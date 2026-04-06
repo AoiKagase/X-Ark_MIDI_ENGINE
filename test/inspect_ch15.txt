@@ -1,0 +1,608 @@
+track=0 tick=0 ch=0 program=1
+noteon track=0 tick=30720 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=30720 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=30816 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=30912 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31008 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31104 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31104 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31200 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31296 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31392 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31392 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31584 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31584 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31680 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31776 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31872 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31872 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=31968 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32064 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32112 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32160 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32208 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32256 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32256 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32352 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32448 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32544 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32640 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32640 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32736 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32832 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32928 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=32928 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33120 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33120 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33216 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33312 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33408 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33408 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33504 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33600 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33648 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33696 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33744 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33792 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33792 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33888 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=33984 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34080 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34176 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34176 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34272 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34368 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34464 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34464 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34656 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34656 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34752 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34848 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34944 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=34944 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35040 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35136 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35184 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35232 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35280 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35328 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35328 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35424 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35520 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35616 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35712 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35712 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35808 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=35904 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36000 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36000 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36192 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36192 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36288 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36384 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36480 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36480 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36576 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36672 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36720 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36768 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36816 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36864 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36864 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=36960 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37056 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37152 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37248 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37248 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37344 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37440 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37536 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37536 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37632 ch=0 bank=0 program=1 key=45 vel=78 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37728 ch=0 bank=0 program=1 key=45 vel=83 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37728 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37728 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37824 ch=0 bank=0 program=1 key=45 vel=93 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37824 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37920 ch=0 bank=0 program=1 key=45 vel=100 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=37920 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38016 ch=0 bank=0 program=1 key=45 vel=107 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38016 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38112 ch=0 bank=0 program=1 key=45 vel=114 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38112 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38208 ch=0 bank=0 program=1 key=45 vel=121 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38208 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38256 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38304 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38304 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38352 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38400 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38400 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38496 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38592 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38688 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38784 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38784 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38880 ch=0 bank=0 program=1 key=60 vel=45 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=38976 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39072 ch=0 bank=0 program=1 key=61 vel=67 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39072 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39264 ch=0 bank=0 program=1 key=61 vel=57 zones=1
+  zone=0 sampleRate=22050 start=93824 end=100336 loopStart=93824 loopEnd=93824 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=61 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39264 ch=0 bank=0 program=1 key=42 vel=97 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39360 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39456 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39552 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39552 ch=0 bank=0 program=1 key=45 vel=127 zones=1
+  zone=0 sampleRate=22050 start=39424 end=48176 loopStart=39424 loopEnd=39424 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=45 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39648 ch=0 bank=0 program=1 key=60 vel=47 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39744 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39792 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39840 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39888 ch=0 bank=0 program=1 key=60 vel=40 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39936 ch=0 bank=0 program=1 key=60 vel=67 zones=1
+  zone=0 sampleRate=22050 start=92192 end=93792 loopStart=92192 loopEnd=92192 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=60 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+noteon track=0 tick=39936 ch=0 bank=0 program=1 key=42 vel=107 zones=1
+  zone=0 sampleRate=22050 start=26976 end=33872 loopStart=26976 loopEnd=26976 sampleModes=0 pan=0 keynum=-1 velocity=-1 root=42 startOff=0 endOff=0 loopStartOff=0 loopEndOff=0 atk=-32768 dec=-12000 sus=0 rel=-6955
+track=1 tick=0 ch=1 program=59
+long-note track=1 ch=1 key=52 start=5 end=1253 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=5 end=1253 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=13824 end=15072 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=13824 end=15072 duration=1248 ticks
+long-note track=1 ch=1 key=60 start=44544 end=45792 duration=1248 ticks
+long-note track=1 ch=1 key=48 start=44544 end=45792 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=50688 end=51936 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=50688 end=51936 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=59904 end=60960 duration=1056 ticks
+long-note track=1 ch=1 key=52 start=59904 end=60960 duration=1056 ticks
+long-note track=1 ch=1 key=64 start=66048 end=67296 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=66048 end=67296 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=72192 end=73440 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=72192 end=73440 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=78336 end=79584 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=78336 end=79584 duration=1248 ticks
+long-note track=1 ch=1 key=55 start=79872 end=81120 duration=1248 ticks
+long-note track=1 ch=1 key=67 start=79872 end=81120 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=81408 end=82656 duration=1248 ticks
+long-note track=1 ch=1 key=52 start=81408 end=82656 duration=1248 ticks
+long-note track=1 ch=1 key=48 start=82944 end=84192 duration=1248 ticks
+long-note track=1 ch=1 key=60 start=82944 end=84192 duration=1248 ticks
+long-note track=1 ch=1 key=64 start=93696 end=94752 duration=1056 ticks
+long-note track=1 ch=1 key=52 start=93696 end=94752 duration=1056 ticks
+track=2 tick=0 ch=2 program=81
+track=3 tick=0 ch=3 program=97
+track=4 tick=0 ch=4 program=50
+track=4 tick=78336 ch=4 program=84
+track=4 tick=78720 ch=4 program=85
+track=4 tick=79104 ch=4 program=86
+track=4 tick=79488 ch=4 program=87
+track=4 tick=79872 ch=4 program=88
+track=4 tick=80256 ch=4 program=89
+track=4 tick=80640 ch=4 program=90
+track=4 tick=81024 ch=4 program=91
+track=4 tick=81408 ch=4 program=92
+track=4 tick=81792 ch=4 program=93
+track=4 tick=82176 ch=4 program=94
+track=4 tick=82560 ch=4 program=95
+track=4 tick=82944 ch=4 program=96
+track=4 tick=83328 ch=4 program=97
+track=4 tick=83712 ch=4 program=98
+track=4 tick=84096 ch=4 program=99
+track=5 tick=0 ch=5 program=113
+long-note track=5 ch=5 key=72 start=13824 end=15624 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=26112 end=27912 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=38400 end=40200 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=44544 end=46344 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=50688 end=52488 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=56832 end=58632 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=59904 end=61704 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=66048 end=67848 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=72192 end=73992 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=84480 end=86280 duration=1800 ticks
+long-note track=5 ch=5 key=72 start=93696 end=95496 duration=1800 ticks
+track=6 tick=0 ch=6 program=3
+track=6 tick=1 ch=6 cc=7 val=100
+track=6 tick=3 ch=6 cc=10 val=64
+long-note track=6 ch=6 key=60 start=12661 end=13853 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=24949 end=26141 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=37237 end=38429 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=43381 end=44573 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=49525 end=50717 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=55669 end=56861 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=58741 end=59933 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=64885 end=66077 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=71029 end=72221 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=83317 end=84509 duration=1192 ticks
+long-note track=6 ch=6 key=60 start=92533 end=93725 duration=1192 ticks
+track=7 tick=0 ch=7 program=7
+track=7 tick=1 ch=7 cc=7 val=100
+track=7 tick=3 ch=7 cc=10 val=64
+long-note track=7 ch=7 key=50 start=7682 end=13826 duration=6144 ticks
+long-note track=7 ch=7 key=52 start=7682 end=13826 duration=6144 ticks
+long-note track=7 ch=7 key=64 start=44545 end=45313 duration=768 ticks
+long-note track=7 ch=7 key=67 start=45312 end=46080 duration=768 ticks
+long-note track=7 ch=7 key=66 start=46080 end=46848 duration=768 ticks
+long-note track=7 ch=7 key=62 start=46848 end=47424 duration=576 ticks
+long-note track=7 ch=7 key=60 start=47616 end=48384 duration=768 ticks
+long-note track=7 ch=7 key=64 start=48384 end=49152 duration=768 ticks
+long-note track=7 ch=7 key=66 start=49152 end=49920 duration=768 ticks
+long-note track=7 ch=7 key=64 start=50688 end=51456 duration=768 ticks
+long-note track=7 ch=7 key=71 start=51456 end=52032 duration=576 ticks
+long-note track=7 ch=7 key=71 start=52224 end=52992 duration=768 ticks
+long-note track=7 ch=7 key=64 start=52992 end=56832 duration=3840 ticks
+track=8 tick=0 ch=8 program=34
+track=8 tick=1 ch=8 cc=7 val=90
+track=8 tick=3 ch=8 cc=10 val=64
+track=8 tick=50976 ch=8 cc=10 val=107
+long-note track=8 ch=8 key=71 start=51072 end=52606 duration=1534 ticks
+track=8 tick=52606 ch=8 cc=10 val=20
+long-note track=8 ch=8 key=65 start=52608 end=54142 duration=1534 ticks
+track=8 tick=54142 ch=8 cc=10 val=107
+long-note track=8 ch=8 key=69 start=54144 end=55678 duration=1534 ticks
+track=8 tick=55678 ch=8 cc=10 val=20
+long-note track=8 ch=8 key=64 start=55680 end=56831 duration=1151 ticks
+track=9 tick=0 ch=9 program=28
+long-note track=9 ch=9 key=62 start=5 end=1541 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=1536 end=3072 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=3072 end=4608 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=4608 end=6144 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=6144 end=7680 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=7681 end=9217 duration=1536 ticks
+long-note track=9 ch=9 key=60 start=1509 end=9628 duration=8119 ticks
+long-note track=9 ch=9 key=62 start=9216 end=10752 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=10752 end=12288 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=12288 end=13824 duration=1536 ticks
+long-note track=9 ch=9 key=61 start=13797 end=21916 duration=8119 ticks
+long-note track=9 ch=9 key=62 start=21504 end=23082 duration=1578 ticks
+long-note track=9 ch=9 key=65 start=23424 end=24576 duration=1152 ticks
+long-note track=9 ch=9 key=63 start=24576 end=26120 duration=1544 ticks
+long-note track=9 ch=9 key=60 start=26090 end=34209 duration=8119 ticks
+long-note track=9 ch=9 key=61 start=26090 end=34209 duration=8119 ticks
+long-note track=9 ch=9 key=63 start=33792 end=35339 duration=1547 ticks
+long-note track=9 ch=9 key=64 start=35712 end=36864 duration=1152 ticks
+long-note track=9 ch=9 key=62 start=36864 end=38662 duration=1798 ticks
+long-note track=9 ch=9 key=66 start=44544 end=46080 duration=1536 ticks
+long-note track=9 ch=9 key=61 start=38373 end=46492 duration=8119 ticks
+long-note track=9 ch=9 key=67 start=46080 end=47616 duration=1536 ticks
+long-note track=9 ch=9 key=66 start=47616 end=49152 duration=1536 ticks
+long-note track=9 ch=9 key=67 start=49152 end=50664 duration=1512 ticks
+long-note track=9 ch=9 key=62 start=50688 end=52224 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=52224 end=53760 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=53760 end=55296 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=55296 end=56832 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=56832 end=58368 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=58368 end=59904 duration=1536 ticks
+long-note track=9 ch=9 key=69 start=72146 end=76416 duration=4270 ticks
+long-note track=9 ch=9 key=70 start=76438 end=78228 duration=1790 ticks
+long-note track=9 ch=9 key=69 start=84434 end=88704 duration=4270 ticks
+long-note track=9 ch=9 key=71 start=88692 end=90926 duration=2234 ticks
+long-note track=9 ch=9 key=62 start=90624 end=92160 duration=1536 ticks
+long-note track=9 ch=9 key=62 start=92160 end=93696 duration=1536 ticks
+long-note track=9 ch=9 key=63 start=93696 end=95232 duration=1536 ticks
+long-note track=9 ch=9 key=64 start=94720 end=95296 duration=576 ticks
+long-note track=9 ch=9 key=65 start=95616 end=96384 duration=768 ticks
+long-note track=9 ch=9 key=62 start=95232 end=96768 duration=1536 ticks
+track=10 tick=0 ch=10 program=28
+long-note track=10 ch=10 key=62 start=24 end=1560 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=1560 end=3096 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=3096 end=4632 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=4632 end=6168 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=6168 end=7704 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=7704 end=9240 duration=1536 ticks
+long-note track=10 ch=10 key=60 start=1536 end=9655 duration=8119 ticks
+long-note track=10 ch=10 key=62 start=9240 end=10776 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=10776 end=12312 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=12312 end=13848 duration=1536 ticks
+long-note track=10 ch=10 key=61 start=13824 end=21943 duration=8119 ticks
+long-note track=10 ch=10 key=62 start=21528 end=23064 duration=1536 ticks
+long-note track=10 ch=10 key=65 start=23448 end=24600 duration=1152 ticks
+long-note track=10 ch=10 key=63 start=24600 end=26136 duration=1536 ticks
+long-note track=10 ch=10 key=60 start=26112 end=34231 duration=8119 ticks
+long-note track=10 ch=10 key=61 start=26112 end=34231 duration=8119 ticks
+long-note track=10 ch=10 key=63 start=33816 end=35352 duration=1536 ticks
+long-note track=10 ch=10 key=64 start=35736 end=36864 duration=1128 ticks
+long-note track=10 ch=10 key=62 start=36888 end=38424 duration=1536 ticks
+long-note track=10 ch=10 key=66 start=44533 end=46080 duration=1547 ticks
+long-note track=10 ch=10 key=61 start=38400 end=46519 duration=8119 ticks
+long-note track=10 ch=10 key=67 start=46069 end=47614 duration=1545 ticks
+long-note track=10 ch=10 key=66 start=47605 end=49152 duration=1547 ticks
+long-note track=10 ch=10 key=67 start=49141 end=50676 duration=1535 ticks
+long-note track=10 ch=10 key=62 start=50712 end=52248 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=52248 end=53784 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=53784 end=55320 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=55320 end=56856 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=56856 end=58392 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=58392 end=59928 duration=1536 ticks
+long-note track=10 ch=10 key=69 start=72168 end=76438 duration=4270 ticks
+long-note track=10 ch=10 key=70 start=76458 end=78248 duration=1790 ticks
+long-note track=10 ch=10 key=69 start=84456 end=88726 duration=4270 ticks
+long-note track=10 ch=10 key=71 start=88714 end=90948 duration=2234 ticks
+long-note track=10 ch=10 key=62 start=90648 end=92184 duration=1536 ticks
+long-note track=10 ch=10 key=62 start=92184 end=93720 duration=1536 ticks
+long-note track=10 ch=10 key=63 start=93720 end=95256 duration=1536 ticks
+long-note track=10 ch=10 key=64 start=94744 end=95320 duration=576 ticks
+long-note track=10 ch=10 key=65 start=95640 end=96408 duration=768 ticks
+long-note track=10 ch=10 key=62 start=95256 end=96792 duration=1536 ticks
+track=11 tick=0 ch=11 program=6
+long-note track=11 ch=11 key=52 start=13824 end=15360 duration=1536 ticks
+long-note track=11 ch=11 key=59 start=13824 end=15360 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=15360 end=16896 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=15360 end=16896 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=16896 end=18432 duration=1536 ticks
+long-note track=11 ch=11 key=60 start=16896 end=18432 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=18432 end=19968 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=18432 end=19968 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=19968 end=23040 duration=3072 ticks
+long-note track=11 ch=11 key=59 start=19968 end=23040 duration=3072 ticks
+long-note track=11 ch=11 key=52 start=23040 end=26112 duration=3072 ticks
+long-note track=11 ch=11 key=58 start=23040 end=26112 duration=3072 ticks
+long-note track=11 ch=11 key=52 start=26112 end=27648 duration=1536 ticks
+long-note track=11 ch=11 key=59 start=26112 end=27648 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=27648 end=29184 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=27648 end=29184 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=29184 end=30720 duration=1536 ticks
+long-note track=11 ch=11 key=60 start=29184 end=30720 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=30720 end=32256 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=30720 end=32256 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=32256 end=35328 duration=3072 ticks
+long-note track=11 ch=11 key=59 start=32256 end=35328 duration=3072 ticks
+long-note track=11 ch=11 key=52 start=35328 end=38400 duration=3072 ticks
+long-note track=11 ch=11 key=58 start=35328 end=38400 duration=3072 ticks
+long-note track=11 ch=11 key=48 start=38400 end=39936 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=38400 end=39936 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=39936 end=41472 duration=1536 ticks
+long-note track=11 ch=11 key=54 start=39936 end=41472 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=41472 end=43008 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=41472 end=43008 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=43008 end=44544 duration=1536 ticks
+long-note track=11 ch=11 key=54 start=43008 end=44544 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=44544 end=46080 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=44544 end=46080 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=46080 end=47616 duration=1536 ticks
+long-note track=11 ch=11 key=54 start=46080 end=47616 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=47616 end=49152 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=47616 end=49152 duration=1536 ticks
+long-note track=11 ch=11 key=48 start=49152 end=50688 duration=1536 ticks
+long-note track=11 ch=11 key=54 start=49152 end=50688 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=50688 end=52224 duration=1536 ticks
+long-note track=11 ch=11 key=59 start=50688 end=52224 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=52224 end=53760 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=52224 end=53760 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=53760 end=55296 duration=1536 ticks
+long-note track=11 ch=11 key=60 start=53760 end=55296 duration=1536 ticks
+long-note track=11 ch=11 key=52 start=55296 end=56832 duration=1536 ticks
+long-note track=11 ch=11 key=57 start=55296 end=56832 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=59904 end=61440 duration=1536 ticks
+long-note track=11 ch=11 key=59 start=59904 end=61440 duration=1536 ticks
+long-note track=11 ch=11 key=64 start=59904 end=61440 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=61440 end=62976 duration=1536 ticks
+long-note track=11 ch=11 key=58 start=61440 end=62976 duration=1536 ticks
+long-note track=11 ch=11 key=62 start=61440 end=62976 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=62976 end=64512 duration=1536 ticks
+long-note track=11 ch=11 key=59 start=62976 end=64512 duration=1536 ticks
+long-note track=11 ch=11 key=64 start=62976 end=64512 duration=1536 ticks
+long-note track=11 ch=11 key=55 start=64512 end=66048 duration=1536 ticks
+long-note track=11 ch=11 key=60 start=64512 end=66048 duration=1536 ticks
+long-note track=11 ch=11 key=63 start=64512 end=66048 duration=1536 ticks
+track=12 tick=0 ch=12 program=6
+long-note track=12 ch=12 key=52 start=13848 end=15384 duration=1536 ticks
+long-note track=12 ch=12 key=59 start=13848 end=15384 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=15384 end=16920 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=15384 end=16920 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=16920 end=18456 duration=1536 ticks
+long-note track=12 ch=12 key=60 start=16920 end=18456 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=18456 end=19992 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=18456 end=19992 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=19992 end=23064 duration=3072 ticks
+long-note track=12 ch=12 key=59 start=19992 end=23064 duration=3072 ticks
+long-note track=12 ch=12 key=52 start=23064 end=26136 duration=3072 ticks
+long-note track=12 ch=12 key=58 start=23064 end=26136 duration=3072 ticks
+long-note track=12 ch=12 key=52 start=26136 end=27672 duration=1536 ticks
+long-note track=12 ch=12 key=59 start=26136 end=27672 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=27672 end=29208 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=27672 end=29208 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=29208 end=30744 duration=1536 ticks
+long-note track=12 ch=12 key=60 start=29208 end=30744 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=30744 end=32280 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=30744 end=32280 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=32280 end=35352 duration=3072 ticks
+long-note track=12 ch=12 key=59 start=32280 end=35352 duration=3072 ticks
+long-note track=12 ch=12 key=52 start=35352 end=38424 duration=3072 ticks
+long-note track=12 ch=12 key=58 start=35352 end=38424 duration=3072 ticks
+long-note track=12 ch=12 key=48 start=38424 end=39960 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=38424 end=39960 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=39960 end=41496 duration=1536 ticks
+long-note track=12 ch=12 key=54 start=39960 end=41496 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=41496 end=43032 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=41496 end=43032 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=43032 end=44568 duration=1536 ticks
+long-note track=12 ch=12 key=54 start=43032 end=44568 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=44568 end=46104 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=44568 end=46104 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=46104 end=47640 duration=1536 ticks
+long-note track=12 ch=12 key=54 start=46104 end=47640 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=47640 end=49176 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=47640 end=49176 duration=1536 ticks
+long-note track=12 ch=12 key=48 start=49176 end=50712 duration=1536 ticks
+long-note track=12 ch=12 key=54 start=49176 end=50712 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=50712 end=52248 duration=1536 ticks
+long-note track=12 ch=12 key=59 start=50712 end=52248 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=52248 end=53784 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=52248 end=53784 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=53784 end=55320 duration=1536 ticks
+long-note track=12 ch=12 key=60 start=53784 end=55320 duration=1536 ticks
+long-note track=12 ch=12 key=52 start=55320 end=56856 duration=1536 ticks
+long-note track=12 ch=12 key=57 start=55320 end=56856 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=59928 end=61464 duration=1536 ticks
+long-note track=12 ch=12 key=59 start=59928 end=61464 duration=1536 ticks
+long-note track=12 ch=12 key=64 start=59928 end=61464 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=61464 end=63000 duration=1536 ticks
+long-note track=12 ch=12 key=58 start=61464 end=63000 duration=1536 ticks
+long-note track=12 ch=12 key=62 start=61464 end=63000 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=63000 end=64536 duration=1536 ticks
+long-note track=12 ch=12 key=59 start=63000 end=64536 duration=1536 ticks
+long-note track=12 ch=12 key=64 start=63000 end=64536 duration=1536 ticks
+long-note track=12 ch=12 key=55 start=64536 end=66072 duration=1536 ticks
+long-note track=12 ch=12 key=60 start=64536 end=66072 duration=1536 ticks
+long-note track=12 ch=12 key=63 start=64536 end=66072 duration=1536 ticks
+track=13 tick=0 ch=13 program=83
+long-note track=13 ch=13 key=45 start=23041 end=24196 duration=1155 ticks
+long-note track=13 ch=13 key=40 start=24193 end=26118 duration=1925 ticks
+long-note track=13 ch=13 key=45 start=35329 end=36484 duration=1155 ticks
+long-note track=13 ch=13 key=40 start=36481 end=38406 duration=1925 ticks
+long-note track=13 ch=13 key=45 start=50689 end=51844 duration=1155 ticks
+long-note track=13 ch=13 key=40 start=51841 end=53766 duration=1925 ticks
+long-note track=13 ch=13 key=45 start=53761 end=54916 duration=1155 ticks
+long-note track=13 ch=13 key=40 start=54913 end=56838 duration=1925 ticks
+track=14 tick=0 ch=14 program=110
+track=15 tick=0 ch=15 program=74
+long-note track=15 ch=15 key=67 start=59928 end=61464 duration=1536 ticks
+long-note track=15 ch=15 key=71 start=59928 end=61464 duration=1536 ticks
+long-note track=15 ch=15 key=76 start=59928 end=61464 duration=1536 ticks
+long-note track=15 ch=15 key=67 start=61464 end=63000 duration=1536 ticks
+long-note track=15 ch=15 key=70 start=61464 end=63000 duration=1536 ticks
+long-note track=15 ch=15 key=74 start=61464 end=63000 duration=1536 ticks
+long-note track=15 ch=15 key=67 start=63000 end=64536 duration=1536 ticks
+long-note track=15 ch=15 key=71 start=63000 end=64536 duration=1536 ticks
+long-note track=15 ch=15 key=76 start=63000 end=64536 duration=1536 ticks
+long-note track=15 ch=15 key=67 start=64536 end=66072 duration=1536 ticks
+long-note track=15 ch=15 key=72 start=64536 end=66072 duration=1536 ticks
+long-note track=15 ch=15 key=75 start=64536 end=66072 duration=1536 ticks
+peak-midi-polyphony=19 at tick=26112

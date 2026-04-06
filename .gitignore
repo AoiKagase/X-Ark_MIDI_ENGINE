@@ -1,0 +1,5 @@
+/.dotnet
+/.vs
+/output
+*.exe
+*.dll
