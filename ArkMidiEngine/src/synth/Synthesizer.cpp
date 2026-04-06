@@ -18,8 +18,8 @@ constexpr f32 kMasterOutputGain = 1.0f;
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
-constexpr const char* kProgramDebugLogPath = "H:\\sourcecode\\ArkMidiEngine\\output\\diagnostics\\sf2_program_focus.log";
-constexpr const char* kProgramSummaryLogPath = "H:\\sourcecode\\ArkMidiEngine\\output\\diagnostics\\sf2_program_summary.log";
+constexpr const char* kProgramDebugLogPath = ".\\diagnostics\\sf2_program_focus.log";
+constexpr const char* kProgramSummaryLogPath = ".\\diagnostics\\sf2_program_summary.log";
 
 
 void ApplyChannelMix(VoicePool& voicePool, u8 ch, const ChannelState& state) {
