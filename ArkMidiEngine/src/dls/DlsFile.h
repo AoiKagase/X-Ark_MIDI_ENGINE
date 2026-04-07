@@ -13,6 +13,7 @@ public:
 
     bool LoadFromMemory(const u8* data, size_t size) override;
     bool LoadFromFile(const std::wstring& path);
+    void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPoolTableEntries);
 
     bool FindZones(u16 bank, u8 program, u8 key, u8 velocity,
                    std::vector<ResolvedZone>& outZones,
@@ -69,6 +70,8 @@ private:
     std::vector<u32>           poolTableOffsets_;
     std::string                errorMsg_;
     bool                       halveSampleRates_ = false;
+    size_t                     maxSampleDataBytes_ = 512ull * 1024ull * 1024ull;
+    u32                        maxPoolTableEntries_ = 1u << 20;
 
     bool ParseRiff(BinaryReader& r);
     bool ParseCollection(BinaryReader& r, u32 chunkSize);

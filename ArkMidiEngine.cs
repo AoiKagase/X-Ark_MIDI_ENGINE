@@ -25,6 +25,18 @@ public static class ArkMidiEngine
         Dls = 2,
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CreateOptions
+    {
+        public uint StructSize;
+        public ulong MaxSampleDataBytes;
+        public uint MaxSf2PdtaEntries;
+        public uint MaxDlsPoolTableEntries;
+
+        public static CreateOptions Default()
+            => new CreateOptions { StructSize = (uint)Marshal.SizeOf<CreateOptions>() };
+    }
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
     private static extern AmeResult AmeCreateEngineFromPaths(
         string midiPath,
@@ -32,6 +44,16 @@ public static class ArkMidiEngine
         SoundBankKind soundBankKind,
         uint sampleRate,
         uint numChannels,
+        out IntPtr outEngine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern AmeResult AmeCreateEngineWithOptions(
+        string midiPath,
+        string soundBankPath,
+        SoundBankKind soundBankKind,
+        uint sampleRate,
+        uint numChannels,
+        ref CreateOptions options,
         out IntPtr outEngine);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -68,6 +90,15 @@ public static class ArkMidiEngine
         public Engine(string midiPath, string soundBankPath,
                       SoundBankKind soundBankKind = SoundBankKind.Auto,
                       uint sampleRate = 44100, uint numChannels = 2)
+            : this(midiPath, soundBankPath, soundBankKind, sampleRate, numChannels, null)
+        {
+        }
+
+        public Engine(string midiPath, string soundBankPath,
+                      SoundBankKind soundBankKind,
+                      uint sampleRate,
+                      uint numChannels,
+                      CreateOptions? options)
         {
             if (string.IsNullOrWhiteSpace(midiPath))
                 throw new ArgumentException("midiPath is null or empty", nameof(midiPath));
@@ -76,13 +107,31 @@ public static class ArkMidiEngine
             if (numChannels < 1 || numChannels > 2)
                 throw new ArgumentOutOfRangeException(nameof(numChannels), "Must be 1 or 2");
 
-            var result = AmeCreateEngineFromPaths(
-                midiPath,
-                soundBankPath,
-                soundBankKind,
-                sampleRate,
-                numChannels,
-                out _handle);
+            AmeResult result;
+            if (options.HasValue)
+            {
+                var nativeOptions = options.Value;
+                if (nativeOptions.StructSize == 0)
+                    nativeOptions.StructSize = (uint)Marshal.SizeOf<CreateOptions>();
+                result = AmeCreateEngineWithOptions(
+                    midiPath,
+                    soundBankPath,
+                    soundBankKind,
+                    sampleRate,
+                    numChannels,
+                    ref nativeOptions,
+                    out _handle);
+            }
+            else
+            {
+                result = AmeCreateEngineFromPaths(
+                    midiPath,
+                    soundBankPath,
+                    soundBankKind,
+                    sampleRate,
+                    numChannels,
+                    out _handle);
+            }
 
             if (result != AmeResult.OK)
                 throw new ArkMidiException(result, GetLastError());

@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 namespace ArkMidi {
@@ -32,6 +33,14 @@ const std::array<i32, 128> kVelAttenTable = []() {
 
 inline i32 ComputeDefaultVelocityAttenuationCb(u8 velocity) {
     return kVelAttenTable[velocity];
+}
+
+bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, std::string& outError) {
+    if (count > maxCount) {
+        outError = std::string("SF2 chunk too large: ") + chunkName;
+        return false;
+    }
+    return true;
 }
 
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
@@ -233,6 +242,13 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
 
 } // namespace
 
+void Sf2File::SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries) {
+    if (maxSampleDataBytes != 0)
+        maxSampleDataBytes_ = maxSampleDataBytes;
+    if (maxPdtaEntries != 0)
+        maxPdtaEntries_ = maxPdtaEntries;
+}
+
 bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     sampleData_.clear();
     presets_.clear(); presetBags_.clear(); presetGens_.clear(); presetMods_.clear();
@@ -245,6 +261,7 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     try {
         BinaryReader r(data, size);
         if (!ParseRiff(r)) return false;
+        if (!ValidateSampleHeaders()) return false;
         BuildPresetIndex();
         ComputeSampleLoudnessGains();
     }
@@ -285,6 +302,10 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
 
         if (chunkId == MakeFourCC("LIST")) {
             u32 listType = r.ReadU32LE();
+            if (chunkSize < 4) {
+                errorMsg_ = "Invalid SF2 LIST chunk size";
+                return false;
+            }
             auto listData = r.ReadSlice(chunkSize - 4);
 
             if (listType == MakeFourCC("sdta")) {
@@ -318,6 +339,11 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
                 subSize = static_cast<u32>(available & ~1u); // 偶数に揃える
             }
             size_t count = subSize / 2;
+            const size_t maxSampleCount = maxSampleDataBytes_ / sizeof(i16);
+            if (count > maxSampleCount) {
+                errorMsg_ = "SF2 sample data exceeds configured limit";
+                return false;
+            }
             sampleData_.resize(count);
             if (count > 0) {
                 // バルクコピー（1サンプルずつ読むと大きなSF2でハングする）
@@ -359,6 +385,8 @@ bool Sf2File::ParsePdta(BinaryReader& r, u32 /*chunkSize*/) {
 
 void Sf2File::ParsePhdr(BinaryReader& r, u32 size) {
     u32 count = size / 38; // sizeof(SFPresetHeader) = 38
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "phdr", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     presets_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         auto& p = presets_[i];
@@ -374,6 +402,8 @@ void Sf2File::ParsePhdr(BinaryReader& r, u32 size) {
 
 void Sf2File::ParsePbag(BinaryReader& r, u32 size) {
     u32 count = size / 4;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pbag", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     presetBags_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetBags_[i].wGenNdx = r.ReadU16LE();
@@ -383,6 +413,8 @@ void Sf2File::ParsePbag(BinaryReader& r, u32 size) {
 
 void Sf2File::ParsePmod(BinaryReader& r, u32 size) {
     u32 count = size / 10;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pmod", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     presetMods_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetMods_[i].sfModSrcOper  = r.ReadU16LE();
@@ -395,6 +427,8 @@ void Sf2File::ParsePmod(BinaryReader& r, u32 size) {
 
 void Sf2File::ParsePgen(BinaryReader& r, u32 size) {
     u32 count = size / 4;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pgen", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     presetGens_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetGens_[i].sfGenOper          = r.ReadU16LE();
@@ -404,6 +438,8 @@ void Sf2File::ParsePgen(BinaryReader& r, u32 size) {
 
 void Sf2File::ParseInst(BinaryReader& r, u32 size) {
     u32 count = size / 22;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "inst", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     instruments_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         for (int c = 0; c < 20; ++c) instruments_[i].achInstName[c] = static_cast<char>(r.ReadU8());
@@ -413,6 +449,8 @@ void Sf2File::ParseInst(BinaryReader& r, u32 size) {
 
 void Sf2File::ParseIbag(BinaryReader& r, u32 size) {
     u32 count = size / 4;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "ibag", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     instBags_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instBags_[i].wInstGenNdx = r.ReadU16LE();
@@ -422,6 +460,8 @@ void Sf2File::ParseIbag(BinaryReader& r, u32 size) {
 
 void Sf2File::ParseImod(BinaryReader& r, u32 size) {
     u32 count = size / 10;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "imod", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     instMods_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instMods_[i].sfModSrcOper    = r.ReadU16LE();
@@ -434,6 +474,8 @@ void Sf2File::ParseImod(BinaryReader& r, u32 size) {
 
 void Sf2File::ParseIgen(BinaryReader& r, u32 size) {
     u32 count = size / 4;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "igen", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     instGens_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instGens_[i].sfGenOper         = r.ReadU16LE();
@@ -444,6 +486,8 @@ void Sf2File::ParseIgen(BinaryReader& r, u32 size) {
 void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
     static_assert(sizeof(SFSample) == 46, "SFSample must be 46 bytes");
     const u32 count = size / 46;
+    if (!ValidateChunkElementCount(count, maxPdtaEntries_, "shdr", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     samples_.resize(count);
     sampleHeaders_.resize(count);
     for (u32 i = 0; i < count; ++i) {
@@ -463,6 +507,29 @@ void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
         h.pitchCorrection = s.chPitchCorrection;
         h.sampleType      = s.sfSampleType;
     }
+}
+
+bool Sf2File::ValidateSampleHeaders() {
+    const u32 sampleDataCount = static_cast<u32>(sampleData_.size());
+    for (size_t i = 0; i < sampleHeaders_.size(); ++i) {
+        auto& h = sampleHeaders_[i];
+        if (h.start > h.end || h.end > sampleDataCount) {
+            errorMsg_ = "SF2 sample header points outside sample data";
+            return false;
+        }
+        if (h.loopStart < h.start || h.loopStart > h.end ||
+            h.loopEnd < h.loopStart || h.loopEnd > h.end) {
+            errorMsg_ = "SF2 sample loop points outside sample range";
+            return false;
+        }
+        if (h.sampleRate == 0) {
+            // Some banks leave the terminal EOS record or even sparse/unused sample
+            // headers at 0 Hz. Keep parsing and fall back to a sane rate so we don't
+            // reject otherwise playable banks.
+            h.sampleRate = 44100;
+        }
+    }
+    return true;
 }
 
 void Sf2File::ComputeSampleLoudnessGains() {

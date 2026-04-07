@@ -28,6 +28,13 @@ typedef enum AmeSoundBankKind_ {
     AME_SOUNDBANK_DLS  = 2,
 } AmeSoundBankKind;
 
+typedef struct AmeCreateOptions_ {
+    unsigned int        structSize;
+    unsigned long long  maxSampleDataBytes;
+    unsigned int        maxSf2PdtaEntries;
+    unsigned int        maxDlsPoolTableEntries;
+} AmeCreateOptions;
+
 typedef struct AmeEngine_* AmeEngine;
 
 AME_API AmeResult AmeCreateEngineFromPaths(
@@ -37,6 +44,16 @@ AME_API AmeResult AmeCreateEngineFromPaths(
     unsigned int       sampleRate,
     unsigned int       numChannels,
     AmeEngine*         outEngine
+);
+
+AME_API AmeResult AmeCreateEngineWithOptions(
+    const wchar_t*            midiPath,
+    const wchar_t*            soundBankPath,
+    AmeSoundBankKind          soundBankKind,
+    unsigned int              sampleRate,
+    unsigned int              numChannels,
+    const AmeCreateOptions*   options,
+    AmeEngine*                outEngine
 );
 
 AME_API AmeResult AmeRender(

@@ -22,7 +22,6 @@ constexpr u16 CONN_DST_EG1_SUSTAINLEVEL_LOCAL = 0x020a;
 constexpr u16 CONN_DST_EG1_DELAYTIME_LOCAL    = 0x020b;
 constexpr u16 CONN_DST_EG1_HOLDTIME_LOCAL     = 0x020c;
 constexpr u16 CONN_TRN_NONE_LOCAL             = 0x0000;
-
 u32 MakeFourCC(const char* s) {
     return (static_cast<u32>(s[0]))
          | (static_cast<u32>(s[1]) << 8)
@@ -121,6 +120,13 @@ void MergeArticulatorGenerator(i32* generators, int gen, i32 value) {
 
 } // namespace
 
+void DlsFile::SetResourceLimits(size_t maxSampleDataBytes, u32 maxPoolTableEntries) {
+    if (maxSampleDataBytes != 0)
+        maxSampleDataBytes_ = maxSampleDataBytes;
+    if (maxPoolTableEntries != 0)
+        maxPoolTableEntries_ = maxPoolTableEntries;
+}
+
 bool DlsFile::LoadFromMemory(const u8* data, size_t size) {
     sampleData_.clear();
     waves_.clear();
@@ -218,6 +224,10 @@ bool DlsFile::ParsePoolTable(BinaryReader& r, u32 /*chunkSize*/) {
 
     r.ReadU32LE(); // cbSize
     u32 cueCount = r.ReadU32LE();
+    if (cueCount > maxPoolTableEntries_) {
+        errorMsg_ = "DLS pool table is too large";
+        return false;
+    }
     poolTableOffsets_.clear();
     poolTableOffsets_.reserve(cueCount);
     for (u32 i = 0; i < cueCount && r.Remaining() >= 4; ++i) {
@@ -287,6 +297,11 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
         } else if (chunkId == MakeFourCC("data")) {
             auto data = r.ReadSlice(chunkSize);
             size_t count = data.Size() / sizeof(i16);
+            const size_t maxWaveSampleCount = maxSampleDataBytes_ / sizeof(i16);
+            if (count > maxWaveSampleCount || sampleData_.size() > maxWaveSampleCount - count) {
+                errorMsg_ = "DLS sample data exceeds configured limit";
+                return false;
+            }
             waveData.resize(count);
             if (count > 0)
                 std::memcpy(waveData.data(), data.CurrentPtr(), count * sizeof(i16));
@@ -308,8 +323,6 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
                     loopLength = wsmp.ReadU32LE();
                     looping = (options & 0x1) != 0 || loopLength > 0;
                 }
-            } else {
-                r.Skip(chunkSize);
             }
         } else {
             r.Skip(chunkSize);
@@ -453,8 +466,6 @@ bool DlsFile::ParseRegionList(BinaryReader& r, u32 /*chunkSize*/, DlsRegion& out
                     outRegion.loopLength = wsmp.ReadU32LE();
                     outRegion.looping = (options & 0x1) != 0 || outRegion.loopLength > 0;
                 }
-            } else {
-                r.Skip(chunkSize);
             }
         } else if (chunkId == MakeFourCC("LIST")) {
             u32 listType = r.ReadU32LE();

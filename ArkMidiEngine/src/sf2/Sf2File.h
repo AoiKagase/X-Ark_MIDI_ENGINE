@@ -14,6 +14,7 @@ public:
     SoundBankKind Kind() const override { return SoundBankKind::Sf2; }
     bool LoadFromMemory(const u8* data, size_t size);
     bool LoadFromFile(const std::wstring& path);
+    void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries);
 
     // プリセット検索: bank/program/key/velocity に一致する ResolvedZone リストを返す
     bool FindZones(u16 bank, u8 program, u8 key, u8 velocity,
@@ -69,8 +70,11 @@ private:
                          u8 key, u8 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
     void BuildPresetIndex();
     void ComputeSampleLoudnessGains();
+    bool ValidateSampleHeaders();
 
     f32 normCompensation_ = 1.0f;
+    size_t maxSampleDataBytes_ = 512ull * 1024ull * 1024ull;
+    u32 maxPdtaEntries_ = 1u << 20;
 };
 
 } // namespace ArkMidi

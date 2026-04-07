@@ -363,14 +363,21 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     const i32 sampleEndIndex = std::max<i32>(0, static_cast<i32>(smp->end) + endOff);
     const i32 loopStartIndex = std::max<i32>(0, static_cast<i32>(smp->loopStart) + loopStartOff);
     const i32 loopEndIndex = std::max<i32>(0, static_cast<i32>(smp->loopEnd) + loopEndOff);
+    const i32 sampleDataLimit = static_cast<i32>(std::min<size_t>(pcmDataSize, static_cast<size_t>(std::numeric_limits<i32>::max())));
+
+    if (sampleStartIndex >= sampleDataLimit || sampleEndIndex <= sampleStartIndex) {
+        active = false;
+        envPhase = EnvPhase::Off;
+        return;
+    }
 
     samplePosFixed = ToFixedSamplePos(sampleStartIndex);
-    sampleEnd      = static_cast<u32>(sampleEndIndex);
-    loopStart      = static_cast<u32>(loopStartIndex);
-    loopEnd        = static_cast<u32>(loopEndIndex);
-    sampleEndFixed = ToFixedSamplePos(sampleEndIndex);
-    loopStartFixed = ToFixedSamplePos(loopStartIndex);
-    loopEndFixed   = ToFixedSamplePos(loopEndIndex);
+    sampleEnd      = static_cast<u32>(std::min(sampleEndIndex, sampleDataLimit));
+    loopStart      = static_cast<u32>(std::min(loopStartIndex, sampleDataLimit));
+    loopEnd        = static_cast<u32>(std::min(loopEndIndex, sampleDataLimit));
+    sampleEndFixed = ToFixedSamplePos(static_cast<i32>(sampleEnd));
+    loopStartFixed = ToFixedSamplePos(static_cast<i32>(loopStart));
+    loopEndFixed   = ToFixedSamplePos(static_cast<i32>(loopEnd));
 
     // SampleModes: 0=no loop, 1=continuous loop, 3=loop until release
     i32 sampleModes = gen[GEN_SampleModes] & 0x3;

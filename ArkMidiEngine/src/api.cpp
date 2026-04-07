@@ -9,6 +9,37 @@
 
 using namespace ArkMidi;
 
+namespace {
+
+constexpr size_t kDefaultMaxSampleDataBytes = 512ull * 1024ull * 1024ull;
+constexpr u32 kDefaultMaxSf2PdtaEntries = 1u << 20;
+constexpr u32 kDefaultMaxDlsPoolTableEntries = 1u << 20;
+
+struct CreateLimits {
+    size_t maxSampleDataBytes = kDefaultMaxSampleDataBytes;
+    u32 maxSf2PdtaEntries = kDefaultMaxSf2PdtaEntries;
+    u32 maxDlsPoolTableEntries = kDefaultMaxDlsPoolTableEntries;
+};
+
+CreateLimits ResolveCreateLimits(const AmeCreateOptions* options) {
+    CreateLimits limits;
+    if (!options)
+        return limits;
+
+    if (options->structSize < sizeof(AmeCreateOptions))
+        return limits;
+
+    if (options->maxSampleDataBytes != 0)
+        limits.maxSampleDataBytes = static_cast<size_t>(options->maxSampleDataBytes);
+    if (options->maxSf2PdtaEntries != 0)
+        limits.maxSf2PdtaEntries = options->maxSf2PdtaEntries;
+    if (options->maxDlsPoolTableEntries != 0)
+        limits.maxDlsPoolTableEntries = options->maxDlsPoolTableEntries;
+    return limits;
+}
+
+} // namespace
+
 struct AmeEngine_ {
     MidiFile                      midiFile;
     std::unique_ptr<SoundBank>    soundBank;
@@ -18,7 +49,7 @@ struct AmeEngine_ {
     bool                          initialized = false;
 };
 
-static std::string g_lastError;
+static thread_local std::string g_lastError;
 
 static void SetError(const std::string& msg) {
     g_lastError = msg;
@@ -50,6 +81,25 @@ AmeResult AmeCreateEngineFromPaths(
     unsigned int numChannels,
     AmeEngine* outEngine)
 {
+    return AmeCreateEngineWithOptions(
+        midiPath,
+        soundBankPath,
+        soundBankKind,
+        sampleRate,
+        numChannels,
+        nullptr,
+        outEngine);
+}
+
+AmeResult AmeCreateEngineWithOptions(
+    const wchar_t* midiPath,
+    const wchar_t* soundBankPath,
+    AmeSoundBankKind soundBankKind,
+    unsigned int sampleRate,
+    unsigned int numChannels,
+    const AmeCreateOptions* options,
+    AmeEngine* outEngine)
+{
     if (!midiPath || !midiPath[0] || !soundBankPath || !soundBankPath[0] || !outEngine) {
         SetError("MIDI path and sound bank path are required");
         return AME_ERR_INVALID_ARG;
@@ -68,6 +118,7 @@ AmeResult AmeCreateEngineFromPaths(
         SetError("Unable to determine sound bank type. Specify SF2 or DLS explicitly.");
         return AME_ERR_UNSUPPORTED;
     }
+    const CreateLimits limits = ResolveCreateLimits(options);
 
     AmeEngine_* eng = nullptr;
     try {
@@ -89,6 +140,7 @@ AmeResult AmeCreateEngineFromPaths(
     try {
         if (resolvedKind == SoundBankKind::Sf2) {
             auto sf2 = std::make_unique<Sf2File>();
+            sf2->SetResourceLimits(limits.maxSampleDataBytes, limits.maxSf2PdtaEntries);
             if (!sf2->LoadFromFile(soundBankPath)) {
                 SetError("SF2 parse error: " + sf2->ErrorMessage());
                 delete eng;
@@ -97,6 +149,7 @@ AmeResult AmeCreateEngineFromPaths(
             eng->soundBank = std::move(sf2);
         } else {
             auto dls = std::make_unique<DlsFile>();
+            dls->SetResourceLimits(limits.maxSampleDataBytes, limits.maxDlsPoolTableEntries);
             if (!dls->LoadFromFile(soundBankPath)) {
                 SetError("DLS parse error: " + dls->ErrorMessage());
                 delete eng;
