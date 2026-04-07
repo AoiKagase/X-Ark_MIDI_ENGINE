@@ -15,6 +15,7 @@
     <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
     <RootNamespace>XArkMidiEngine</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>XArkMidiEngine</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -75,7 +76,7 @@
   </ItemDefinitionGroup>
   <!-- ヘッダーファイル -->
   <ItemGroup>
-    <ClInclude Include="include\X-ArkMidiEngine.h" />
+    <ClInclude Include="include\XArkMidiEngine.h" />
     <ClInclude Include="src\common\Types.h" />
     <ClInclude Include="src\common\CpuFeatures.h" />
     <ClInclude Include="src\common\BinaryReader.h" />
@@ -117,4 +118,3 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
-

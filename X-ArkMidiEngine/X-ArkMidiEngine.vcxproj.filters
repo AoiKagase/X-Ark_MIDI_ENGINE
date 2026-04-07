@@ -27,7 +27,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\X-ArkMidiEngine.h">
+    <ClInclude Include="include\XArkMidiEngine.h">
       <Filter>Public API</Filter>
     </ClInclude>
     <ClInclude Include="src\common\Types.h">
@@ -78,6 +78,8 @@
     <ClInclude Include="src\synth\Synthesizer.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
+    <ClInclude Include="src\common\CpuFeatures.h" />
+    <ClInclude Include="src\synth\SimdKernels.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp">
@@ -116,6 +118,8 @@
     <ClCompile Include="src\synth\Synthesizer.cpp">
       <Filter>Source Files\synth</Filter>
     </ClCompile>
+    <ClCompile Include="src\common\CpuFeatures.cpp" />
+    <ClCompile Include="src\synth\SimdKernels.cpp" />
+    <ClCompile Include="src\synth\SimdKernelsAvx2.cpp" />
   </ItemGroup>
 </Project>
-

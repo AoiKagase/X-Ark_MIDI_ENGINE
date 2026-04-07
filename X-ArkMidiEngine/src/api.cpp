@@ -1,8 +1,9 @@
-﻿#include "../include/X-ArkMidiEngine.h"
+﻿#include "../include/XArkMidiEngine.h"
 #include "midi/MidiFile.h"
 #include "sf2/Sf2File.h"
 #include "dls/DlsFile.h"
 #include "synth/Synthesizer.h"
+#include <exception>
 #include <memory>
 #include <string>
 #include <cwctype>
@@ -104,6 +105,7 @@ XAmeResult XAmeCreateEngineWithOptions(
         SetError("MIDI path and sound bank path are required");
         return XAME_ERR_INVALID_ARG;
     }
+    *outEngine = nullptr;
     if (numChannels < 1 || numChannels > 2) {
         SetError("numChannels must be 1 or 2");
         return XAME_ERR_INVALID_ARG;
@@ -119,25 +121,18 @@ XAmeResult XAmeCreateEngineWithOptions(
         return XAME_ERR_UNSUPPORTED;
     }
     const CreateLimits limits = ResolveCreateLimits(options);
-
     XAmeEngine_* eng = nullptr;
     try {
         eng = new XAmeEngine_();
-    } catch (...) {
-        SetError("Out of memory");
-        return XAME_ERR_OUT_OF_MEM;
-    }
+        eng->sampleRate = sampleRate;
+        eng->numChannels = numChannels;
 
-    eng->sampleRate = sampleRate;
-    eng->numChannels = numChannels;
+        if (!eng->midiFile.LoadFromFile(midiPath)) {
+            SetError("MIDI parse error: " + eng->midiFile.ErrorMessage());
+            delete eng;
+            return XAME_ERR_PARSE_MIDI;
+        }
 
-    if (!eng->midiFile.LoadFromFile(midiPath)) {
-        SetError("MIDI parse error: " + eng->midiFile.ErrorMessage());
-        delete eng;
-        return XAME_ERR_PARSE_MIDI;
-    }
-
-    try {
         if (resolvedKind == SoundBankKind::Sf2) {
             auto sf2 = std::make_unique<Sf2File>();
             sf2->SetResourceLimits(limits.maxSampleDataBytes, limits.maxSf2PdtaEntries);
@@ -157,21 +152,29 @@ XAmeResult XAmeCreateEngineWithOptions(
             }
             eng->soundBank = std::move(dls);
         }
-    } catch (...) {
+
+        if (!eng->synthesizer.Init(&eng->midiFile, eng->soundBank.get(), sampleRate, numChannels)) {
+            SetError("Synthesizer init error: " + eng->synthesizer.ErrorMessage());
+            delete eng;
+            return XAME_ERR_NOT_INIT;
+        }
+
+        eng->initialized = true;
+        *outEngine = eng;
+        return XAME_OK;
+    } catch (const std::bad_alloc&) {
         SetError("Out of memory");
         delete eng;
         return XAME_ERR_OUT_OF_MEM;
-    }
-
-    if (!eng->synthesizer.Init(&eng->midiFile, eng->soundBank.get(), sampleRate, numChannels)) {
-        SetError("Synthesizer init error: " + eng->synthesizer.ErrorMessage());
+    } catch (const std::exception& e) {
+        SetError(std::string("Unhandled exception during engine creation: ") + e.what());
+        delete eng;
+        return XAME_ERR_NOT_INIT;
+    } catch (...) {
+        SetError("Unhandled unknown exception during engine creation");
         delete eng;
         return XAME_ERR_NOT_INIT;
     }
-
-    eng->initialized = true;
-    *outEngine = eng;
-    return XAME_OK;
 }
 
 XAmeResult XAmeRender(
