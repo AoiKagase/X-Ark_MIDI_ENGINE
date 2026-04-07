@@ -553,6 +553,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         case GEN_Instrument:
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), presetLayer[g]);
             break;
+        case GEN_InitialAttenuation:
+            // BASSMIDI/FluidSynth互換: プリセット層のInitialAttenuationは無視する。
+            // SF2仕様上は加算対象だが、正負どちらの値もリード/パッド間のバランスを
+            // 崩すため、インストルメント層の値のみを使用する。
+            break;
         default:
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), outZone.generators[g] + presetLayer[g]);
             break;
