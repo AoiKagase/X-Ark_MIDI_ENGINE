@@ -21,11 +21,10 @@ constexpr u16 kModSrcVelocity = 2u;
 double ComputeDefaultVelocityAttenuationCb(u8 velocity) {
     if (velocity >= 127) return 0.0;
     if (velocity <= 0)   return 960.0;
-    // TiMidity++ perceived_vol_table 互換カーブ: gain = (velocity/127)^1.66096404744
-    // AttenuationToGain の逆算: centibels = -200 * log10(gain)
-    // TiMidity++ の recompute_amp が perceived_vol_table[vel] を乗算ゲインとして使うのと等価。
-    const double gain = std::pow(static_cast<double>(velocity) / 127.0, 1.66096404744);
-    return std::max(0.0, -200.0 * std::log10(gain));
+    // SF2 default modulator 1 (square law, FluidSynth/BASSMIDI互換):
+    //   amplitude ∝ (vel/127)^2  →  attenuation = 400 * log10(127/vel) centibels
+    //   vel=127 → 0cB, vel=64 → ~119cB, vel=1 → ~841cB
+    return 400.0 * std::log10(127.0 / static_cast<double>(velocity));
 }
 
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {

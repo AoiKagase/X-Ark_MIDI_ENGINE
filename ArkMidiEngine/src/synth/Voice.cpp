@@ -508,11 +508,9 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
 
     // ---- 音量計算（SF2仕様） ----
-    const f64 initAttenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
-    // SF2 default modulator 1: Note-On Velocity -> InitialAttenuation (square law)
-    // 400 * log10(127/vel) centibels  (vel=127→0cB, vel=1→~841cB, vel=0→960cB)
-    const f64 velAttenCb = (vel > 0) ? 400.0 * std::log10(127.0 / static_cast<f64>(vel)) : 960.0;
-    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(initAttenCb + velAttenCb)));
+    // GEN_InitialAttenuation には FindZones() 内で velocity 分が加算済み
+    const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
+    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
     if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
 
     // ---- 初期ローパスフィルター ----
@@ -561,10 +559,8 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     }
 
     const i32* gen = zone.generators;
-    const f64 initAttenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
-    // SF2 default modulator 1: Note-On Velocity -> InitialAttenuation (square law)
-    const f64 velAttenCb = (velocity > 0) ? 400.0 * std::log10(127.0 / static_cast<f64>(velocity)) : 960.0;
-    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(initAttenCb + velAttenCb)));
+    const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
+    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
     if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
 
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
