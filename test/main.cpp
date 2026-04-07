@@ -1,9 +1,9 @@
-/*
- * ArkMidiEngine テスト用コンソールアプリ
+﻿/*
+ * X-ArkMidiEngine テスト用コンソールアプリ
  * WAVファイルに書き出すことで動作確認できる
  *
  * 使用方法:
- *   ArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
+ *   X-ArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
  */
 
 #include <cstdio>
@@ -14,7 +14,7 @@
 #include <string>
 
 // DLL ヘッダー（DLL をビルド後にパスを通すこと）
-#include "../ArkMidiEngine/include/ArkMidiEngine.h"
+#include "../X-ArkMidiEngine/include/X-ArkMidiEngine.h"
 
 // ---- WAV ヘッダー書き出しユーティリティ ----
 
@@ -81,16 +81,16 @@ int main(int argc, char* argv[]) {
     std::wstring midiPathW = ToWide(midiPath);
     std::wstring sf2PathW = ToWide(sf2Path);
 
-    AmeEngine engine = nullptr;
-    AmeResult r = AmeCreateEngineFromPaths(
+    XAmeEngine engine = nullptr;
+    XAmeResult r = XAmeCreateEngineFromPaths(
         midiPathW.c_str(),
         sf2PathW.c_str(),
-        AME_SOUNDBANK_AUTO,
+        XAME_SOUNDBANK_AUTO,
         SAMPLE_RATE, NUM_CHANNELS,
         &engine);
 
-    if (r != AME_OK) {
-        fprintf(stderr, "AmeCreateEngine failed: %s\n", AmeGetLastError());
+    if (r != XAME_OK) {
+        fprintf(stderr, "XAmeCreateEngine failed: %s\n", XAmeGetLastError());
         return 1;
     }
 
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     FILE* wavFile = fopen(wavPath, "wb");
     if (!wavFile) {
         fprintf(stderr, "Failed to open output file: %s\n", wavPath);
-        AmeDestroyEngine(engine);
+        XAmeDestroyEngine(engine);
         return 1;
     }
 
@@ -112,9 +112,9 @@ int main(int argc, char* argv[]) {
     std::vector<short> buf(FRAMES_PER_CHUNK * NUM_CHANNELS);
     uint32_t totalFrames = 0;
 
-    while (!AmeIsFinished(engine)) {
+    while (!XAmeIsFinished(engine)) {
         unsigned int written = 0;
-        AmeRender(engine, buf.data(), FRAMES_PER_CHUNK, &written);
+        XAmeRender(engine, buf.data(), FRAMES_PER_CHUNK, &written);
         fwrite(buf.data(), sizeof(short) * NUM_CHANNELS, written, wavFile);
         totalFrames += written;
 
@@ -132,6 +132,7 @@ int main(int argc, char* argv[]) {
     printf("Done! %.2f sec (%u frames) -> %s\n",
            static_cast<double>(totalFrames) / SAMPLE_RATE, totalFrames, wavPath);
 
-    AmeDestroyEngine(engine);
+    XAmeDestroyEngine(engine);
     return 0;
 }
+

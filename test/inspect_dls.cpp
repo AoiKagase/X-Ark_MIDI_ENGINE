@@ -1,13 +1,13 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <vector>
 #include <map>
 #include <tuple>
 #include <limits>
 #include <cstdint>
 
-#include "../ArkMidiEngine/src/common/BinaryReader.h"
+#include "../X-ArkMidiEngine/src/common/BinaryReader.h"
 
-using namespace ArkMidi;
+using namespace XArkMidi;
 
 static std::vector<u8> ReadFile(const char* path) {
     FILE* f = fopen(path, "rb");
@@ -98,3 +98,4 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
+

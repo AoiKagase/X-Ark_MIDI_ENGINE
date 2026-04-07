@@ -1,4 +1,4 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <cstdlib>
 #include <vector>
 #include <cstdint>
@@ -7,11 +7,11 @@
 #include <array>
 #include <algorithm>
 
-#include "../ArkMidiEngine/src/common/Types.h"
-#include "../ArkMidiEngine/src/midi/MidiFile.h"
-#include "../ArkMidiEngine/src/sf2/Sf2File.h"
+#include "../X-ArkMidiEngine/src/common/Types.h"
+#include "../X-ArkMidiEngine/src/midi/MidiFile.h"
+#include "../X-ArkMidiEngine/src/sf2/Sf2File.h"
 
-using namespace ArkMidi;
+using namespace XArkMidi;
 
 static std::vector<u8> ReadFile(const char* path) {
     FILE* f = fopen(path, "rb");
@@ -153,3 +153,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+

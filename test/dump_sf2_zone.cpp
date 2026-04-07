@@ -1,10 +1,10 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <vector>
 #include <cmath>
 
-#include "../ArkMidiEngine/src/sf2/Sf2File.h"
+#include "../X-ArkMidiEngine/src/sf2/Sf2File.h"
 
-using namespace ArkMidi;
+using namespace XArkMidi;
 
 int wmain(int argc, wchar_t* argv[]) {
     if (argc < 6) {
@@ -69,3 +69,4 @@ int wmain(int argc, wchar_t* argv[]) {
 
     return 0;
 }
+

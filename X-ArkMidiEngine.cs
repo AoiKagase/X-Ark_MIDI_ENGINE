@@ -1,0 +1,227 @@
+﻿using System;
+using System.Runtime.InteropServices;
+
+public static class XArkMidiEngine
+{
+    private const string DllName = "X-ArkMidiEngine.dll";
+
+    public enum XAmeResult : int
+    {
+        OK = 0,
+        InvalidArg = -1,
+        ParseMidi = -2,
+        ParseSf2 = -3,
+        OutOfMemory = -4,
+        NotInitialized = -5,
+        ParseDls = -6,
+        Unsupported = -7,
+        Io = -8,
+    }
+
+    public enum SoundBankKind : uint
+    {
+        Auto = 0,
+        Sf2 = 1,
+        Dls = 2,
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CreateOptions
+    {
+        public uint StructSize;
+        public ulong MaxSampleDataBytes;
+        public uint MaxSf2PdtaEntries;
+        public uint MaxDlsPoolTableEntries;
+
+        public static CreateOptions Default()
+            => new CreateOptions { StructSize = (uint)Marshal.SizeOf<CreateOptions>() };
+    }
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern XAmeResult XAmeCreateEngineFromPaths(
+        string midiPath,
+        string soundBankPath,
+        SoundBankKind soundBankKind,
+        uint sampleRate,
+        uint numChannels,
+        out IntPtr outEngine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern XAmeResult XAmeCreateEngineWithOptions(
+        string midiPath,
+        string soundBankPath,
+        SoundBankKind soundBankKind,
+        uint sampleRate,
+        uint numChannels,
+        ref CreateOptions options,
+        out IntPtr outEngine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeRender(
+        IntPtr engine,
+        short[] outBuffer,
+        uint numFrames,
+        out uint outWritten);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int XAmeIsFinished(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void XAmeDestroyEngine(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr XAmeGetVersion();
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr XAmeGetLastError();
+
+    public static string GetVersion()
+        => Marshal.PtrToStringAnsi(XAmeGetVersion()) ?? string.Empty;
+
+    public static string GetLastError()
+        => Marshal.PtrToStringAnsi(XAmeGetLastError()) ?? string.Empty;
+
+    public sealed class Engine : IDisposable
+    {
+        private IntPtr _handle;
+        private bool _disposed;
+        private readonly uint _numChannels;
+
+        public Engine(string midiPath, string soundBankPath,
+                      SoundBankKind soundBankKind = SoundBankKind.Auto,
+                      uint sampleRate = 44100, uint numChannels = 2)
+            : this(midiPath, soundBankPath, soundBankKind, sampleRate, numChannels, null)
+        {
+        }
+
+        public Engine(string midiPath, string soundBankPath,
+                      SoundBankKind soundBankKind,
+                      uint sampleRate,
+                      uint numChannels,
+                      CreateOptions? options)
+        {
+            if (string.IsNullOrWhiteSpace(midiPath))
+                throw new ArgumentException("midiPath is null or empty", nameof(midiPath));
+            if (string.IsNullOrWhiteSpace(soundBankPath))
+                throw new ArgumentException("soundBankPath is null or empty", nameof(soundBankPath));
+            if (numChannels < 1 || numChannels > 2)
+                throw new ArgumentOutOfRangeException(nameof(numChannels), "Must be 1 or 2");
+
+            XAmeResult result;
+            if (options.HasValue)
+            {
+                var nativeOptions = options.Value;
+                if (nativeOptions.StructSize == 0)
+                    nativeOptions.StructSize = (uint)Marshal.SizeOf<CreateOptions>();
+                result = XAmeCreateEngineWithOptions(
+                    midiPath,
+                    soundBankPath,
+                    soundBankKind,
+                    sampleRate,
+                    numChannels,
+                    ref nativeOptions,
+                    out _handle);
+            }
+            else
+            {
+                result = XAmeCreateEngineFromPaths(
+                    midiPath,
+                    soundBankPath,
+                    soundBankKind,
+                    sampleRate,
+                    numChannels,
+                    out _handle);
+            }
+
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+
+            _numChannels = numChannels;
+        }
+
+        public uint Render(short[] buffer, uint numFrames)
+        {
+            ThrowIfDisposed();
+            var requiredSamples = checked((int)(numFrames * _numChannels));
+            if (buffer == null || buffer.Length < requiredSamples)
+                throw new ArgumentException("buffer is smaller than required", nameof(buffer));
+
+            var result = XAmeRender(_handle, buffer, numFrames, out uint written);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+            return written;
+        }
+
+        public bool IsFinished
+        {
+            get
+            {
+                if (_disposed) return true;
+                return XAmeIsFinished(_handle) != 0;
+            }
+        }
+
+        public short[] RenderAll(uint chunkFrames = 4096)
+        {
+            ThrowIfDisposed();
+            var buf = new short[chunkFrames * _numChannels];
+            var result = new short[buf.Length];
+            int totalSamples = 0;
+
+            while (!IsFinished)
+            {
+                uint written = Render(buf, chunkFrames);
+                if (written == 0) break;
+
+                int writtenSamples = checked((int)(written * _numChannels));
+                int requiredSamples = checked(totalSamples + writtenSamples);
+                if (requiredSamples > result.Length)
+                {
+                    int newLength = result.Length;
+                    while (newLength < requiredSamples)
+                    {
+                        newLength = checked(newLength * 2);
+                    }
+                    Array.Resize(ref result, newLength);
+                }
+
+                Array.Copy(buf, 0, result, totalSamples, writtenSamples);
+                totalSamples = requiredSamples;
+            }
+
+            Array.Resize(ref result, totalSamples);
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                if (_handle != IntPtr.Zero)
+                {
+                    XAmeDestroyEngine(_handle);
+                    _handle = IntPtr.Zero;
+                }
+                _disposed = true;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(Engine));
+        }
+    }
+
+    public class XArkMidiException : Exception
+    {
+        public XAmeResult ErrorCode { get; }
+
+        public XArkMidiException(XAmeResult code, string message)
+            : base($"[{code}] {message}")
+        {
+            ErrorCode = code;
+        }
+    }
+}
+
