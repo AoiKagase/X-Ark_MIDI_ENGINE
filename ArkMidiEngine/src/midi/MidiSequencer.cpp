@@ -70,11 +70,17 @@ void MidiSequencer::BuildTempoMap(const MidiFile* file) {
 }
 
 void MidiSequencer::MergeTracks(const MidiFile* file) {
+    // 総イベント数を事前計算して push_back による再確保を防ぐ
+    size_t totalEvents = 0;
+    const int trackCount = file->TrackCount();
+    for (int t = 0; t < trackCount; ++t)
+        totalEvents += file->Track(t).Events().size();
+    mergedEvents_.reserve(totalEvents);
+
     // N-way マージ: priority_queue<{tick, trackIndex, eventIndex}>
     using Entry = std::tuple<u32, int, size_t>;
     std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> pq;
 
-    int trackCount = file->TrackCount();
     for (int t = 0; t < trackCount; ++t) {
         if (!file->Track(t).Events().empty())
             pq.push({ file->Track(t).Events()[0].absoluteTick, t, 0 });

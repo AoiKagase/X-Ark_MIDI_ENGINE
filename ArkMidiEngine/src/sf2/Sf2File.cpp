@@ -18,13 +18,20 @@ namespace {
 
 constexpr u16 kModSrcVelocity = 2u;
 
-double ComputeDefaultVelocityAttenuationCb(u8 velocity) {
-    if (velocity >= 127) return 0.0;
-    if (velocity <= 0)   return 960.0;
-    // SF2 default modulator 1 (square law, FluidSynth/BASSMIDI互換):
-    //   amplitude ∝ (vel/127)^2  →  attenuation = 400 * log10(127/vel) centibels
-    //   vel=127 → 0cB, vel=64 → ~119cB, vel=1 → ~841cB
-    return 400.0 * std::log10(127.0 / static_cast<double>(velocity));
+// SF2 default modulator 1: velocity → InitialAttenuation
+// 400 * log10(127/vel) centibels (square law, FluidSynth/BASSMIDI互換)
+// NoteOn毎に呼ばれるため、128エントリのテーブルで log10 計算を排除
+const std::array<i32, 128> kVelAttenTable = []() {
+    std::array<i32, 128> t{};
+    t[0] = 960;
+    for (int v = 1; v < 127; ++v)
+        t[v] = static_cast<i32>(std::lround(400.0 * std::log10(127.0 / v)));
+    t[127] = 0;
+    return t;
+}();
+
+inline i32 ComputeDefaultVelocityAttenuationCb(u8 velocity) {
+    return kVelAttenTable[velocity];
 }
 
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
@@ -435,33 +442,26 @@ void Sf2File::ParseIgen(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
-    u32 count = size / 46;
+    static_assert(sizeof(SFSample) == 46, "SFSample must be 46 bytes");
+    const u32 count = size / 46;
     samples_.resize(count);
     sampleHeaders_.resize(count);
     for (u32 i = 0; i < count; ++i) {
-        auto& s = samples_[i];
-        for (int c = 0; c < 20; ++c) {
-            s.achSampleName[c] = static_cast<char>(r.ReadU8());
-            sampleHeaders_[i].sampleName[c] = s.achSampleName[c];
-        }
-        s.dwStart           = r.ReadU32LE();
-        s.dwEnd             = r.ReadU32LE();
-        s.dwStartloop       = r.ReadU32LE();
-        s.dwEndloop         = r.ReadU32LE();
-        s.dwSampleRate      = r.ReadU32LE();
-        s.byOriginalPitch   = r.ReadU8();
-        s.chPitchCorrection = static_cast<i8>(r.ReadU8());
-        s.wSampleLink       = r.ReadU16LE();
-        s.sfSampleType      = r.ReadU16LE();
+        // SFSample は #pragma pack(1) で 46 バイト ─ 一括 memcpy で個別読込を排除
+        SFSample& s = samples_[i];
+        std::memcpy(&s, r.CurrentPtr(), sizeof(SFSample));
+        r.Skip(sizeof(SFSample));
 
-        sampleHeaders_[i].start = s.dwStart;
-        sampleHeaders_[i].end = s.dwEnd;
-        sampleHeaders_[i].loopStart = s.dwStartloop;
-        sampleHeaders_[i].loopEnd = s.dwEndloop;
-        sampleHeaders_[i].sampleRate = s.dwSampleRate;
-        sampleHeaders_[i].originalPitch = s.byOriginalPitch;
-        sampleHeaders_[i].pitchCorrection = s.chPitchCorrection;
-        sampleHeaders_[i].sampleType = s.sfSampleType;
+        SampleHeader& h = sampleHeaders_[i];
+        std::memcpy(h.sampleName, s.achSampleName, 20);
+        h.start           = s.dwStart;
+        h.end             = s.dwEnd;
+        h.loopStart       = s.dwStartloop;
+        h.loopEnd         = s.dwEndloop;
+        h.sampleRate      = s.dwSampleRate;
+        h.originalPitch   = s.byOriginalPitch;
+        h.pitchCorrection = s.chPitchCorrection;
+        h.sampleType      = s.sfSampleType;
     }
 }
 
@@ -480,14 +480,12 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     const i32* defaults = GetSF2GeneratorDefaults();
     constexpr i32 kUnset = std::numeric_limits<i32>::min();
 
-    // Step 1: デフォルト値で初期化
-    for (int g = 0; g < GEN_COUNT; ++g)
-        outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), defaults[g]);
+    // Step 1: デフォルト値で初期化（デフォルト値は仕様範囲内なのでクランプ不要 → memcpy）
+    std::memcpy(outZone.generators, defaults, GEN_COUNT * sizeof(i32));
 
-    auto clearLayer = [&](i32* layer) {
-        for (int g = 0; g < GEN_COUNT; ++g) {
-            layer[g] = kUnset;
-        }
+    // std::fill はコンパイラが SIMD 化するため for ループより高速
+    auto clearLayer = [](i32* layer) {
+        std::fill(layer, layer + GEN_COUNT, std::numeric_limits<i32>::min());
     };
 
     auto applyPresetLayer = [&](i32* layer, int bagIdx) {
@@ -598,7 +596,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     }
 
     if (!hasVelocityToAttenuationMod) {
-        const i32 delta = static_cast<i32>(std::lround(ComputeDefaultVelocityAttenuationCb(velocity)));
+        const i32 delta = ComputeDefaultVelocityAttenuationCb(velocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
     }
