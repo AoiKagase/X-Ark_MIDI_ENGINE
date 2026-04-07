@@ -440,7 +440,10 @@ void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
     sampleHeaders_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         auto& s = samples_[i];
-        for (int c = 0; c < 20; ++c) s.achSampleName[c] = static_cast<char>(r.ReadU8());
+        for (int c = 0; c < 20; ++c) {
+            s.achSampleName[c] = static_cast<char>(r.ReadU8());
+            sampleHeaders_[i].sampleName[c] = s.achSampleName[c];
+        }
         s.dwStart           = r.ReadU32LE();
         s.dwEnd             = r.ReadU32LE();
         s.dwStartloop       = r.ReadU32LE();
@@ -450,7 +453,7 @@ void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
         s.chPitchCorrection = static_cast<i8>(r.ReadU8());
         s.wSampleLink       = r.ReadU16LE();
         s.sfSampleType      = r.ReadU16LE();
-        for (int c = 0; c < 20; ++c) sampleHeaders_[i].sampleName[c] = s.achSampleName[c];
+
         sampleHeaders_[i].start = s.dwStart;
         sampleHeaders_[i].end = s.dwEnd;
         sampleHeaders_[i].loopStart = s.dwStartloop;
