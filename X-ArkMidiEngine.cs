@@ -193,6 +193,14 @@ public static class XArkMidiEngine
             return result;
         }
 
+        public byte[] RenderAllBytes(uint chunkFrames = 4096)
+        {
+            var samples = RenderAll(chunkFrames);
+            var bytes = new byte[samples.Length * sizeof(short)];
+            Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
+            return bytes;
+        }
+
         public void Dispose()
         {
             if (!_disposed)
