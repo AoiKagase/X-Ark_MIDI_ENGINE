@@ -517,10 +517,11 @@ bool Sf2File::ValidateSampleHeaders() {
             errorMsg_ = "SF2 sample header points outside sample data";
             return false;
         }
-        if (h.loopStart < h.start || h.loopStart > h.end ||
-            h.loopEnd < h.loopStart || h.loopEnd > h.end) {
-            errorMsg_ = "SF2 sample loop points outside sample range";
-            return false;
+        if (h.loopStart < h.start || h.loopStart > h.end) {
+            h.loopStart = h.start;
+        }
+        if (h.loopEnd < h.loopStart || h.loopEnd > h.end) {
+            h.loopEnd = h.end;
         }
         if (h.sampleRate == 0) {
             // Some banks leave the terminal EOS record or even sparse/unused sample
@@ -622,9 +623,10 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), presetLayer[g]);
             break;
         case GEN_InitialAttenuation:
-            // BASSMIDI/FluidSynth互換: プリセット層のInitialAttenuationは無視する。
-            // SF2仕様上は加算対象だが、正負どちらの値もリード/パッド間のバランスを
-            // 崩すため、インストルメント層の値のみを使用する。
+            // SF2仕様上はプリセット層のInitialAttenuationは加算対象だが、
+            // フル加算だとリード/パッド間のバランスが崩れるため48%のみ加算する。
+            // （200 cb * 48 / 100 = 96 cb）
+            outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), outZone.generators[g] + (presetLayer[g] * 48) / 100);
             break;
         default:
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), outZone.generators[g] + presetLayer[g]);
@@ -846,6 +848,141 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
         }
     }
     return !outZones.empty();
+}
+
+bool Sf2File::GetPresetBagIndices(u16 bank, u8 program, int& outGlobalBagIdx, int& outLocalBagIdx) const {
+    outGlobalBagIdx = -1;
+    outLocalBagIdx = -1;
+
+    const u32 presetKey = (static_cast<u32>(bank) << 8) | static_cast<u32>(program);
+    const auto it = presetIndexMap_.find(presetKey);
+    if (it == presetIndexMap_.end() || it->second.empty()) {
+        return false;
+    }
+
+    const int pi = it->second[0];
+    const auto& ph = presets_[pi];
+
+    int pbagStart = ph.wPresetBagNdx;
+    int pbagEnd = presets_[pi + 1].wPresetBagNdx;
+
+    int pbagMax = static_cast<int>(presetBags_.size());
+    if (pbagStart < 0 || pbagStart >= pbagMax) return false;
+    if (pbagEnd > pbagMax) pbagEnd = pbagMax;
+
+    if (pbagStart < pbagEnd && pbagStart + 1 < pbagMax) {
+        int gs = presetBags_[pbagStart].wGenNdx;
+        int ge = presetBags_[pbagStart + 1].wGenNdx;
+        bool hasInstrument = false;
+        for (int pg = gs; pg < ge && pg < static_cast<int>(presetGens_.size()); ++pg) {
+            if (presetGens_[pg].sfGenOper == GEN_Instrument) { hasInstrument = true; break; }
+        }
+        if (!hasInstrument) outGlobalBagIdx = pbagStart;
+    }
+
+    outLocalBagIdx = pbagStart;
+    return true;
+}
+
+bool Sf2File::GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& outGlobalBagIdx) const {
+    outGlobalBagIdx = -1;
+
+    if (instrumentIdx < 0 || instrumentIdx + 1 >= static_cast<int>(instruments_.size())) {
+        return false;
+    }
+
+    int ibagStart = instruments_[instrumentIdx].wInstBagNdx;
+    int ibagEnd = instruments_[instrumentIdx + 1].wInstBagNdx;
+
+    int ibagMax = static_cast<int>(instBags_.size());
+    if (ibagStart < 0 || ibagStart >= ibagMax) return false;
+    if (ibagEnd > ibagMax) ibagEnd = ibagMax;
+
+    if (ibagStart < ibagEnd && ibagStart + 1 < ibagMax) {
+        int gs = instBags_[ibagStart].wInstGenNdx;
+        int ge = instBags_[ibagStart + 1].wInstGenNdx;
+        bool hasSampleId = false;
+        for (int ig = gs; ig < ge && ig < static_cast<int>(instGens_.size()); ++ig) {
+            if (instGens_[ig].sfGenOper == GEN_SampleID) { hasSampleId = true; break; }
+        }
+        if (!hasSampleId) outGlobalBagIdx = ibagStart;
+    }
+
+    return true;
+}
+
+void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]) const {
+    const i32* defaults = GetSF2GeneratorDefaults();
+    std::memcpy(outGens, defaults, GEN_COUNT * sizeof(i32));
+
+    if (genStart < 0 || genEnd <= genStart) return;
+
+    int genMax = static_cast<int>(presetGens_.size());
+    if (genStart > genMax) return;
+    if (genEnd > genMax) genEnd = genMax;
+
+    for (int g = genStart; g < genEnd; ++g) {
+        u16 oper = presetGens_[g].sfGenOper;
+        if (oper >= GEN_COUNT) continue;
+        outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.shAmount));
+    }
+}
+
+void Sf2File::GetPresetGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const {
+    const i32* defaults = GetSF2GeneratorDefaults();
+    std::memcpy(outGens, defaults, GEN_COUNT * sizeof(i32));
+
+    int pbagMax = static_cast<int>(presetBags_.size());
+    if (bagIdx < 0 || bagIdx >= pbagMax) return;
+
+    int genStart = presetBags_[bagIdx].wGenNdx;
+    int genEnd = (bagIdx + 1 < pbagMax) ? presetBags_[bagIdx + 1].wGenNdx : static_cast<int>(presetGens_.size());
+
+    int pgenMax = static_cast<int>(presetGens_.size());
+    if (genStart < 0 || genStart > pgenMax) genStart = pgenMax;
+    if (genEnd > pgenMax) genEnd = pgenMax;
+
+    for (int g = genStart; g < genEnd; ++g) {
+        u16 oper = presetGens_[g].sfGenOper;
+        if (oper >= GEN_COUNT) continue;
+        if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
+            outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.wAmount));
+        } else {
+            outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.shAmount));
+        }
+    }
+}
+
+void Sf2File::GetInstrumentGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const {
+    const i32* defaults = GetSF2GeneratorDefaults();
+    std::memcpy(outGens, defaults, GEN_COUNT * sizeof(i32));
+
+    int ibagMax = static_cast<int>(instBags_.size());
+    if (bagIdx < 0 || bagIdx >= ibagMax) return;
+
+    int genStart = instBags_[bagIdx].wInstGenNdx;
+    int genEnd = (bagIdx + 1 < ibagMax) ? instBags_[bagIdx + 1].wInstGenNdx : static_cast<int>(instGens_.size());
+
+    int igenMax = static_cast<int>(instGens_.size());
+    if (genStart < 0 || genStart > igenMax) genStart = igenMax;
+    if (genEnd > igenMax) genEnd = igenMax;
+
+    for (int g = genStart; g < genEnd; ++g) {
+        u16 oper = instGens_[g].sfGenOper;
+        if (oper >= GEN_COUNT) continue;
+        if (oper == GEN_SampleID || oper == GEN_SampleModes || oper == GEN_KeyRange || oper == GEN_VelRange) {
+            outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(instGens_[g].genAmount.wAmount));
+        } else {
+            outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(instGens_[g].genAmount.shAmount));
+        }
+    }
+}
+
+int Sf2File::GetInstrumentIndex(int presetInstrumentGenValue) const {
+    if (presetInstrumentGenValue < 0 || presetInstrumentGenValue >= static_cast<int>(instruments_.size())) {
+        return -1;
+    }
+    return presetInstrumentGenValue;
 }
 
 } // namespace XArkMidi

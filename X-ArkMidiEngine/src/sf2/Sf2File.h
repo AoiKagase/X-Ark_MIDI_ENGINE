@@ -29,6 +29,19 @@ public:
 
     f32 GetLoudnessNormCompensation() const override { return normCompensation_; }
 
+    size_t PresetCount() const { return presets_.size(); }
+    size_t InstrumentCount() const { return instruments_.size(); }
+    size_t SampleHeaderCount() const { return sampleHeaders_.size(); }
+    const SFPresetHeader* Preset(size_t idx) const { return idx < presets_.size() ? &presets_[idx] : nullptr; }
+    const SampleHeader* SampleHeaders(size_t idx) const { return idx < sampleHeaders_.size() ? &sampleHeaders_[idx] : nullptr; }
+
+    bool GetPresetBagIndices(u16 bank, u8 program, int& outGlobalBagIdx, int& outLocalBagIdx) const;
+    bool GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& outGlobalBagIdx) const;
+    void GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]) const;
+    void GetPresetGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const;
+    void GetInstrumentGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const;
+    int GetInstrumentIndex(int presetInstrumentGenValue) const;
+
 private:
     std::vector<i16>           sampleData_;
     std::vector<SFPresetHeader> presets_;

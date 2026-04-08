@@ -1,72 +1,184 @@
-﻿#include <cstdio>
+#include <cstdio>
 #include <vector>
 #include <cmath>
+#include <cstring>
+#include <limits>
 
 #include "../X-ArkMidiEngine/src/sf2/Sf2File.h"
+#include "../X-ArkMidiEngine/src/sf2/Sf2Types.h"
 
 using namespace XArkMidi;
 
-int wmain(int argc, wchar_t* argv[]) {
-    if (argc < 6) {
-        std::fwprintf(stderr, L"Usage: %ls <input.sf2> <bank> <program> <key> <velocity>\n", argv[0]);
+static const char* GenName(int g) {
+    switch (g) {
+    case 0: return "startAddrsOffset";
+    case 1: return "endAddrsOffset";
+    case 2: return "startloopAddrsOffset";
+    case 3: return "endloopAddrsOffset";
+    case 4: return "startAddrsCoarseOffset";
+    case 5: return "modLfoToPitch";
+    case 6: return "vibLfoToPitch";
+    case 7: return "modEnvToPitch";
+    case 8: return "initialFilterFc";
+    case 9: return "initialFilterQ";
+    case 10: return "modLfoToFilterFc";
+    case 11: return "modEnvToFilterFc";
+    case 12: return "modLfoToVolume";
+    case 13: return "unused1";
+    case 15: return "chorusEffectsSend";
+    case 16: return "reverbEffectsSend";
+    case 17: return "pan";
+    case 21: return "delayModLFO";
+    case 22: return "freqModLFO";
+    case 23: return "delayVibLFO";
+    case 24: return "freqVibLFO";
+    case 25: return "delayModEnv";
+    case 26: return "attackModEnv";
+    case 27: return "holdModEnv";
+    case 28: return "decayModEnv";
+    case 29: return "sustainModEnv";
+    case 30: return "releaseModEnv";
+    case 31: return "keynumToModEnvHold";
+    case 32: return "keynumToModEnvDecay";
+    case 33: return "delayVolEnv";
+    case 34: return "attackVolEnv";
+    case 35: return "holdVolEnv";
+    case 36: return "decayVolEnv";
+    case 37: return "sustainVolEnv";
+    case 38: return "releaseVolEnv";
+    case 39: return "keynumToVolEnvHold";
+    case 40: return "keynumToVolEnvDecay";
+    case 41: return "instrument";
+    case 43: return "keyRange";
+    case 44: return "velRange";
+    case 45: return "startloopAddrsCoarse";
+    case 46: return "keynum";
+    case 47: return "velocity";
+    case 48: return "initialAttenuation";
+    case 50: return "endloopAddrsCoarse";
+    case 51: return "coarseTune";
+    case 52: return "fineTune";
+    case 53: return "sampleID";
+    case 54: return "sampleModes";
+    case 56: return "scaleTuning";
+    case 57: return "exclusiveClass";
+    case 58: return "overridingRootKey";
+    default: return "unknown";
+    }
+}
+
+void PrintNonDefaultGens(const i32 gens[GEN_COUNT], const i32 defaults[GEN_COUNT], const char* header) {
+    printf("  %s:\n", header);
+    bool hasContent = false;
+    for (int g = 0; g < GEN_COUNT; ++g) {
+        if (g == GEN_COUNT - 1) continue;
+        if (gens[g] != defaults[g]) {
+            printf("    [%02d] %-25s = %d\n", g, GenName(g), gens[g]);
+            hasContent = true;
+        }
+    }
+    if (!hasContent) {
+        printf("    (all default values)\n");
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <input.sf2> [bank program key velocity]\n", argv[0]);
         return 1;
     }
 
-    const std::wstring path = argv[1];
-    const u16 bank = static_cast<u16>(_wtoi(argv[2]));
-    const u8 program = static_cast<u8>(_wtoi(argv[3]));
-    const u8 key = static_cast<u8>(_wtoi(argv[4]));
-    const u8 velocity = static_cast<u8>(_wtoi(argv[5]));
-
+    const std::wstring path = std::wstring(argv[1], argv[1] + strlen(argv[1]));
+    
     Sf2File sf2;
     if (!sf2.LoadFromFile(path)) {
-        std::fprintf(stderr, "SF2 parse failed: %s\n", sf2.ErrorMessage().c_str());
+        fprintf(stderr, "SF2 parse failed: %s\n", sf2.ErrorMessage().c_str());
         return 1;
     }
 
-    std::vector<ResolvedZone> zones;
-    if (!sf2.FindZones(bank, program, key, velocity, zones, nullptr)) {
-        std::printf("zones=0\n");
+    const i16* pcm = sf2.SampleData();
+    const size_t sampleCount = sf2.SampleDataCount();
+    
+    printf("=== SF2 Analysis: %s ===\n", argv[1]);
+    printf("Samples: %zu, Presets: %zu, Instruments: %zu\n\n", 
+        sampleCount, sf2.PresetCount(), sf2.InstrumentCount());
+
+    if (argc >= 5) {
+        u16 bank = static_cast<u16>(atoi(argv[2]));
+        u8 program = static_cast<u8>(atoi(argv[3]));
+        u8 key = static_cast<u8>(atoi(argv[4]));
+        u8 velocity = 100;
+        if (argc >= 6) velocity = static_cast<u8>(atoi(argv[5]));
+        
+        printf("=== Query: bank=%u program=%u key=%u velocity=%u ===\n\n", bank, program, key, velocity);
+
+        const i32* defaults = GetSF2GeneratorDefaults();
+
+        int globalPresetBag, localPresetBag;
+        if (!sf2.GetPresetBagIndices(bank, program, globalPresetBag, localPresetBag)) {
+            printf("Preset not found!\n");
+            return 0;
+        }
+
+        printf("[Preset] bank=%u program=%u\n", bank, program);
+        printf("  Global Bag: %d, Local Bag: %d\n\n", globalPresetBag, localPresetBag);
+
+        i32 presetGlobalGens[GEN_COUNT] = {0};
+        i32 presetLocalGens[GEN_COUNT] = {0};
+        if (globalPresetBag >= 0) {
+            sf2.GetPresetGeneratorLayer(globalPresetBag, presetGlobalGens);
+            PrintNonDefaultGens(presetGlobalGens, defaults, "Preset Global Zone (raw)");
+        }
+        sf2.GetPresetGeneratorLayer(localPresetBag, presetLocalGens);
+        PrintNonDefaultGens(presetLocalGens, defaults, "Preset Local Zone (raw)");
+
+        int instrumentIdx = presetLocalGens[GEN_Instrument];
+        if (instrumentIdx >= 0) {
+            printf("\n[Instrument] index=%d\n", instrumentIdx);
+            
+            int globalInstBag;
+            if (sf2.GetInstrumentBagIndices(instrumentIdx, 0, globalInstBag)) {
+                i32 instGlobalGens[GEN_COUNT] = {0};
+                if (globalInstBag >= 0) {
+                    sf2.GetInstrumentGeneratorLayer(globalInstBag, instGlobalGens);
+                    PrintNonDefaultGens(instGlobalGens, defaults, "Instrument Global Zone (raw)");
+                }
+            }
+        }
+
+        std::vector<ResolvedZone> zones;
+        if (!sf2.FindZones(bank, program, key, velocity, zones, nullptr)) {
+            printf("\nNO ZONES FOUND!\n");
+            return 0;
+        }
+        
+        printf("\n--- Merged Results (%zu zones) ---\n", zones.size());
+        for (size_t zi = 0; zi < zones.size(); ++zi) {
+            const auto& z = zones[zi];
+            const auto* h = z.sample;
+            
+            printf("\nZone %zu:\n", zi);
+            printf("  Sample: '%.20s' start=%u end=%u rate=%u\n",
+                h->sampleName, h->start, h->end, h->sampleRate);
+            
+            int peak = 0;
+            double sumSq = 0.0;
+            u32 frames = 0;
+            for (u32 pos = h->start; pos < h->end && pos < sampleCount; ++pos) {
+                int v = pcm[pos];
+                if (abs(v) > peak) peak = abs(v);
+                sumSq += static_cast<double>(v) * static_cast<double>(v);
+                ++frames;
+            }
+            double rms = frames > 0 ? sqrt(sumSq / frames) : 0.0;
+            printf("  Audio: frames=%u peak=%d rms=%.1f\n", frames, peak, rms);
+            printf("  InitialAttenuation: %d cb\n", z.generators[48]);
+        }
+        
         return 0;
     }
 
-    std::printf("zones=%zu\n", zones.size());
-    for (size_t i = 0; i < zones.size(); ++i) {
-        const auto& z = zones[i];
-        const i16* pcm = sf2.SampleData();
-        const size_t sampleCount = sf2.SampleDataCount();
-        const u32 start = z.sample->start;
-        const u32 end = z.sample->end;
-        int peak = 0;
-        double sumSq = 0.0;
-        u32 frames = 0;
-        for (u32 pos = start; pos < end && pos < sampleCount; ++pos) {
-            const int v = pcm[pos];
-            const int a = std::abs(v);
-            if (a > peak) peak = a;
-            sumSq += static_cast<double>(v) * static_cast<double>(v);
-            ++frames;
-        }
-        const double rms = frames > 0 ? std::sqrt(sumSq / frames) : 0.0;
-        std::printf(
-            "zone=%zu root=%d fine=%d att=%d pan=%d sampleModes=%d start=%u end=%u loopStart=%u loopEnd=%u lsOff=%d leOff=%d sampleRate=%u peak=%d rms=%.0f\n",
-            i,
-            z.generators[GEN_OverridingRootKey],
-            z.generators[GEN_FineTune],
-            z.generators[GEN_InitialAttenuation],
-            z.generators[GEN_Pan],
-            z.generators[GEN_SampleModes],
-            z.sample->start,
-            z.sample->end,
-            z.sample->loopStart,
-            z.sample->loopEnd,
-            z.generators[GEN_StartloopAddrsOffset] + z.generators[GEN_StartloopAddrsCoarse] * 32768,
-            z.generators[GEN_EndloopAddrsOffset] + z.generators[GEN_EndloopAddrsCoarse] * 32768,
-            z.sample->sampleRate,
-            peak,
-            rms);
-    }
-
+    printf("Specify bank program key velocity to query.\n");
+    printf("Example: %s file.sf2 0 80 60 100\n", argv[0]);
     return 0;
 }
-
