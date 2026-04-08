@@ -18,14 +18,28 @@ constexpr f32 kMasterOutputGain = 0.80f; // リバーブ増量分を考慮して
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
-constexpr const char* kProgramDebugLogPath = ".\\diagnostics\\sf2_program_focus.log";
-constexpr const char* kProgramSummaryLogPath = ".\\diagnostics\\sf2_program_summary.log";
+constexpr const char* kProgramDebugLogPath = ".\\diagnostics\\program_focus.log";
+constexpr const char* kProgramSummaryLogPath = ".\\diagnostics\\program_summary.log";
+
+const char* SoundBankKindName(SoundBankKind kind) {
+    switch (kind) {
+    case SoundBankKind::Sf2: return "sf2";
+    case SoundBankKind::Dls: return "dls";
+    default: return "auto";
+    }
+}
 
 bool IsProgramLoggingEnabled() {
     static const bool enabled = []() {
         char* value = nullptr;
         size_t len = 0;
-        const errno_t err = _dupenv_s(&value, &len, "XARKMIDI_ENABLE_SF2_PROGRAM_LOG");
+        const errno_t err = _dupenv_s(&value, &len, "XARKMIDI_ENABLE_PROGRAM_LOG");
+        if (!(err == 0 && value && value[0] != '\0' && value[0] != '0')) {
+            std::free(value);
+            value = nullptr;
+            len = 0;
+            _dupenv_s(&value, &len, "XARKMIDI_ENABLE_SF2_PROGRAM_LOG");
+        }
         const bool isEnabled = (err == 0 && value && value[0] != '\0' && value[0] != '0');
         std::free(value);
         return isEnabled;
@@ -104,14 +118,15 @@ void ResetProgramDebugLog() {
     std::filesystem::create_directories(std::filesystem::path(kProgramDebugLogPath).parent_path());
     static bool initialized = false;
     std::ofstream log(kProgramDebugLogPath, initialized ? std::ios::app : std::ios::trunc);
-    log << (initialized ? "\n--- synth init ---\n" : "X-ArkMidiEngine SF2 focused program diagnostics\n");
+    log << (initialized ? "\n--- synth init ---\n" : "X-ArkMidiEngine program diagnostics\n");
     std::ofstream summary(kProgramSummaryLogPath, initialized ? std::ios::app : std::ios::trunc);
-    summary << (initialized ? "--- synth init ---\n" : "X-ArkMidiEngine SF2 note_on program summary\n");
+    summary << (initialized ? "--- synth init ---\n" : "X-ArkMidiEngine note_on program summary\n");
     initialized = true;
 }
 
 void AppendProgramSummaryLog(u16 requestedBank,
                              u16 resolvedBank,
+                             SoundBankKind bankKind,
                              u8 channel,
                              u8 program,
                              u8 key,
@@ -124,6 +139,7 @@ void AppendProgramSummaryLog(u16 requestedBank,
         return;
     }
     log << "note_on"
+        << " bank_kind=" << SoundBankKindName(bankKind)
         << " ch=" << static_cast<int>(channel)
         << " program=" << static_cast<int>(program)
         << " key=" << static_cast<int>(key)
@@ -135,6 +151,7 @@ void AppendProgramSummaryLog(u16 requestedBank,
 
 void AppendProgramDebugLog(u16 requestedBank,
                            u16 resolvedBank,
+                           SoundBankKind bankKind,
                            u8 channel,
                            u8 program,
                            u8 key,
@@ -150,6 +167,7 @@ void AppendProgramDebugLog(u16 requestedBank,
     }
 
     log << "note_on"
+        << " bank_kind=" << SoundBankKindName(bankKind)
         << " ch=" << static_cast<int>(channel)
         << " program=" << static_cast<int>(program)
         << " key=" << static_cast<int>(key)
@@ -192,6 +210,7 @@ void AppendProgramDebugLog(u16 requestedBank,
             << " decay_vol_env=" << gen[GEN_DecayVolEnv]
             << " sustain_vol_env=" << gen[GEN_SustainVolEnv]
             << " release_vol_env=" << gen[GEN_ReleaseVolEnv]
+            << " no_truncation=" << (zone.noTruncation ? 1 : 0)
             << " pan=" << gen[GEN_Pan]
             << " reverb_send=" << gen[GEN_ReverbEffectsSend]
             << " chorus_send=" << gen[GEN_ChorusEffectsSend]
@@ -525,12 +544,9 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u8 vel) {
         }
     }
 
-    if (soundBank_->Kind() == SoundBankKind::Sf2) {
-        AppendProgramSummaryLog(bank, resolvedBank, ch, state.program, key, vel);
-    }
-
-    if (soundBank_->Kind() == SoundBankKind::Sf2 && ShouldLogProgram(state.program)) {
-        AppendProgramDebugLog(bank, resolvedBank, ch, state.program, key, vel, state, zoneScratch_);
+    if (ShouldLogProgram(state.program)) {
+        AppendProgramSummaryLog(bank, resolvedBank, soundBank_->Kind(), ch, state.program, key, vel);
+        AppendProgramDebugLog(bank, resolvedBank, soundBank_->Kind(), ch, state.program, key, vel, state, zoneScratch_);
     }
 
     if (state.monoMode) {

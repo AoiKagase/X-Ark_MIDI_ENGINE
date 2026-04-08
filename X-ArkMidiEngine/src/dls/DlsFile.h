@@ -43,6 +43,7 @@ private:
         u16 unityNote = 60;
         i16 fineTune = 0;
         i32 attenuation = 0;
+        bool noTruncation = false;
         bool looping = false;
         u32 loopStart = 0;
         u32 loopLength = 0;
@@ -62,6 +63,7 @@ private:
         SampleHeader sample;
         u32 poolOffset = 0;
         bool hasWsmp = false;
+        bool noTruncation = false;
     };
 
     std::vector<i16>           sampleData_;

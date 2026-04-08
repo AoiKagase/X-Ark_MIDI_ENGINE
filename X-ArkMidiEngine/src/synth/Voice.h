@@ -51,6 +51,7 @@ public:
     bool    looping    = false;
     bool    loopUntilRelease = false;
     bool    usesLoopFallback = false;
+    bool    ignoreNoteOffUntilSampleEnd = false;
 
     // ボリュームエンベロープ
     EnvPhase envPhase        = EnvPhase::Off;

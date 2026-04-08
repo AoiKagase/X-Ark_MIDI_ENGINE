@@ -185,22 +185,11 @@ inline void MixConstantChunkScalar(
         }
     } else {
         for (u32 i = 0; i < chunkFrames; ++i) {
-            const size_t i0 = static_cast<size_t>(samplePosFixed >> kSamplePosFracBits);
-            const f32 frac = static_cast<f32>(samplePosFixed & kSamplePosFracMask) * kSamplePosFracScale;
-            const f32 s0 = static_cast<f32>(sampleData[i0]);
-            f32 s1 = s0;
-            if (looping) {
-                const size_t loopStartIndex = static_cast<size_t>(loopStartFixed >> kSamplePosFracBits);
-                const size_t loopEndIndex = static_cast<size_t>(loopEndFixed >> kSamplePosFracBits);
-                if (i0 + 1 >= loopEndIndex) {
-                    s1 = static_cast<f32>(sampleData[loopStartIndex]);
-                } else if (i0 + 1 < sampleDataSize) {
-                    s1 = static_cast<f32>(sampleData[i0 + 1]);
-                }
-            } else if (i0 + 1 < sampleDataSize) {
-                s1 = static_cast<f32>(sampleData[i0 + 1]);
-            }
-            const f32 sample = s0 + (s1 - s0) * frac;
+            const size_t loopStartIndex = static_cast<size_t>(loopStartFixed >> kSamplePosFracBits);
+            const size_t loopEndIndex = static_cast<size_t>(loopEndFixed >> kSamplePosFracBits);
+            const f32 sample = looping
+                ? CubicInterpFixedLooped(sampleData, samplePosFixed, sampleDataSize, loopStartIndex, loopEndIndex)
+                : CubicInterpFixed(sampleData, samplePosFixed, sampleDataSize);
             samplePosFixed += sampleStepFixed;
 
             const u32 frameIndex = offset + i;
@@ -337,6 +326,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     portamentoStepSemitones = 0.0;
     portamentoSamplesRemaining = 0;
     usesLoopFallback = false;
+    ignoreNoteOffUntilSampleEnd = false;
     envPhase      = EnvPhase::Delay;
     envLevel      = 0.0f;
     envSampleCount= 0;
@@ -410,6 +400,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sampleEndFixed = ToFixedSamplePos(static_cast<i32>(sampleEnd));
     loopStartFixed = ToFixedSamplePos(static_cast<i32>(loopStart));
     loopEndFixed = ToFixedSamplePos(static_cast<i32>(loopEnd));
+    ignoreNoteOffUntilSampleEnd =
+        (soundBankKind == SoundBankKind::Dls && zone.noTruncation && !looping);
 
     // ---- ピッチ計算 ----
     i32 rootKey = (gen[GEN_OverridingRootKey] >= 0)
@@ -653,6 +645,9 @@ void Voice::RefreshOutputGains() {
 
 void Voice::NoteOff() {
     if (envPhase != EnvPhase::Off && envPhase != EnvPhase::Release) {
+        if (ignoreNoteOffUntilSampleEnd) {
+            return;
+        }
         if (loopUntilRelease) {
             looping = false;
         }
@@ -1094,7 +1089,11 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                     for (u32 i = 0; i < chunkFrames; ++i) {
                         localEnvLevel = std::min(1.0f, localEnvLevel + envAttackRate);
-                        const f32 sample = LinearInterpFixedUnchecked(sampleData, localSamplePosFixed);
+                        const f32 sample = localLooping
+                            ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
+                                                     static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
+                                                     static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
+                            : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
                         localSamplePosFixed += localSampleStepFixed;
 
                         const f32 scaled = sample * localEnvLevel;
@@ -1137,7 +1136,11 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                     for (u32 i = 0; i < chunkFrames; ++i) {
                         localEnvLevel *= rate;
-                        const f32 sample = LinearInterpFixedUnchecked(sampleData, localSamplePosFixed);
+                        const f32 sample = localLooping
+                            ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
+                                                     static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
+                                                     static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
+                            : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
                         localSamplePosFixed += localSampleStepFixed;
 
                         const f32 scaled = sample * localEnvLevel;
@@ -1264,7 +1267,11 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                         return;
                     }
 
-                    const f32 sample = LinearInterpFixedUnchecked(sampleData, localSamplePosFixed);
+                    const f32 sample = localLooping
+                        ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
+                                                 static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
+                                                 static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
+                        : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
                     localSamplePosFixed += localSampleStepFixed;
 
                     const f32 normalized = sample * kInvPcmScale;
@@ -1329,7 +1336,11 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
 
             const f32 sample = localIntegralStep
                 ? static_cast<f32>(sampleData[static_cast<size_t>(localSamplePosFixed >> kSamplePosFracBits)])
-                : LinearInterpFixedUnchecked(sampleData, localSamplePosFixed);
+                : (localLooping
+                    ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
+                                             static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
+                                             static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
+                    : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize));
             const f32 modLfoValue = ComputeLfoValue(modLfoDelayEnd, localModLfoSampleCount, localModLfoPhase, modLfoPhaseStep);
             const f32 vibLfoValue = ComputeLfoValue(vibLfoDelayEnd, localVibLfoSampleCount, localVibLfoPhase, vibLfoPhaseStep);
             const f64 portamentoSemitones = localPortamentoOffsetSemitones;

@@ -212,6 +212,7 @@ inline const i32* GetSF2GeneratorDefaults() {
 struct ResolvedZone {
     const SampleHeader* sample; // サンプルヘッダーへのポインタ（非所有）
     i32 generators[GEN_COUNT];  // マージ済みジェネレーター値
+    bool noTruncation = false;  // DLS wsmp NO_TRUNCATION
 };
 
 } // namespace XArkMidi

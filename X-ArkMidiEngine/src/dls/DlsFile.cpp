@@ -277,6 +277,7 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
     u16 bitsPerSample = 0;
     u32 sampleRate = 0;
     bool hasWsmp = false;
+    bool noTruncation = false;
     u16 unityNote = 60;
     i16 fineTune = 0;
     bool looping = false;
@@ -316,12 +317,13 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
                 wsmp.Skip(4);
                 u32 options = wsmp.ReadU32LE();
                 u32 loopCount = wsmp.ReadU32LE();
+                noTruncation = (options & 0x1u) != 0;
                 if (loopCount > 0 && wsmp.Remaining() >= 16) {
                     wsmp.ReadU32LE();
                     wsmp.ReadU32LE();
                     loopStart = wsmp.ReadU32LE();
                     loopLength = wsmp.ReadU32LE();
-                    looping = (options & 0x1) != 0 || loopLength > 0;
+                    looping = loopLength > 0;
                 }
             }
         } else {
@@ -365,6 +367,7 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
     outWave.sample.pitchCorrection = static_cast<i8>(ClampValue<int>(fineTune, -99, 99));
     outWave.sample.sampleType = 1;
     outWave.hasWsmp = hasWsmp;
+    outWave.noTruncation = noTruncation;
     return true;
 }
 
@@ -459,12 +462,13 @@ bool DlsFile::ParseRegionList(BinaryReader& r, u32 /*chunkSize*/, DlsRegion& out
                 outRegion.attenuation = DlsWsmpAttenuationToCentibels(wsmp.ReadU32LE());
                 u32 options = wsmp.ReadU32LE();
                 u32 loopCount = wsmp.ReadU32LE();
+                outRegion.noTruncation = (options & 0x1u) != 0;
                 if (loopCount > 0 && wsmp.Remaining() >= 16) {
                     wsmp.ReadU32LE();
                     wsmp.ReadU32LE();
                     outRegion.loopStart = wsmp.ReadU32LE();
                     outRegion.loopLength = wsmp.ReadU32LE();
-                    outRegion.looping = (options & 0x1) != 0 || outRegion.loopLength > 0;
+                    outRegion.looping = outRegion.loopLength > 0;
                 }
             }
         } else if (chunkId == MakeFourCC("LIST")) {
@@ -589,10 +593,16 @@ void DlsFile::ApplyRegionToZone(const DlsRegion& region, const DlsWave& wave, Re
                                               : wave.sample.originalPitch;
     outZone.generators[GEN_FineTune] = region.hasWsmp ? region.fineTune : 0;
     outZone.generators[GEN_InitialAttenuation] = region.hasWsmp ? region.attenuation : 0;
+    // Region wsmp often overrides pitch/attenuation only. Preserve wave-level
+    // no-truncation semantics unless the bank explicitly omits wsmp entirely.
+    outZone.noTruncation = wave.noTruncation || region.noTruncation;
 
     const bool waveLooping = wave.sample.loopEnd > wave.sample.loopStart + 1;
-    const bool useRegionLoop = region.hasWsmp;
-    const bool looping = useRegionLoop ? region.looping : waveLooping;
+    const bool regionLooping = region.looping && region.loopLength > 1;
+    // Region wsmp often carries root/attenuation without redefining the loop.
+    // Only override the wave loop when the region actually provides a valid loop.
+    const bool useRegionLoop = regionLooping;
+    const bool looping = useRegionLoop ? true : waveLooping;
     outZone.generators[GEN_SampleModes] = looping ? 3 : 0;
     if (looping) {
         if (useRegionLoop) {
