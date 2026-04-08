@@ -42,6 +42,15 @@ public:
     void GetInstrumentGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const;
     int GetInstrumentIndex(int presetInstrumentGenValue) const;
 
+    struct ZoneInfo {
+        int bagIndex;
+        int keyLo, keyHi;
+        int velLo, velHi;
+        int sampleId;
+        i32 generators[GEN_COUNT];
+    };
+    bool GetInstrumentLocalZones(int instrumentIdx, std::vector<ZoneInfo>& outZones) const;
+
 private:
     std::vector<i16>           sampleData_;
     std::vector<SFPresetHeader> presets_;

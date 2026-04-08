@@ -135,14 +135,18 @@ int main(int argc, char* argv[]) {
         int instrumentIdx = presetLocalGens[GEN_Instrument];
         if (instrumentIdx >= 0) {
             printf("\n[Instrument] index=%d\n", instrumentIdx);
-            
-            int globalInstBag;
-            if (sf2.GetInstrumentBagIndices(instrumentIdx, 0, globalInstBag)) {
-                i32 instGlobalGens[GEN_COUNT] = {0};
-                if (globalInstBag >= 0) {
-                    sf2.GetInstrumentGeneratorLayer(globalInstBag, instGlobalGens);
-                    PrintNonDefaultGens(instGlobalGens, defaults, "Instrument Global Zone (raw)");
-                }
+
+            std::vector<Sf2File::ZoneInfo> instZones;
+            sf2.GetInstrumentLocalZones(instrumentIdx, instZones);
+            printf("  Total Instrument Zones: %zu\n", instZones.size());
+
+            for (size_t iz = 0; iz < instZones.size(); ++iz) {
+                const auto& izi = instZones[iz];
+                char kr[32], vr[32];
+                if (izi.keyLo == 0 && izi.keyHi == 127) strcpy(kr, "key=any"); else sprintf(kr, "key=%d-%d", izi.keyLo, izi.keyHi);
+                if (izi.velLo == 0 && izi.velHi == 127) strcpy(vr, "vel=any"); else sprintf(vr, "vel=%d-%d", izi.velLo, izi.velHi);
+                printf("    Zone %zu: bag=%d %s %s sampleID=%d attenu=%d\n",
+                    iz, izi.bagIndex, kr, vr, izi.sampleId, izi.generators[GEN_InitialAttenuation]);
             }
         }
 
@@ -161,18 +165,35 @@ int main(int argc, char* argv[]) {
             printf("  Sample: '%.20s' start=%u end=%u rate=%u\n",
                 h->sampleName, h->start, h->end, h->sampleRate);
             
-            int peak = 0;
+            i32 peak = 0;
             double sumSq = 0.0;
             u32 frames = 0;
+            bool allZero = true;
             for (u32 pos = h->start; pos < h->end && pos < sampleCount; ++pos) {
-                int v = pcm[pos];
-                if (abs(v) > peak) peak = abs(v);
+                i16 v = pcm[pos];
+                if (v != 0) allZero = false;
+                i32 av = abs(v);
+                if (av > peak) peak = av;
                 sumSq += static_cast<double>(v) * static_cast<double>(v);
                 ++frames;
             }
             double rms = frames > 0 ? sqrt(sumSq / frames) : 0.0;
             printf("  Audio: frames=%u peak=%d rms=%.1f\n", frames, peak, rms);
+            if (allZero) printf("  WARNING: ALL SAMPLES ARE ZERO!\n");
             printf("  InitialAttenuation: %d cb\n", z.generators[48]);
+            double linearGain = pow(10.0, -z.generators[48] / 200.0);
+            printf("  Linear Gain: %.4f\n", linearGain);
+            printf("  Effective Peak: %d * %.4f = %.1f\n", peak, linearGain, peak * linearGain);
+            printf("  All gens:\n");
+            bool anyGen = false;
+            for (int g = 0; g < GEN_COUNT; ++g) {
+                if (g == GEN_COUNT - 1) continue;
+                if (z.generators[g] != 0) {
+                    printf("    [%02d] %-25s = %d\n", g, GenName(g), z.generators[g]);
+                    anyGen = true;
+                }
+            }
+            if (!anyGen) printf("    (all zero)\n");
         }
         
         return 0;

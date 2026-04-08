@@ -6,3 +6,5 @@
 /intermediate
 *.obj
 *.lib
+/test/intermediate
+*.pdb

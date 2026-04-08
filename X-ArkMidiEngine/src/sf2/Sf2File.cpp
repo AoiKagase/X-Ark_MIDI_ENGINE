@@ -985,5 +985,55 @@ int Sf2File::GetInstrumentIndex(int presetInstrumentGenValue) const {
     return presetInstrumentGenValue;
 }
 
+bool Sf2File::GetInstrumentLocalZones(int instrumentIdx, std::vector<ZoneInfo>& outZones) const {
+    outZones.clear();
+    if (instrumentIdx < 0 || instrumentIdx + 1 >= static_cast<int>(instruments_.size())) {
+        return false;
+    }
+
+    int ibagStart = instruments_[instrumentIdx    ].wInstBagNdx;
+    int ibagEnd   = instruments_[instrumentIdx + 1].wInstBagNdx;
+    int ibagMax = static_cast<int>(instBags_.size());
+    if (ibagStart < 0 || ibagStart >= ibagMax) return false;
+    if (ibagEnd > ibagMax) ibagEnd = ibagMax;
+
+    for (int ib = ibagStart; ib < ibagEnd; ++ib) {
+        int igenStart = instBags_[ib].wInstGenNdx;
+        int igenEnd   = (ib + 1 < ibagMax)
+                        ? instBags_[ib + 1].wInstGenNdx : static_cast<int>(instGens_.size());
+
+        int igenMax = static_cast<int>(instGens_.size());
+        if (igenStart < 0 || igenStart > igenMax) igenStart = igenMax;
+        if (igenEnd   > igenMax) igenEnd = igenMax;
+
+        ZoneInfo zi;
+        zi.bagIndex = ib;
+        zi.keyLo = 0; zi.keyHi = 127;
+        zi.velLo = 0; zi.velHi = 127;
+        zi.sampleId = -1;
+        memset(zi.generators, 0, sizeof(zi.generators));
+
+        for (int ig = igenStart; ig < igenEnd; ++ig) {
+            u16 oper = instGens_[ig].sfGenOper;
+            if (oper == GEN_KeyRange) {
+                zi.keyLo = instGens_[ig].genAmount.ranges.lo;
+                zi.keyHi = instGens_[ig].genAmount.ranges.hi;
+            }
+            else if (oper == GEN_VelRange) {
+                zi.velLo = instGens_[ig].genAmount.ranges.lo;
+                zi.velHi = instGens_[ig].genAmount.ranges.hi;
+            }
+            else if (oper == GEN_SampleID) {
+                zi.sampleId = instGens_[ig].genAmount.wAmount;
+            }
+            else if (oper < GEN_COUNT) {
+                zi.generators[oper] = static_cast<i32>(instGens_[ig].genAmount.shAmount);
+            }
+        }
+        outZones.push_back(zi);
+    }
+    return !outZones.empty();
+}
+
 } // namespace XArkMidi
 
