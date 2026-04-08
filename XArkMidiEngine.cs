@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 public static class XArkMidiEngine
 {
-    private const string DllName = "X-ArkMidiEngine.dll";
+    private const string DllName = "XArkMidiEngine.dll";
 
     public enum XAmeResult : int
     {

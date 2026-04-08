@@ -14,7 +14,7 @@
 #include <string>
 
 // DLL ヘッダー（DLL をビルド後にパスを通すこと）
-#include "../X-ArkMidiEngine/include/X-ArkMidiEngine.h"
+#include "../X-ArkMidiEngine/include/XArkMidiEngine.h"
 
 // ---- WAV ヘッダー書き出しユーティリティ ----
 

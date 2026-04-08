@@ -8,3 +8,5 @@
 *.lib
 /test/intermediate
 *.pdb
+*.obj
+*.lib
