@@ -7,12 +7,12 @@
 namespace XArkMidi {
 
 namespace {
-constexpr f32 kChorusFeedback = 0.14f;
-constexpr f32 kChorusWetMix = 0.25f;
-constexpr f32 kChorusToReverb = 0.02f;
-constexpr f32 kReverbFeedback = 0.44f;
-constexpr f32 kReverbWetMix = 0.45f;
-constexpr f32 kMasterReverbSend = 0.08f;
+constexpr f32 kChorusFeedback = 0.20f;
+constexpr f32 kChorusWetMix = 0.35f;
+constexpr f32 kChorusToReverb = 0.03f;
+constexpr f32 kReverbFeedback = 0.50f;
+constexpr f32 kReverbWetMix = 0.55f;
+constexpr f32 kMasterReverbSend = 0.10f;
 constexpr f32 kMixGainSmooth = 0.0025f;
 constexpr f32 kMasterOutputGain = 1.0f;
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
@@ -205,10 +205,6 @@ f32 ComputeMixGain(int /*activeVoices*/) {
     return 1.0f;
 }
 
-f32 SoftLimitSample(f32 sample) {
-    return sample;
-}
-
 f32 ApplyDcBlock(f32 input, f32& prevIn, f32& prevOut) {
     constexpr f32 r = 0.995f;
     const f32 output = input - prevIn + r * prevOut;
@@ -341,8 +337,7 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
         for (u32 i = 0; i < blockFrames; ++i) {
             f32 dryL = dryBlockL_[i];
             f32 dryR = dryBlockR_[i];
-            const f32 masterReverbSend =
-                (soundBank_ && soundBank_->Kind() == SoundBankKind::Sf2) ? 0.0f : effectiveMasterReverbSend;
+            const f32 masterReverbSend = effectiveMasterReverbSend;
             f32 reverbInL = reverbBlockL_[i] + dryL * masterReverbSend;
             f32 reverbInR = reverbBlockR_[i] + dryR * masterReverbSend;
             f32 chorusInL = chorusBlockL_[i];
@@ -404,8 +399,7 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             outR *= mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
             outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_);
             outR = ApplyDcBlock(outR, dcBlockPrevInR_, dcBlockPrevOutR_);
-            outL = SoftLimitSample(outL);
-            outR = SoftLimitSample(outR);
+            outputLimiter_.Process(outL, outR);
 
             if (stereo) {
                 buf[(frame + i) * 2    ] = ClampToI16(outL * 32767.0f);

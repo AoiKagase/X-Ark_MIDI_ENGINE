@@ -8,6 +8,46 @@
 
 namespace XArkMidi {
 
+class OutputLimiter {
+public:
+    OutputLimiter() : peakL_(0.0f), peakR_(0.0f), gainL_(1.0f), gainR_(1.0f) {}
+
+    void Process(f32& sampleL, f32& sampleR) {
+        constexpr f32 kCeiling = 0.95f;
+        constexpr f32 kAttack = 0.1f;
+        constexpr f32 kRelease = 0.001f;
+        constexpr f32 kPeakDecay = 0.9999f;
+
+        f32 absL = std::abs(sampleL);
+        f32 absR = std::abs(sampleR);
+        f32 absPeak = (absL > absR) ? absL : absR;
+
+        peakL_ = std::max(peakL_ * kPeakDecay, absL);
+        peakR_ = std::max(peakR_ * kPeakDecay, absR);
+
+        f32 currentPeak = (peakL_ > peakR_) ? peakL_ : peakR_;
+
+        f32 targetGain = (currentPeak > kCeiling) ? (kCeiling / currentPeak) : 1.0f;
+
+        if (targetGain < gainL_) {
+            gainL_ += (targetGain - gainL_) * kAttack;
+            gainR_ += (targetGain - gainR_) * kAttack;
+        } else {
+            gainL_ += (targetGain - gainL_) * kRelease;
+            gainR_ += (targetGain - gainR_) * kRelease;
+        }
+
+        sampleL *= gainL_;
+        sampleR *= gainR_;
+    }
+
+private:
+    f32 peakL_;
+    f32 peakR_;
+    f32 gainL_;
+    f32 gainR_;
+};
+
 class Synthesizer {
 public:
     bool Init(const MidiFile* midi, const SoundBank* soundBank,
@@ -74,6 +114,7 @@ private:
     std::vector<f32> chorusBlockL_;
     std::vector<f32> chorusBlockR_;
     std::vector<ResolvedZone> zoneScratch_;
+    OutputLimiter outputLimiter_;
 
     void HandleEvent(const MidiEvent& ev);
     void HandleNoteOn(u8 ch, u8 key, u8 vel);
