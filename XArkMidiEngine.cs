@@ -25,6 +25,13 @@ public static class XArkMidiEngine
         Dls = 2,
     }
 
+    [Flags]
+    public enum CompatibilityFlags : uint
+    {
+        None = 0,
+        Sf2ZeroLengthLoopRetrigger = 1 << 0,
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct CreateOptions
     {
@@ -32,6 +39,7 @@ public static class XArkMidiEngine
         public ulong MaxSampleDataBytes;
         public uint MaxSf2PdtaEntries;
         public uint MaxDlsPoolTableEntries;
+        public CompatibilityFlags CompatibilityFlags;
 
         public static CreateOptions Default()
             => new CreateOptions { StructSize = (uint)Marshal.SizeOf<CreateOptions>() };

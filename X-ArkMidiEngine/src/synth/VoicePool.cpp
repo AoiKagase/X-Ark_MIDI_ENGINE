@@ -123,9 +123,22 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                         u16 bank, u8 channel, u8 program, u8 key, u8 velocity, u32 sampleRate,
                         f64 pitchBendSemitones, u8 exclusiveClass,
                         f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend, SoundBankKind soundBankKind,
+                        const SynthCompatOptions& compatOptions,
                         i32 portamentoSourceKey, u8 portamentoTime) {
     if (zones.empty()) {
         return;
+    }
+    if (compatOptions.sf2ZeroLengthLoopRetrigger) {
+        for (u16 i = 0; i < activeCount_;) {
+            const u16 voiceIndex = activeIndices_[i];
+            auto& v = voices_[voiceIndex];
+            if (v.channel != channel || v.noteKey != key) {
+                ++i;
+                continue;
+            }
+            v.Kill();
+            UntrackVoice(voiceIndex);
+        }
     }
     // サスティンペダル保留中に同一キーが再トリガーされた場合、古いボイスをRelease移行させる
     // （ボイスの蓄積防止。BASSMIDI互換の挙動）
@@ -151,7 +164,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
         if (!v) break; // ボイス確保失敗
         const u16 voiceIndex = static_cast<u16>(v - voices_);
         v->NoteOn(zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
-                  pitchBendSemitones, soundBankKind, portamentoSourceKey, portamentoTime);
+                  pitchBendSemitones, soundBankKind, compatOptions, portamentoSourceKey, portamentoTime);
         if (v->active) {
             v->UpdateChannelMix(volumeFactor, pan, reverbSend, chorusSend);
             v->exclusiveClass = exclusiveClass;

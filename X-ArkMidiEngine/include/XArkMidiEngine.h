@@ -28,11 +28,17 @@ typedef enum XAmeSoundBankKind_ {
     XAME_SOUNDBANK_DLS  = 2,
 } XAmeSoundBankKind;
 
+typedef enum XAmeCompatibilityFlags_ {
+    XAME_COMPAT_NONE = 0,
+    XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER = 1u << 0,
+} XAmeCompatibilityFlags;
+
 typedef struct XAmeCreateOptions_ {
     unsigned int        structSize;
     unsigned long long  maxSampleDataBytes;
     unsigned int        maxSf2PdtaEntries;
     unsigned int        maxDlsPoolTableEntries;
+    unsigned int        compatibilityFlags;
 } XAmeCreateOptions;
 
 typedef struct XAmeEngine_* XAmeEngine;

@@ -6,6 +6,10 @@
 
 namespace XArkMidi {
 
+struct SynthCompatOptions {
+    bool sf2ZeroLengthLoopRetrigger = false;
+};
+
 enum class EnvPhase : u8 {
     Delay,
     Attack,
@@ -46,6 +50,7 @@ public:
     i64     sampleEndFixed = 0;
     bool    looping    = false;
     bool    loopUntilRelease = false;
+    bool    usesLoopFallback = false;
 
     // ボリュームエンベロープ
     EnvPhase envPhase        = EnvPhase::Off;
@@ -131,7 +136,8 @@ public:
     // NoteOn で初期化
     void NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
                 u16 bankNumber, u8 ch, u8 programNumber, u8 key, u8 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
-                SoundBankKind soundBankKind, i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
+                SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
+                i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
     bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
     void RefreshResolvedZoneControllers(const ResolvedZone& zone);
 

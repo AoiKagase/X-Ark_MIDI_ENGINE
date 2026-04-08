@@ -51,7 +51,8 @@ private:
 class Synthesizer {
 public:
     bool Init(const MidiFile* midi, const SoundBank* soundBank,
-              u32 sampleRate, u32 numChannels);
+              u32 sampleRate, u32 numChannels,
+              const SynthCompatOptions& compatOptions = {});
 
     // PCM データを buf に書き込む
     // buf には numFrames * numChannels * sizeof(int16_t) バイト以上を確保すること
@@ -63,6 +64,7 @@ public:
     const std::string& ErrorMessage() const { return errorMsg_; }
 
 private:
+    SynthCompatOptions compatOptions_{};
     const SoundBank* soundBank_ = nullptr;
     u32             sampleRate_ = 44100;
     u32             numChannels_= 2;

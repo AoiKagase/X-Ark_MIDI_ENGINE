@@ -130,7 +130,13 @@ u32 FramesUntilPhaseChange(EnvPhase phase,
     case EnvPhase::Hold:
         return (sampleCount < holdEnd) ? (holdEnd - sampleCount) : 0;
     case EnvPhase::Decay:
-        if (decayRate <= 0.0f || level <= sustainLevel + 1e-9f) return 0;
+        if (decayRate <= 0.0f) return 0;
+        if (sustainLevel <= kEnvelopeSilenceThreshold) {
+            if (level <= kEnvelopeSilenceThreshold) return 0;
+            return std::max<u32>(1, static_cast<u32>(std::ceil(
+                std::log(kEnvelopeSilenceThreshold / level) / std::log(decayRate))));
+        }
+        if (level <= sustainLevel + 1e-9f) return 0;
         return std::max<u32>(1, static_cast<u32>(std::ceil(std::log(sustainLevel / level) / std::log(decayRate))));
     case EnvPhase::Sustain:
         return std::numeric_limits<u32>::max();
@@ -310,7 +316,8 @@ void AdvanceEnvelope(EnvPhase& phase,
 
 void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
                    u16 bankNumber, u8 ch, u8 programNumber, u8 key, u8 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
-                   SoundBankKind newSoundBankKind, i32 portamentoSourceKey, u8 portamentoTime) {
+                   SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
+                   i32 portamentoSourceKey, u8 portamentoTime) {
     active         = true;
     bank           = bankNumber;
     channel        = ch;
@@ -329,6 +336,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     portamentoOffsetSemitones = 0.0;
     portamentoStepSemitones = 0.0;
     portamentoSamplesRemaining = 0;
+    usesLoopFallback = false;
     envPhase      = EnvPhase::Delay;
     envLevel      = 0.0f;
     envSampleCount= 0;
@@ -386,7 +394,16 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
 
     // 縮退ループガード: loopEnd <= loopStart はループ無効扱い
     if (looping && loopEnd <= loopStart + 1) {
-        looping = false;
+        if (compatOptions.sf2ZeroLengthLoopRetrigger &&
+            soundBankKind == SoundBankKind::Sf2 &&
+            sampleModes != 0 &&
+            sampleEnd > static_cast<u32>(sampleStartIndex + 1)) {
+            loopStart = static_cast<u32>(sampleStartIndex);
+            loopEnd = sampleEnd;
+            usesLoopFallback = true;
+        } else {
+            looping = false;
+        }
     }
     // サンプル終端がデータ末尾を超えないよう保護（念のため）
     if (sampleEnd < loopEnd) sampleEnd = loopEnd;
@@ -543,6 +560,9 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
 
     // ---- パン ----
     // GEN_Pan: -500(左)～500(右)
+    // GEN_Pan: SF2 の ±500 をそのまま使用
+    // → L/R ゾーンの音響的分離が自然な厚みを生む (BASSMIDI 互換)
+    // → リバーブで空間的な広がりを補う
     const f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
     baseGainL = std::sqrt(0.5f * (1.0f - pan));
     baseGainR = std::sqrt(0.5f * (1.0f + pan));

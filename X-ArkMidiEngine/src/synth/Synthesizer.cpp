@@ -7,14 +7,14 @@
 namespace XArkMidi {
 
 namespace {
-constexpr f32 kChorusFeedback = 0.20f;
-constexpr f32 kChorusWetMix = 0.35f;
-constexpr f32 kChorusToReverb = 0.03f;
+constexpr f32 kChorusFeedback = 0.15f;
+constexpr f32 kChorusWetMix = 0.28f;
+constexpr f32 kChorusToReverb = 0.20f;
 constexpr f32 kReverbFeedback = 0.50f;
-constexpr f32 kReverbWetMix = 0.55f;
-constexpr f32 kMasterReverbSend = 0.10f;
+constexpr f32 kReverbWetMix = 0.80f;   // 0.65→0.80: リバーブリターンを増量
+constexpr f32 kMasterReverbSend = 0.20f; // 0.12→0.20: ドライ→リバーブへの送り増量
 constexpr f32 kMixGainSmooth = 0.0025f;
-constexpr f32 kMasterOutputGain = 1.0f;
+constexpr f32 kMasterOutputGain = 0.80f; // リバーブ増量分を考慮して dry を抑制
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
@@ -227,7 +227,9 @@ f32 Lerp(f32 a, f32 b, f32 t) {
 }
 
 bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
-                        u32 sampleRate, u32 numChannels) {
+                        u32 sampleRate, u32 numChannels,
+                        const SynthCompatOptions& compatOptions) {
+    compatOptions_    = compatOptions;
     soundBank_        = soundBank;
     sampleRate_       = sampleRate;
     numChannels_      = numChannels;
@@ -552,7 +554,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u8 vel) {
     voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleDataCount(),
                       resolvedBank, ch, state.program, key, vel, sampleRate_,
                       pitchBend, excClass, state.VolumeFactor(), state.pan,
-                      state.reverbSend, state.chorusSend, soundBank_->Kind(),
+                      state.reverbSend, state.chorusSend, soundBank_->Kind(), compatOptions_,
                       portamentoSourceKey, state.portamentoTime);
     state.lastNoteKey = key;
     state.portamentoControlKey = 0xFF;

@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <cwctype>
+#include <cstddef>
 
 using namespace XArkMidi;
 
@@ -22,21 +23,38 @@ struct CreateLimits {
     u32 maxDlsPoolTableEntries = kDefaultMaxDlsPoolTableEntries;
 };
 
+bool HasCreateOptionField(const XAmeCreateOptions* options, size_t offset, size_t fieldSize) {
+    return options && options->structSize >= offset + fieldSize;
+}
+
 CreateLimits ResolveCreateLimits(const XAmeCreateOptions* options) {
     CreateLimits limits;
     if (!options)
         return limits;
 
-    if (options->structSize < sizeof(XAmeCreateOptions))
-        return limits;
-
-    if (options->maxSampleDataBytes != 0)
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, maxSampleDataBytes), sizeof(options->maxSampleDataBytes)) &&
+        options->maxSampleDataBytes != 0) {
         limits.maxSampleDataBytes = static_cast<size_t>(options->maxSampleDataBytes);
-    if (options->maxSf2PdtaEntries != 0)
+    }
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, maxSf2PdtaEntries), sizeof(options->maxSf2PdtaEntries)) &&
+        options->maxSf2PdtaEntries != 0) {
         limits.maxSf2PdtaEntries = options->maxSf2PdtaEntries;
-    if (options->maxDlsPoolTableEntries != 0)
+    }
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, maxDlsPoolTableEntries), sizeof(options->maxDlsPoolTableEntries)) &&
+        options->maxDlsPoolTableEntries != 0) {
         limits.maxDlsPoolTableEntries = options->maxDlsPoolTableEntries;
+    }
     return limits;
+}
+
+SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
+    SynthCompatOptions compatOptions;
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, compatibilityFlags), sizeof(options->compatibilityFlags))) {
+        const u32 flags = options->compatibilityFlags;
+        compatOptions.sf2ZeroLengthLoopRetrigger =
+            (flags & XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER) != 0;
+    }
+    return compatOptions;
 }
 
 } // namespace
@@ -121,6 +139,7 @@ XAmeResult XAmeCreateEngineWithOptions(
         return XAME_ERR_UNSUPPORTED;
     }
     const CreateLimits limits = ResolveCreateLimits(options);
+    const SynthCompatOptions compatOptions = ResolveCompatOptions(options);
     XAmeEngine_* eng = nullptr;
     try {
         eng = new XAmeEngine_();
@@ -153,7 +172,7 @@ XAmeResult XAmeCreateEngineWithOptions(
             eng->soundBank = std::move(dls);
         }
 
-        if (!eng->synthesizer.Init(&eng->midiFile, eng->soundBank.get(), sampleRate, numChannels)) {
+        if (!eng->synthesizer.Init(&eng->midiFile, eng->soundBank.get(), sampleRate, numChannels, compatOptions)) {
             SetError("Synthesizer init error: " + eng->synthesizer.ErrorMessage());
             delete eng;
             return XAME_ERR_NOT_INIT;

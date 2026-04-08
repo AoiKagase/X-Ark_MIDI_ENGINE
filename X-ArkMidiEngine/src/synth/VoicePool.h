@@ -23,6 +23,7 @@ public:
                 u16 bank, u8 channel, u8 program, u8 key, u8 velocity, u32 sampleRate,
                 f64 pitchBendSemitones, u8 exclusiveClass,
                 f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend, SoundBankKind soundBankKind,
+                const SynthCompatOptions& compatOptions,
                 i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
 
     // NoteOff: 該当チャンネル・ノートのボイスを Release フェーズへ
