@@ -1,4 +1,5 @@
 ﻿#include "MidiTrack.h"
+#include "../midi2/UmpTypes.h"
 #include <stdexcept>
 
 namespace XArkMidi {
@@ -100,6 +101,7 @@ bool MidiTrack::ParseEvent(BinaryReader& r, u32 currentTick) {
         case 0x80: // Note Off
             ev.data1 = r.ReadU8(); // note
             ev.data2 = r.ReadU8(); // velocity
+            ev.velocity16 = Scale7To16(ev.data2);
             events_.push_back(ev);
             break;
         case 0x90: // Note On (velocity=0 は NoteOff と同義)
@@ -107,16 +109,19 @@ bool MidiTrack::ParseEvent(BinaryReader& r, u32 currentTick) {
             ev.data2 = r.ReadU8();
             if (ev.data2 == 0)
                 ev.type = MidiEventType::NoteOff;
+            ev.velocity16 = Scale7To16(ev.data2);
             events_.push_back(ev);
             break;
         case 0xA0: // Poly Pressure
             ev.data1 = r.ReadU8();
             ev.data2 = r.ReadU8();
+            ev.value32 = Scale7To32(ev.data2);
             events_.push_back(ev);
             break;
         case 0xB0: // Control Change
             ev.data1 = r.ReadU8();
             ev.data2 = r.ReadU8();
+            ev.value32 = Scale7To32(ev.data2);
             events_.push_back(ev);
             break;
         case 0xC0: // Program Change
@@ -125,13 +130,17 @@ bool MidiTrack::ParseEvent(BinaryReader& r, u32 currentTick) {
             break;
         case 0xD0: // Channel Pressure
             ev.data1 = r.ReadU8();
+            ev.value32 = Scale7To32(ev.data1);
             events_.push_back(ev);
             break;
-        case 0xE0: // Pitch Bend
+        case 0xE0: { // Pitch Bend
             ev.data1 = r.ReadU8(); // LSB
             ev.data2 = r.ReadU8(); // MSB
+            const u16 bend14 = static_cast<u16>((ev.data2 << 7) | ev.data1); // 0-16383
+            ev.value32 = Scale14To32(bend14);
             events_.push_back(ev);
             break;
+        }
         default:
             errorMsg_ = "Unknown MIDI status byte";
             return false;

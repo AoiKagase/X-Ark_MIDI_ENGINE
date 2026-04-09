@@ -28,8 +28,17 @@ struct MidiEvent {
     u32           absoluteTick; // デルタtick累積後の絶対tick
     MidiEventType type;
     u8            channel;      // 0-15
-    u8            data1;        // ノート番号 / CC番号 / プログラム番号 等
-    u8            data2;        // ベロシティ / CC値 等
+    u8            data1;        // ノート番号 / CC番号 / プログラム番号 等 (7-bit互換)
+    u8            data2;        // ベロシティ / CC値 等 (7-bit互換)
+
+    // MIDI 2.0 高精度フィールド
+    // 常に有効: MIDI 1.0 由来の場合はビットレプリケーションでアップスケール済み
+    //   NoteOn/Off : velocity16 に 16-bit velocity (0-65535)
+    //   CC         : value32 に 32-bit CC値 (0-4294967295)
+    //   PolyPressure/ChannelPressure: value32 に 32-bit 圧力値
+    //   PitchBend  : value32 に 32-bit pitch bend (center=0x80000000)
+    u16           velocity16 = 0;
+    u32           value32    = 0;
 
     // MetaTempo 専用: μsec/beat (BPM = 60,000,000 / tempoUs)
     u32           tempoUs;

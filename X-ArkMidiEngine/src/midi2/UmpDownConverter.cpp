@@ -115,35 +115,41 @@ void UmpDownConverter::ConvertMidi2Channel(u32 word0, u32 word1, u32 tick,
     switch (statusNibble) {
     case kMidiStatusNoteOff: {
         // Word1: [velocity(16)][attribute_data(16)]
-        const u8 vel7 = Scale16To7(static_cast<u16>(word1 >> 16));
-        ev.type  = MidiEventType::NoteOff;
-        ev.data1 = index1; // note number
-        ev.data2 = vel7;
+        const u16 vel16 = static_cast<u16>(word1 >> 16);
+        const u8  vel7  = Scale16To7(vel16);
+        ev.type       = MidiEventType::NoteOff;
+        ev.data1      = index1; // note number
+        ev.data2      = vel7;
+        ev.velocity16 = vel16;  // 16-bit velocity をそのまま保持
         out.push_back(ev);
         break;
     }
     case kMidiStatusNoteOn: {
         // Word1: [velocity(16)][attribute_data(16)]
-        const u8 vel7 = Scale16To7(static_cast<u16>(word1 >> 16));
-        ev.type  = (vel7 == 0) ? MidiEventType::NoteOff : MidiEventType::NoteOn;
-        ev.data1 = index1; // note number
-        ev.data2 = vel7;
+        const u16 vel16 = static_cast<u16>(word1 >> 16);
+        const u8  vel7  = Scale16To7(vel16);
+        ev.type       = (vel7 == 0) ? MidiEventType::NoteOff : MidiEventType::NoteOn;
+        ev.data1      = index1; // note number
+        ev.data2      = vel7;
+        ev.velocity16 = vel16;  // 16-bit velocity をそのまま保持
         out.push_back(ev);
         break;
     }
     case kMidiStatusPolyPressure:
         // Word1: pressure(32)
-        ev.type  = MidiEventType::PolyPressure;
-        ev.data1 = index1; // note number
-        ev.data2 = Scale32To7(word1);
+        ev.type    = MidiEventType::PolyPressure;
+        ev.data1   = index1; // note number
+        ev.data2   = Scale32To7(word1);
+        ev.value32 = word1;  // 32-bit pressure をそのまま保持
         out.push_back(ev);
         break;
 
     case kMidiStatusControlChange:
         // Word1: cc_value(32)
-        ev.type  = MidiEventType::ControlChange;
-        ev.data1 = index1; // CC number (0-127)
-        ev.data2 = Scale32To7(word1);
+        ev.type    = MidiEventType::ControlChange;
+        ev.data1   = index1; // CC number (0-127)
+        ev.data2   = Scale32To7(word1);
+        ev.value32 = word1;  // 32-bit CC値をそのまま保持
         out.push_back(ev);
         break;
 
@@ -182,14 +188,16 @@ void UmpDownConverter::ConvertMidi2Channel(u32 word0, u32 word1, u32 tick,
     }
     case kMidiStatusChannelPressure:
         // Word1: pressure(32)
-        ev.type  = MidiEventType::ChannelPressure;
-        ev.data1 = Scale32To7(word1);
+        ev.type    = MidiEventType::ChannelPressure;
+        ev.data1   = Scale32To7(word1);
+        ev.value32 = word1;  // 32-bit pressure をそのまま保持
         out.push_back(ev);
         break;
 
     case kMidiStatusPitchBend:
         // Word1: pitch_bend(32), center=0x80000000
-        ev.type = MidiEventType::PitchBend;
+        ev.type    = MidiEventType::PitchBend;
+        ev.value32 = word1;  // 32-bit pitch bend をそのまま保持
         SetPitchBend14(ev, word1);
         out.push_back(ev);
         break;

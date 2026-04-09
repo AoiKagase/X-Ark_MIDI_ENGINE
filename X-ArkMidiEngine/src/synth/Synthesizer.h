@@ -121,11 +121,11 @@ private:
     void HandleEvent(const MidiEvent& ev);
     void HandleNoteOn(u8 ch, u8 key, u8 vel);
     void HandleNoteOff(u8 ch, u8 key);
-    void HandleControlChange(u8 ch, u8 cc, u8 val);
+    void HandleControlChange(u8 ch, u8 cc, u32 val32); // val32: 32-bit精度CC値
     void HandleProgramChange(u8 ch, u8 program);
     void HandlePolyPressure(u8 ch, u8 key, u8 pressure);
     void HandleChannelPressure(u8 ch, u8 pressure);
-    void HandlePitchBend(u8 ch, i16 bend);
+    void HandlePitchBend(u8 ch, u32 bend32); // bend32: center=0x80000000
     void HandleSysEx(const MidiEvent& ev);
     void RefreshSf2ControllersForChannel(u8 ch);
     bool HasAudibleEffectTail() const;

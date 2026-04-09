@@ -174,8 +174,8 @@ void AppendProgramDebugLog(u16 requestedBank,
         << " vel=" << static_cast<int>(velocity)
         << " requested_bank=" << requestedBank
         << " resolved_bank=" << resolvedBank
-        << " channel_volume=" << static_cast<int>(state.volume)
-        << " channel_expression=" << static_cast<int>(state.expression)
+        << " channel_volume=" << static_cast<int>(state.volume32 >> 25)   // 32-bit→7-bit表示
+        << " channel_expression=" << static_cast<int>(state.expression32 >> 25)
         << " channel_pan=" << static_cast<int>(state.pan)
         << " channel_reverb=" << static_cast<int>(state.reverbSend)
         << " channel_chorus=" << static_cast<int>(state.chorusSend)
@@ -488,7 +488,7 @@ void Synthesizer::HandleEvent(const MidiEvent& ev) {
         HandleNoteOff(ev.channel, ev.data1);
         break;
     case MidiEventType::ControlChange:
-        HandleControlChange(ev.channel, ev.data1, ev.data2);
+        HandleControlChange(ev.channel, ev.data1, ev.value32);
         break;
     case MidiEventType::ProgramChange:
         HandleProgramChange(ev.channel, ev.data1);
@@ -500,7 +500,7 @@ void Synthesizer::HandleEvent(const MidiEvent& ev) {
         HandleChannelPressure(ev.channel, ev.data1);
         break;
     case MidiEventType::PitchBend:
-        HandlePitchBend(ev.channel, ev.PitchBendValue());
+        HandlePitchBend(ev.channel, ev.value32);
         break;
     case MidiEventType::SysEx:
         HandleSysEx(ev);
@@ -526,7 +526,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u8 vel) {
     for (int i = 0; i < 128; ++i) ctx.ccValues[i] = state.ccValues[i];
     for (int i = 0; i < 128; ++i) ctx.polyPressure[i] = state.polyPressure[i];
     ctx.channelPressure = state.channelPressure;
-    ctx.pitchBend = state.pitchBend;
+    ctx.pitchBend = state.PitchBend14();
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     if (!soundBank_->FindZones(bank, state.program, key, vel, zoneScratch_, &ctx)) {
@@ -580,8 +580,9 @@ void Synthesizer::HandleNoteOff(u8 ch, u8 key) {
     voicePool_.NoteOff(ch, key, channels_[ch].sustain);
 }
 
-void Synthesizer::HandleControlChange(u8 ch, u8 cc, u8 val) {
+void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
     auto& state = channels_[ch];
+    const u8 val = static_cast<u8>(val32 >> 25); // 32-bit → 7-bit (SF2モジュレーション用)
     state.ccValues[cc] = val;
     switch (cc) {
     case 0:  // Bank Select MSB
@@ -603,16 +604,16 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u8 val) {
     case 5:  // Portamento Time
         state.portamentoTime = val;
         break;
-    case 7:  // Volume
-        state.volume = val;
+    case 7:  // Volume (32-bit精度で保持)
+        state.volume32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
     case 10: // Pan
         state.pan = val;
         ApplyChannelMix(voicePool_, ch, state);
         break;
-    case 11: // Expression
-        state.expression = val;
+    case 11: // Expression (32-bit精度で保持)
+        state.expression32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
     case 32: // Bank Select LSB
@@ -809,8 +810,8 @@ void Synthesizer::HandleChannelPressure(u8 ch, u8 pressure) {
     RefreshSf2ControllersForChannel(ch);
 }
 
-void Synthesizer::HandlePitchBend(u8 ch, i16 bend) {
-    channels_[ch].pitchBend = bend;
+void Synthesizer::HandlePitchBend(u8 ch, u32 bend32) {
+    channels_[ch].pitchBend32 = bend32;
     // ドラムチャンネルはピッチベンド無効
     if (channels_[ch].isDrum) return;
     // 現在鳴っているボイスのピッチをリアルタイム更新
@@ -961,7 +962,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
         ctx.polyPressure[i] = state.polyPressure[i];
     }
     ctx.channelPressure = state.channelPressure;
-    ctx.pitchBend = state.pitchBend;
+    ctx.pitchBend = state.PitchBend14();
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,

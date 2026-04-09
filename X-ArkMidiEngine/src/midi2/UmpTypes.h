@@ -64,4 +64,32 @@ constexpr u8 kFlexBankSetup     = 0x00; // Setup and Performance bank
 constexpr u8 kFlexTypeSetTempo  = 0x00; // Set Tempo
 constexpr u8 kFlexTypeTimeSig   = 0x01; // Time Signature
 
+// ---------------------------------------------------------------------------
+// MIDI 1.0 → MIDI 2.0 スケールアップ関数
+// 参照: MIDI 2.0 仕様 MC-HB-20 Section 7
+//   "Translating Between MIDI 1.0 and MIDI 2.0 Protocol Messages"
+// ビットレプリケーションにより 0→0、最大値→0xFFFF(FF) の線形写像を保証する。
+// ---------------------------------------------------------------------------
+
+// 7-bit (0-127) → 16-bit (0-65535)
+inline u16 Scale7To16(u8 v) {
+    return static_cast<u16>((static_cast<u16>(v) << 9)
+                           | (static_cast<u16>(v) << 2)
+                           | (v >> 5));
+}
+
+// 7-bit (0-127) → 32-bit (0-4294967295)
+inline u32 Scale7To32(u8 v) {
+    const u32 w = v;
+    return (w << 25) | (w << 18) | (w << 11) | (w << 4) | (w >> 3);
+}
+
+// 14-bit (0-16383) → 32-bit (0-4294967295)
+// Pitch Bend など 14-bit 値のアップスケールに使用する。
+inline u32 Scale14To32(u16 v) {
+    return (static_cast<u32>(v) << 18)
+         | (static_cast<u32>(v) << 4)
+         | (v >> 10);
+}
+
 } // namespace XArkMidi

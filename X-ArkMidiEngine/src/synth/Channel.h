@@ -8,11 +8,16 @@ struct ChannelState {
     u16  bank       = 0;    // CC0(MSB)*128 + CC32(LSB)
     u8   bankMSB    = 0;    // CC0
     u8   bankLSB    = 0;    // CC32
-    i16  pitchBend  = 0;    // -8192 ～ +8191
+    // MIDI 2.0 対応: 32-bit pitch bend (center=0x80000000)
+    // MIDI 1.0 由来の場合は 14-bit からビットレプリケーションでアップスケール済み
+    u32  pitchBend32 = 0x80000000u; // center=0
     u8   pitchBendRangeSemitones = 2; // RPN 0,0 (デフォルト ±2半音)
     u8   pitchBendRangeCents = 0;
-    u8   volume     = 127;  // CC7
-    u8   expression = 127;  // CC11
+    // MIDI 2.0 対応: 32-bit volume/expression
+    // MIDI 1.0 由来の場合は 7-bit からビットレプリケーションでアップスケール済み
+    // Scale7To32(127) = 0xFFFFFFFF (full volume)
+    u32  volume32     = 0xFFFFFFFFu; // CC7
+    u32  expression32 = 0xFFFFFFFFu; // CC11
     u8   pan        = 64;   // CC10 (64=センター)
     u8   reverbSend = 40;   // CC91 (GM/BASSMIDI default)
     u8   chorusSend = 0;    // CC93
@@ -45,10 +50,19 @@ struct ChannelState {
     u8   modulationDepthRangeCents = 0;
 
     // ピッチベンド量をセミトーン単位で返す
+    // pitchBend32: center=0x80000000, range [0, 0xFFFFFFFF]
     f64 PitchBendSemitones() const {
         const f64 range = static_cast<f64>(pitchBendRangeSemitones) +
                           static_cast<f64>(pitchBendRangeCents) / 100.0;
-        return static_cast<f64>(pitchBend) / 8192.0 * range;
+        const f64 normalized =
+            (static_cast<f64>(pitchBend32) - 2147483648.0) / 2147483648.0;
+        return normalized * range;
+    }
+
+    // SF2 モジュレーション用: pitchBend32 を MIDI 1.0 互換の 14-bit i16 (-8192..+8191) に変換
+    i16 PitchBend14() const {
+        const i64 centered = static_cast<i64>(pitchBend32) - 0x80000000LL;
+        return static_cast<i16>(centered * 8192LL / 0x80000000LL);
     }
 
     f64 ChannelTuningSemitones() const {
@@ -68,10 +82,12 @@ struct ChannelState {
     }
 
     // マスター音量係数 [0.0, 1.0]
-    // SF2/GM準拠: CC7・CC11 は (v/127)^2 の2乗カーブ
+    // SF2/GM準拠: CC7・CC11 は (v/max)^2 の2乗カーブ
+    // 32-bit 精度: volume32/expression32 を使用
     f32 VolumeFactor() const {
-        const f32 v = static_cast<f32>(volume)  / 127.0f;
-        const f32 e = static_cast<f32>(expression) / 127.0f;
+        constexpr f32 kMax = 4294967295.0f; // 0xFFFFFFFF
+        const f32 v = static_cast<f32>(volume32)     / kMax;
+        const f32 e = static_cast<f32>(expression32) / kMax;
         return v * v * e * e;
     }
 
@@ -80,11 +96,11 @@ struct ChannelState {
         bank       = 0;
         bankMSB    = 0;
         bankLSB    = 0;
-        pitchBend  = 0;
+        pitchBend32 = 0x80000000u; // center
         pitchBendRangeSemitones = 2;
         pitchBendRangeCents = 0;
-        volume     = 127;
-        expression = 127;
+        volume32     = 0xFFFFFFFFu; // Scale7To32(127)
+        expression32 = 0xFFFFFFFFu;
         pan        = 64;
         reverbSend = 40;
         chorusSend = 0;
@@ -110,9 +126,9 @@ struct ChannelState {
         for (int i = 0; i < 128; ++i) ccValues[i] = 0;
         for (int i = 0; i < 128; ++i) polyPressure[i] = 0;
         for (int i = 0; i < 128; ++i) noteTuningCents[i] = 0;
-        ccValues[7] = volume;
+        ccValues[7]  = 127;  // volume32=0xFFFFFFFF の 7-bit 相当
         ccValues[10] = pan;
-        ccValues[11] = expression;
+        ccValues[11] = 127;  // expression32=0xFFFFFFFF の 7-bit 相当
         ccValues[91] = reverbSend;
         ccValues[93] = chorusSend;
         ccValues[64] = 0;
