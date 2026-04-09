@@ -320,10 +320,12 @@ bool DlsFile::ParseWaveList(BinaryReader& r, u32 /*chunkSize*/, DlsWave& outWave
                 noTruncation = (options & 0x1u) != 0;
                 if (loopCount > 0 && wsmp.Remaining() >= 16) {
                     wsmp.ReadU32LE();
-                    wsmp.ReadU32LE();
+                    u32 loopType = wsmp.ReadU32LE();
                     loopStart = wsmp.ReadU32LE();
                     loopLength = wsmp.ReadU32LE();
-                    looping = loopLength > 0;
+                    // DLS Level 1 仕様では loopType=0 (順方向ループ) のみ定義。
+                    // 非標準の loopType は無効ループとして扱う。
+                    looping = (loopType == 0) && loopLength > 0;
                 }
             }
         } else {
@@ -465,10 +467,12 @@ bool DlsFile::ParseRegionList(BinaryReader& r, u32 /*chunkSize*/, DlsRegion& out
                 outRegion.noTruncation = (options & 0x1u) != 0;
                 if (loopCount > 0 && wsmp.Remaining() >= 16) {
                     wsmp.ReadU32LE();
-                    wsmp.ReadU32LE();
+                    u32 loopType = wsmp.ReadU32LE();
                     outRegion.loopStart = wsmp.ReadU32LE();
                     outRegion.loopLength = wsmp.ReadU32LE();
-                    outRegion.looping = outRegion.loopLength > 0;
+                    // DLS Level 1 仕様では loopType=0 (順方向ループ) のみ定義。
+                    // 非標準の loopType は無効ループとして扱う。
+                    outRegion.looping = (loopType == 0) && outRegion.loopLength > 0;
                 }
             }
         } else if (chunkId == MakeFourCC("LIST")) {
