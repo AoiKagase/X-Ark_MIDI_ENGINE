@@ -107,9 +107,17 @@ void MergeArticulatorGenerator(i32* generators, int gen, i32 value) {
     }
 
     switch (gen) {
+    // DLS articulator 値は絶対値: SET で適用する
     case GEN_OverridingRootKey:
     case GEN_Keynum:
     case GEN_Velocity:
+    // EG タイム系: DLS 仕様では絶対 timecent 値。SF2 デフォルト (-12000) に加算すると
+    // 意図した時間が大幅に短縮される。SET で上書きする。
+    case GEN_DelayVolEnv:
+    case GEN_AttackVolEnv:
+    case GEN_HoldVolEnv:
+    case GEN_DecayVolEnv:
+    case GEN_ReleaseVolEnv:
         generators[gen] = value;
         break;
     default:
