@@ -85,6 +85,9 @@
     <ClInclude Include="src\midi\MidiTrack.h" />
     <ClInclude Include="src\midi\MidiFile.h" />
     <ClInclude Include="src\midi\MidiSequencer.h" />
+    <ClInclude Include="src\midi2\UmpTypes.h" />
+    <ClInclude Include="src\midi2\UmpDownConverter.h" />
+    <ClInclude Include="src\midi2\Midi2File.h" />
     <ClInclude Include="src\soundbank\SoundBank.h" />
     <ClInclude Include="src\dls\DlsFile.h" />
     <ClInclude Include="src\sf2\Sf2Types.h" />
@@ -106,6 +109,8 @@
     <ClCompile Include="src\midi\MidiTrack.cpp" />
     <ClCompile Include="src\midi\MidiFile.cpp" />
     <ClCompile Include="src\midi\MidiSequencer.cpp" />
+    <ClCompile Include="src\midi2\UmpDownConverter.cpp" />
+    <ClCompile Include="src\midi2\Midi2File.cpp" />
     <ClCompile Include="src\dls\DlsFile.cpp" />
     <ClCompile Include="src\sf2\Sf2File.cpp" />
     <ClCompile Include="src\synth\SimdKernels.cpp" />

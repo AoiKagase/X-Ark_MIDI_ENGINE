@@ -27,6 +27,10 @@ private:
     MidiHeader              header_{};
     std::vector<MidiTrack>  tracks_;
     std::string             errorMsg_;
+
+    // MIDI 2.0 Clip File (RIFF/MIDI) のロード。
+    // LoadFromMemory() が自動的に呼び出す。
+    bool LoadMidi2FromMemory(const u8* data, size_t size);
 };
 
 } // namespace XArkMidi

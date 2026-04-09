@@ -14,6 +14,9 @@ public:
 
     const std::vector<MidiEvent>& Events() const { return events_; }
 
+    // 外部から直接イベントを追加する (MIDI 2.0 ダウンコンバート用)
+    void AddEvent(const MidiEvent& ev) { events_.push_back(ev); }
+
     // パースエラーメッセージ
     const std::string& ErrorMessage() const { return errorMsg_; }
 
