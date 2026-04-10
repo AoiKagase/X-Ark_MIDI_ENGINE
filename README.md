@@ -1,4 +1,6 @@
 # What is this?
+[![Build](https://github.com/AoiKagase/X-Ark_MIDI_ENGINE/actions/workflows/build.yml/badge.svg)](https://github.com/AoiKagase/X-Ark_MIDI_ENGINE/actions/workflows/build.yml)
+
 MIDIファイルとSF2/DLSファイルを読み込んでPCMデータを出力するWindows用DLLです。
 
 # 
