@@ -1,11 +1,11 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <vector>
 #include <cmath>
 #include <cstring>
 #include <limits>
 
-#include "../X-ArkMidiEngine/src/sf2/Sf2File.h"
-#include "../X-ArkMidiEngine/src/sf2/Sf2Types.h"
+#include "../src/sf2/Sf2File.h"
+#include "../src/sf2/Sf2Types.h"
 
 using namespace XArkMidi;
 
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const std::wstring path = std::wstring(argv[1], argv[1] + strlen(argv[1]));
+    const std::wstring path(argv[1], argv[1] + std::strlen(argv[1]));
     
     Sf2File sf2;
     if (!sf2.LoadFromFile(path)) {
@@ -213,3 +213,4 @@ int main(int argc, char* argv[]) {
     printf("Example: %s file.sf2 0 80 60 100\n", argv[0]);
     return 0;
 }
+

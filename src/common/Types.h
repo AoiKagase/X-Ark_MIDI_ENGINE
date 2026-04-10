@@ -3,6 +3,13 @@
 #include <cstddef>
 #include <cmath>
 
+// Platform macros
+#if defined(_MSC_VER)
+#  define XARK_NOINLINE __declspec(noinline)
+#else
+#  define XARK_NOINLINE __attribute__((noinline))
+#endif
+
 namespace XArkMidi {
 
 // 基本型エイリアス

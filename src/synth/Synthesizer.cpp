@@ -1,6 +1,7 @@
 ﻿#include "Synthesizer.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
@@ -18,8 +19,8 @@ constexpr f32 kMasterOutputGain = 1.00f; // リバーブ増量分を考慮して
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
-constexpr const char* kProgramDebugLogPath = ".\\diagnostics\\program_focus.log";
-constexpr const char* kProgramSummaryLogPath = ".\\diagnostics\\program_summary.log";
+constexpr const char* kProgramDebugLogPath = "./diagnostics/program_focus.log";
+constexpr const char* kProgramSummaryLogPath = "./diagnostics/program_summary.log";
 
 const char* SoundBankKindName(SoundBankKind kind) {
     switch (kind) {
@@ -31,18 +32,25 @@ const char* SoundBankKindName(SoundBankKind kind) {
 
 bool IsProgramLoggingEnabled() {
     static const bool enabled = []() {
+#ifdef _WIN32
         char* value = nullptr;
         size_t len = 0;
-        const errno_t err = _dupenv_s(&value, &len, "XARKMIDI_ENABLE_PROGRAM_LOG");
-        if (!(err == 0 && value && value[0] != '\0' && value[0] != '0')) {
+        _dupenv_s(&value, &len, "XARKMIDI_ENABLE_PROGRAM_LOG");
+        if (!(value && value[0] != '\0' && value[0] != '0')) {
             std::free(value);
             value = nullptr;
-            len = 0;
             _dupenv_s(&value, &len, "XARKMIDI_ENABLE_SF2_PROGRAM_LOG");
         }
-        const bool isEnabled = (err == 0 && value && value[0] != '\0' && value[0] != '0');
+        const bool isEnabled = (value && value[0] != '\0' && value[0] != '0');
         std::free(value);
         return isEnabled;
+#else
+        const char* v = std::getenv("XARKMIDI_ENABLE_PROGRAM_LOG");
+        if (v && v[0] != '\0' && v[0] != '0')
+            return true;
+        v = std::getenv("XARKMIDI_ENABLE_SF2_PROGRAM_LOG");
+        return v && v[0] != '\0' && v[0] != '0';
+#endif
     }();
     return enabled;
 }

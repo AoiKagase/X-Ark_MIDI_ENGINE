@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -33,12 +33,12 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)output\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediate\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\build\msvc\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)..\build\msvc\obj\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)output\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediate\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\build\msvc\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)..\build\msvc\obj\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -48,7 +48,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -65,7 +65,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -74,52 +74,50 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <!-- ヘッダーファイル -->
   <ItemGroup>
-    <ClInclude Include="include\XArkMidiEngine.h" />
-    <ClInclude Include="src\common\Types.h" />
-    <ClInclude Include="src\common\CpuFeatures.h" />
-    <ClInclude Include="src\common\BinaryReader.h" />
-    <ClInclude Include="src\common\FileUtil.h" />
-    <ClInclude Include="src\midi\MidiEvent.h" />
-    <ClInclude Include="src\midi\MidiTrack.h" />
-    <ClInclude Include="src\midi\MidiFile.h" />
-    <ClInclude Include="src\midi\MidiSequencer.h" />
-    <ClInclude Include="src\midi2\UmpTypes.h" />
-    <ClInclude Include="src\midi2\UmpDownConverter.h" />
-    <ClInclude Include="src\midi2\Midi2File.h" />
-    <ClInclude Include="src\soundbank\SoundBank.h" />
-    <ClInclude Include="src\dls\DlsFile.h" />
-    <ClInclude Include="src\sf2\Sf2Types.h" />
-    <ClInclude Include="src\sf2\Sf2File.h" />
-    <ClInclude Include="src\synth\Interpolator.h" />
-    <ClInclude Include="src\synth\SimdKernels.h" />
-    <ClInclude Include="src\synth\Voice.h" />
-    <ClInclude Include="src\synth\VoicePool.h" />
-    <ClInclude Include="src\synth\Channel.h" />
-    <ClInclude Include="src\synth\Synthesizer.h" />
+    <ClInclude Include="..\include\XArkMidiEngine.h" />
+    <ClInclude Include="..\src\common\Types.h" />
+    <ClInclude Include="..\src\common\CpuFeatures.h" />
+    <ClInclude Include="..\src\common\BinaryReader.h" />
+    <ClInclude Include="..\src\common\FileUtil.h" />
+    <ClInclude Include="..\src\midi\MidiEvent.h" />
+    <ClInclude Include="..\src\midi\MidiTrack.h" />
+    <ClInclude Include="..\src\midi\MidiFile.h" />
+    <ClInclude Include="..\src\midi\MidiSequencer.h" />
+    <ClInclude Include="..\src\midi2\UmpTypes.h" />
+    <ClInclude Include="..\src\midi2\UmpDownConverter.h" />
+    <ClInclude Include="..\src\midi2\Midi2File.h" />
+    <ClInclude Include="..\src\soundbank\SoundBank.h" />
+    <ClInclude Include="..\src\dls\DlsFile.h" />
+    <ClInclude Include="..\src\sf2\Sf2Types.h" />
+    <ClInclude Include="..\src\sf2\Sf2File.h" />
+    <ClInclude Include="..\src\synth\Interpolator.h" />
+    <ClInclude Include="..\src\synth\SimdKernels.h" />
+    <ClInclude Include="..\src\synth\Voice.h" />
+    <ClInclude Include="..\src\synth\VoicePool.h" />
+    <ClInclude Include="..\src\synth\Channel.h" />
+    <ClInclude Include="..\src\synth\Synthesizer.h" />
   </ItemGroup>
-  <!-- ソースファイル -->
   <ItemGroup>
-    <ClCompile Include="src\dllmain.cpp" />
-    <ClCompile Include="src\api.cpp" />
-    <ClCompile Include="src\common\CpuFeatures.cpp" />
-    <ClCompile Include="src\common\BinaryReader.cpp" />
-    <ClCompile Include="src\common\FileUtil.cpp" />
-    <ClCompile Include="src\midi\MidiTrack.cpp" />
-    <ClCompile Include="src\midi\MidiFile.cpp" />
-    <ClCompile Include="src\midi\MidiSequencer.cpp" />
-    <ClCompile Include="src\midi2\UmpDownConverter.cpp" />
-    <ClCompile Include="src\midi2\Midi2File.cpp" />
-    <ClCompile Include="src\dls\DlsFile.cpp" />
-    <ClCompile Include="src\sf2\Sf2File.cpp" />
-    <ClCompile Include="src\synth\SimdKernels.cpp" />
-    <ClCompile Include="src\synth\SimdKernelsAvx2.cpp">
+    <ClCompile Include="..\src\dllmain.cpp" />
+    <ClCompile Include="..\src\api.cpp" />
+    <ClCompile Include="..\src\common\CpuFeatures.cpp" />
+    <ClCompile Include="..\src\common\BinaryReader.cpp" />
+    <ClCompile Include="..\src\common\FileUtil.cpp" />
+    <ClCompile Include="..\src\midi\MidiTrack.cpp" />
+    <ClCompile Include="..\src\midi\MidiFile.cpp" />
+    <ClCompile Include="..\src\midi\MidiSequencer.cpp" />
+    <ClCompile Include="..\src\midi2\UmpDownConverter.cpp" />
+    <ClCompile Include="..\src\midi2\Midi2File.cpp" />
+    <ClCompile Include="..\src\dls\DlsFile.cpp" />
+    <ClCompile Include="..\src\sf2\Sf2File.cpp" />
+    <ClCompile Include="..\src\synth\SimdKernels.cpp" />
+    <ClCompile Include="..\src\synth\SimdKernelsAvx2.cpp">
       <AdditionalOptions>/arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="src\synth\Voice.cpp" />
-    <ClCompile Include="src\synth\VoicePool.cpp" />
-    <ClCompile Include="src\synth\Synthesizer.cpp" />
+    <ClCompile Include="..\src\synth\Voice.cpp" />
+    <ClCompile Include="..\src\synth\VoicePool.cpp" />
+    <ClCompile Include="..\src\synth\Synthesizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

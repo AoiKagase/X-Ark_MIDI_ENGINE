@@ -1,9 +1,13 @@
 ﻿#pragma once
 
-#ifdef XARKMIDIENGINE_EXPORTS
-#  define XAME_API __declspec(dllexport)
+#if defined(_WIN32)
+#  ifdef XARKMIDIENGINE_EXPORTS
+#    define XAME_API __declspec(dllexport)
+#  else
+#    define XAME_API __declspec(dllimport)
+#  endif
 #else
-#  define XAME_API __declspec(dllimport)
+#  define XAME_API __attribute__((visibility("default")))
 #endif
 
 #ifdef __cplusplus
@@ -55,6 +59,26 @@ XAME_API XAmeResult XAmeCreateEngineFromPaths(
 XAME_API XAmeResult XAmeCreateEngineWithOptions(
     const wchar_t*            midiPath,
     const wchar_t*            soundBankPath,
+    XAmeSoundBankKind          soundBankKind,
+    unsigned int              sampleRate,
+    unsigned int              numChannels,
+    const XAmeCreateOptions*   options,
+    XAmeEngine*                outEngine
+);
+
+// UTF-8 path variants (preferred on Linux; available on all platforms)
+XAME_API XAmeResult XAmeCreateEngineFromPathsUtf8(
+    const char*        midiPath,
+    const char*        soundBankPath,
+    XAmeSoundBankKind   soundBankKind,
+    unsigned int       sampleRate,
+    unsigned int       numChannels,
+    XAmeEngine*         outEngine
+);
+
+XAME_API XAmeResult XAmeCreateEngineWithOptionsUtf8(
+    const char*               midiPath,
+    const char*               soundBankPath,
     XAmeSoundBankKind          soundBankKind,
     unsigned int              sampleRate,
     unsigned int              numChannels,

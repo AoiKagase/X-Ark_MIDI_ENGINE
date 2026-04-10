@@ -3,7 +3,7 @@
 
 namespace XArkMidi::Simd {
 
-__declspec(noinline) void AccumulateSixAvx2(
+XARK_NOINLINE void AccumulateSixAvx2(
     f32* dstOutL, f32* dstOutR,
     f32* dstReverbL, f32* dstReverbR,
     f32* dstChorusL, f32* dstChorusR,

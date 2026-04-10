@@ -14,7 +14,7 @@
 #include <string>
 
 // DLL ヘッダー（DLL をビルド後にパスを通すこと）
-#include "../X-ArkMidiEngine/include/XArkMidiEngine.h"
+#include "../include/XArkMidiEngine.h"
 
 // ---- WAV ヘッダー書き出しユーティリティ ----
 
@@ -52,17 +52,6 @@ static void WriteWavHeader(FILE* f, uint32_t sampleRate, uint16_t channels,
     WriteU32LE(f, dataBytes);
 }
 
-// ---- ファイル読み込みユーティリティ ----
-
-static std::wstring ToWide(const char* path) {
-    std::wstring result;
-    while (*path) {
-        result.push_back(static_cast<unsigned char>(*path));
-        ++path;
-    }
-    return result;
-}
-
 // ---- メイン ----
 
 int main(int argc, char* argv[]) {
@@ -75,19 +64,17 @@ int main(int argc, char* argv[]) {
     const char* sf2Path  = argv[2];
     const char* wavPath  = argv[3];
 
-    // エンジン生成
+    // エンジン生成（UTF-8 API を使用）
     const unsigned int SAMPLE_RATE  = 44100;
     const unsigned int NUM_CHANNELS = 2;
-    std::wstring midiPathW = ToWide(midiPath);
-    std::wstring sf2PathW = ToWide(sf2Path);
     XAmeCreateOptions options{};
     options.structSize = sizeof(options);
     options.compatibilityFlags = XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER;
 
     XAmeEngine engine = nullptr;
-    XAmeResult r = XAmeCreateEngineWithOptions(
-        midiPathW.c_str(),
-        sf2PathW.c_str(),
+    XAmeResult r = XAmeCreateEngineWithOptionsUtf8(
+        midiPath,
+        sf2Path,
         XAME_SOUNDBANK_AUTO,
         SAMPLE_RATE, NUM_CHANNELS,
         &options,
@@ -139,4 +126,5 @@ int main(int argc, char* argv[]) {
     XAmeDestroyEngine(engine);
     return 0;
 }
+
 

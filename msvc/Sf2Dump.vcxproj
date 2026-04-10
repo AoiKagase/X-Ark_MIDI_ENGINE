@@ -22,8 +22,8 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
-    <OutDir>$(SolutionDir)output\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediate\Sf2Dump\$(Configuration)\</IntDir>
+    <OutDir>$(SolutionDir)..\build\msvc\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)..\build\msvc\obj\Sf2Dump\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -32,7 +32,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\X-ArkMidiEngine\include;$(ProjectDir)..\X-ArkMidiEngine\src\common;$(ProjectDir)..\X-ArkMidiEngine\src\sf2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\src\common;$(ProjectDir)..\src\sf2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -40,17 +40,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="dump_sf2_zone.cpp" />
-    <ClCompile Include="..\X-ArkMidiEngine\src\sf2\Sf2File.cpp" />
-    <ClCompile Include="..\X-ArkMidiEngine\src\common\BinaryReader.cpp" />
-    <ClCompile Include="..\X-ArkMidiEngine\src\common\FileUtil.cpp" />
+    <ClCompile Include="..\tests\dump_sf2_zone.cpp" />
+    <ClCompile Include="..\src\sf2\Sf2File.cpp" />
+    <ClCompile Include="..\src\common\BinaryReader.cpp" />
+    <ClCompile Include="..\src\common\FileUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\X-ArkMidiEngine\src\sf2\Sf2File.h" />
-    <ClInclude Include="..\X-ArkMidiEngine\src\sf2\Sf2Types.h" />
-    <ClInclude Include="..\X-ArkMidiEngine\src\common\BinaryReader.h" />
-    <ClInclude Include="..\X-ArkMidiEngine\src\common\FileUtil.h" />
-    <ClInclude Include="..\X-ArkMidiEngine\src\common\Types.h" />
+    <ClInclude Include="..\src\sf2\Sf2File.h" />
+    <ClInclude Include="..\src\sf2\Sf2Types.h" />
+    <ClInclude Include="..\src\common\BinaryReader.h" />
+    <ClInclude Include="..\src\common\FileUtil.h" />
+    <ClInclude Include="..\src\common\Types.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

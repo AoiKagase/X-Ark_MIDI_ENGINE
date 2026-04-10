@@ -1,4 +1,5 @@
 ﻿#include "FileUtil.h"
+#include <cstdint>
 #include <cstdio>
 
 namespace XArkMidi {
@@ -11,7 +12,28 @@ bool ReadFileBytes(const std::wstring& path, std::vector<u8>& outData, std::stri
 #ifdef _WIN32
     _wfopen_s(&file, path.c_str(), L"rb");
 #else
-    file = std::fopen(std::string(path.begin(), path.end()).c_str(), "rb");
+    // Convert wstring (UCS-4 on Linux) to UTF-8
+    std::string utf8path;
+    utf8path.reserve(path.size() * 4);
+    for (wchar_t wc : path) {
+        const uint32_t cp = static_cast<uint32_t>(wc);
+        if (cp < 0x80u) {
+            utf8path += static_cast<char>(cp);
+        } else if (cp < 0x800u) {
+            utf8path += static_cast<char>(0xC0u | (cp >> 6));
+            utf8path += static_cast<char>(0x80u | (cp & 0x3Fu));
+        } else if (cp < 0x10000u) {
+            utf8path += static_cast<char>(0xE0u | (cp >> 12));
+            utf8path += static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu));
+            utf8path += static_cast<char>(0x80u | (cp & 0x3Fu));
+        } else {
+            utf8path += static_cast<char>(0xF0u | (cp >> 18));
+            utf8path += static_cast<char>(0x80u | ((cp >> 12) & 0x3Fu));
+            utf8path += static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu));
+            utf8path += static_cast<char>(0x80u | (cp & 0x3Fu));
+        }
+    }
+    file = std::fopen(utf8path.c_str(), "rb");
 #endif
     if (!file) {
         outError = "Failed to open file";

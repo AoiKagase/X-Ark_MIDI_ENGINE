@@ -3,11 +3,12 @@
 #include "sf2/Sf2File.h"
 #include "dls/DlsFile.h"
 #include "synth/Synthesizer.h"
+#include <cstddef>
+#include <cstdint>
+#include <cwctype>
 #include <exception>
 #include <memory>
 #include <string>
-#include <cwctype>
-#include <cstddef>
 
 using namespace XArkMidi;
 
@@ -72,6 +73,47 @@ static thread_local std::string g_lastError;
 
 static void SetError(const std::string& msg) {
     g_lastError = msg;
+}
+
+static std::wstring Utf8ToWstring(const char* utf8) {
+    std::wstring result;
+    if (!utf8) return result;
+    const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+    while (*p) {
+        uint32_t cp;
+        if (*p < 0x80u) {
+            cp = *p++;
+        } else if ((*p & 0xE0u) == 0xC0u && p[1]) {
+            cp  = static_cast<uint32_t>(*p++ & 0x1Fu) << 6;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu);
+        } else if ((*p & 0xF0u) == 0xE0u && p[1] && p[2]) {
+            cp  = static_cast<uint32_t>(*p++ & 0x0Fu) << 12;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu) << 6;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu);
+        } else if ((*p & 0xF8u) == 0xF0u && p[1] && p[2] && p[3]) {
+            cp  = static_cast<uint32_t>(*p++ & 0x07u) << 18;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu) << 12;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu) << 6;
+            cp |= static_cast<uint32_t>(*p++ & 0x3Fu);
+        } else {
+            ++p; // skip invalid byte
+            continue;
+        }
+#ifdef _WIN32
+        // UTF-16: encode surrogate pair for supplementary characters
+        if (cp < 0x10000u) {
+            result += static_cast<wchar_t>(cp);
+        } else {
+            cp -= 0x10000u;
+            result += static_cast<wchar_t>(0xD800u | (cp >> 10));
+            result += static_cast<wchar_t>(0xDC00u | (cp & 0x3FFu));
+        }
+#else
+        // UCS-4
+        result += static_cast<wchar_t>(cp);
+#endif
+    }
+    return result;
 }
 
 static std::wstring ToLower(std::wstring s) {
@@ -231,5 +273,48 @@ const char* XAmeGetVersion(void) {
 
 const char* XAmeGetLastError(void) {
     return g_lastError.c_str();
+}
+
+XAmeResult XAmeCreateEngineFromPathsUtf8(
+    const char* midiPath,
+    const char* soundBankPath,
+    XAmeSoundBankKind soundBankKind,
+    unsigned int sampleRate,
+    unsigned int numChannels,
+    XAmeEngine* outEngine)
+{
+    return XAmeCreateEngineWithOptionsUtf8(
+        midiPath,
+        soundBankPath,
+        soundBankKind,
+        sampleRate,
+        numChannels,
+        nullptr,
+        outEngine);
+}
+
+XAmeResult XAmeCreateEngineWithOptionsUtf8(
+    const char* midiPath,
+    const char* soundBankPath,
+    XAmeSoundBankKind soundBankKind,
+    unsigned int sampleRate,
+    unsigned int numChannels,
+    const XAmeCreateOptions* options,
+    XAmeEngine* outEngine)
+{
+    if (!midiPath || !midiPath[0] || !soundBankPath || !soundBankPath[0]) {
+        SetError("MIDI path and sound bank path are required");
+        return XAME_ERR_INVALID_ARG;
+    }
+    const std::wstring wMidiPath      = Utf8ToWstring(midiPath);
+    const std::wstring wSoundBankPath = Utf8ToWstring(soundBankPath);
+    return XAmeCreateEngineWithOptions(
+        wMidiPath.c_str(),
+        wSoundBankPath.c_str(),
+        soundBankKind,
+        sampleRate,
+        numChannels,
+        options,
+        outEngine);
 }
 

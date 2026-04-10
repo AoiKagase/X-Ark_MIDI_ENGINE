@@ -1,22 +1,24 @@
 ﻿#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 #include <cmath>
 
-#include "../X-ArkMidiEngine/src/dls/DlsFile.h"
+#include "../src/dls/DlsFile.h"
 
 using namespace XArkMidi;
 
-int wmain(int argc, wchar_t* argv[]) {
+int main(int argc, char* argv[]) {
     if (argc < 6) {
-        std::fwprintf(stderr, L"Usage: %ls <input.dls> <bank> <program> <key> <velocity>\n", argv[0]);
+        std::fprintf(stderr, "Usage: %s <input.dls> <bank> <program> <key> <velocity>\n", argv[0]);
         return 1;
     }
 
-    const std::wstring path = argv[1];
-    const u16 bank = static_cast<u16>(_wtoi(argv[2]));
-    const u8 program = static_cast<u8>(_wtoi(argv[3]));
-    const u8 key = static_cast<u8>(_wtoi(argv[4]));
-    const u8 velocity = static_cast<u8>(_wtoi(argv[5]));
+    const std::wstring path(argv[1], argv[1] + std::strlen(argv[1]));
+    const u16 bank = static_cast<u16>(std::atoi(argv[2]));
+    const u8 program = static_cast<u8>(std::atoi(argv[3]));
+    const u8 key = static_cast<u8>(std::atoi(argv[4]));
+    const u8 velocity = static_cast<u8>(std::atoi(argv[5]));
 
     DlsFile dls;
     if (!dls.LoadFromFile(path)) {

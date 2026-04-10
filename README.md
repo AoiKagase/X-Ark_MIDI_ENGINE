@@ -11,17 +11,17 @@ AI純正です。
 
 ## プロジェクト概要
 
-X-ArkMIDIEngine は、MIDI ファイルを SF2/DLS サウンドバンクを用いて PCM 音声へレンダリングする Windows 向け DLL です。
+X-ArkMIDIEngine は、MIDI ファイルを SF2/DLS サウンドバンクを用いて PCM 音声へレンダリングする DLL / 共有ライブラリです。
 
 - 入力: MIDI ファイル、SF2 または DLS ファイル
 - 出力: PCM オーディオデータ
-- 形式: Windows DLL
+- 形式: Windows DLL / Linux shared object
 - 主用途: ネイティブアプリや .NET アプリからの MIDI レンダリング
 
 ## 主な特徴
 
 - C API によるシンプルな利用形態
-- UTF-16 パス対応
+- UTF-16 / UTF-8 パス対応
 - x64 / C++17 ベース
 - AVX2 SIMD カーネルを利用したビルド構成
 - C# から利用できる P/Invoke ラッパーを同梱
@@ -33,35 +33,41 @@ Visual Studio 2022 環境を前提としています。
 ### DLL をビルド
 
 ```powershell
-msbuild X-ArkMidiEngine/X-ArkMidiEngine.vcxproj /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
+msbuild msvc/XArkMidiEngine.vcxproj /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
 ```
 
 ### ソリューション全体をビルド
 
 ```powershell
-msbuild X-ArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo
+msbuild msvc/XArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo
 ```
 
-- 出力先: `output/Release/XArkMidiEngine.dll`
+- 出力先: `build/msvc/bin/Release/XArkMidiEngine.dll`
 - ツールセット: v145
 - 対応プラットフォーム: x64 のみ
 
+### CMake
+
+```bash
+cmake -B build/cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build/cmake
+# Output: build/cmake/libXArkMidiEngine.so
+```
+
 ## ディレクトリ構成
 
-- `X-ArkMidiEngine/`
-  コア DLL プロジェクト
-- `X-ArkMidiEngine/include/`
+- `include/`
   公開 API ヘッダー
-- `X-ArkMidiEngine/src/`
+- `src/`
   実装本体
+- `tests/`
+  テスト用実行ファイルとダンプツール
+- `msvc/`
+  Visual Studio ソリューション / プロジェクト
+- `build/`
+  生成物専用
 - `XArkMidiEngine.cs`
   C# P/Invoke ラッパー
-- `test/`
-  テスト用実行ファイルや検証コード
-- `output/`
-  ビルド成果物
-- `intermediate/`
-  中間生成物
 
 ## API 概要
 
@@ -69,13 +75,15 @@ msbuild X-ArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild 
 
 - `XAmeCreateEngineFromPaths()`
 - `XAmeCreateEngineWithOptions()`
+- `XAmeCreateEngineFromPathsUtf8()`
+- `XAmeCreateEngineWithOptionsUtf8()`
 - `XAmeRender()`
 - `XAmeIsFinished()`
 - `XAmeDestroyEngine()`
 
 ### 注意点
 
-- パスは `wchar_t*` を用いた UTF-16 形式
+- パスは Windows では `wchar_t*`、Linux では UTF-8 `char*` 推奨
 - `numChannels` は `1` または `2`
 - デフォルトサンプルレートは `44100Hz`
 
@@ -88,7 +96,7 @@ msbuild X-ArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild 
 ### テストアプリのビルド
 
 ```powershell
-msbuild test/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /nologo
+msbuild msvc/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /nologo
 ```
 
 ### MIDI レンダリングテスト

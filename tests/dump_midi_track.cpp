@@ -1,12 +1,17 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include <vector>
-#include "../X-ArkMidiEngine/src/midi/MidiFile.h"
+#include "../src/midi/MidiFile.h"
 
 using namespace XArkMidi;
 
 static std::vector<u8> ReadFile(const char* path) {
     FILE* f = nullptr;
-    if (fopen_s(&f, path, "rb") != 0 || !f) return {};
+#ifdef _WIN32
+    fopen_s(&f, path, "rb");
+#else
+    f = std::fopen(path, "rb");
+#endif
+    if (!f) return {};
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -68,3 +73,4 @@ int main(int argc, char* argv[]) {
     }
     return 0;
 }
+

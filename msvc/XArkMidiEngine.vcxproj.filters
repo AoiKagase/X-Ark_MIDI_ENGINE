@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Public API">
@@ -27,99 +27,99 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\XArkMidiEngine.h">
+    <ClInclude Include="..\include\XArkMidiEngine.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="src\common\Types.h">
+    <ClInclude Include="..\src\common\Types.h">
       <Filter>Source Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="src\common\BinaryReader.h">
+    <ClInclude Include="..\src\common\BinaryReader.h">
       <Filter>Source Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="src\common\FileUtil.h">
+    <ClInclude Include="..\src\common\FileUtil.h">
       <Filter>Source Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="src\midi\MidiEvent.h">
+    <ClInclude Include="..\src\midi\MidiEvent.h">
       <Filter>Source Files\midi</Filter>
     </ClInclude>
-    <ClInclude Include="src\midi\MidiTrack.h">
+    <ClInclude Include="..\src\midi\MidiTrack.h">
       <Filter>Source Files\midi</Filter>
     </ClInclude>
-    <ClInclude Include="src\midi\MidiFile.h">
+    <ClInclude Include="..\src\midi\MidiFile.h">
       <Filter>Source Files\midi</Filter>
     </ClInclude>
-    <ClInclude Include="src\midi\MidiSequencer.h">
+    <ClInclude Include="..\src\midi\MidiSequencer.h">
       <Filter>Source Files\midi</Filter>
     </ClInclude>
-    <ClInclude Include="src\sf2\Sf2Types.h">
+    <ClInclude Include="..\src\sf2\Sf2Types.h">
       <Filter>Source Files\sf2</Filter>
     </ClInclude>
-    <ClInclude Include="src\sf2\Sf2File.h">
+    <ClInclude Include="..\src\sf2\Sf2File.h">
       <Filter>Source Files\sf2</Filter>
     </ClInclude>
-    <ClInclude Include="src\soundbank\SoundBank.h">
+    <ClInclude Include="..\src\soundbank\SoundBank.h">
       <Filter>Source Files\soundbank</Filter>
     </ClInclude>
-    <ClInclude Include="src\dls\DlsFile.h">
+    <ClInclude Include="..\src\dls\DlsFile.h">
       <Filter>Source Files\dls</Filter>
     </ClInclude>
-    <ClInclude Include="src\synth\Interpolator.h">
+    <ClInclude Include="..\src\synth\Interpolator.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
-    <ClInclude Include="src\synth\Voice.h">
+    <ClInclude Include="..\src\synth\Voice.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
-    <ClInclude Include="src\synth\VoicePool.h">
+    <ClInclude Include="..\src\synth\VoicePool.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
-    <ClInclude Include="src\synth\Channel.h">
+    <ClInclude Include="..\src\synth\Channel.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
-    <ClInclude Include="src\synth\Synthesizer.h">
+    <ClInclude Include="..\src\synth\Synthesizer.h">
       <Filter>Source Files\synth</Filter>
     </ClInclude>
-    <ClInclude Include="src\common\CpuFeatures.h" />
-    <ClInclude Include="src\synth\SimdKernels.h" />
+    <ClInclude Include="..\src\common\CpuFeatures.h" />
+    <ClInclude Include="..\src\synth\SimdKernels.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\dllmain.cpp">
+    <ClCompile Include="..\src\dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\api.cpp">
+    <ClCompile Include="..\src\api.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\common\BinaryReader.cpp">
+    <ClCompile Include="..\src\common\BinaryReader.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="src\common\FileUtil.cpp">
+    <ClCompile Include="..\src\common\FileUtil.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="src\midi\MidiTrack.cpp">
+    <ClCompile Include="..\src\midi\MidiTrack.cpp">
       <Filter>Source Files\midi</Filter>
     </ClCompile>
-    <ClCompile Include="src\midi\MidiFile.cpp">
+    <ClCompile Include="..\src\midi\MidiFile.cpp">
       <Filter>Source Files\midi</Filter>
     </ClCompile>
-    <ClCompile Include="src\midi\MidiSequencer.cpp">
+    <ClCompile Include="..\src\midi\MidiSequencer.cpp">
       <Filter>Source Files\midi</Filter>
     </ClCompile>
-    <ClCompile Include="src\sf2\Sf2File.cpp">
+    <ClCompile Include="..\src\sf2\Sf2File.cpp">
       <Filter>Source Files\sf2</Filter>
     </ClCompile>
-    <ClCompile Include="src\dls\DlsFile.cpp">
+    <ClCompile Include="..\src\dls\DlsFile.cpp">
       <Filter>Source Files\dls</Filter>
     </ClCompile>
-    <ClCompile Include="src\synth\Voice.cpp">
+    <ClCompile Include="..\src\synth\Voice.cpp">
       <Filter>Source Files\synth</Filter>
     </ClCompile>
-    <ClCompile Include="src\synth\VoicePool.cpp">
+    <ClCompile Include="..\src\synth\VoicePool.cpp">
       <Filter>Source Files\synth</Filter>
     </ClCompile>
-    <ClCompile Include="src\synth\Synthesizer.cpp">
+    <ClCompile Include="..\src\synth\Synthesizer.cpp">
       <Filter>Source Files\synth</Filter>
     </ClCompile>
-    <ClCompile Include="src\common\CpuFeatures.cpp" />
-    <ClCompile Include="src\synth\SimdKernels.cpp" />
-    <ClCompile Include="src\synth\SimdKernelsAvx2.cpp" />
+    <ClCompile Include="..\src\common\CpuFeatures.cpp" />
+    <ClCompile Include="..\src\synth\SimdKernels.cpp" />
+    <ClCompile Include="..\src\synth\SimdKernelsAvx2.cpp" />
   </ItemGroup>
 </Project>
