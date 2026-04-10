@@ -10,11 +10,16 @@ on:
 jobs:
   windows:
     name: Windows (MSVC)
-    runs-on: windows-latest
+    runs-on: windows-2025
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install VS 2026 Build Tools
+        shell: powershell
+        run: |
+          choco install visualstudio2026buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart" -y
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
