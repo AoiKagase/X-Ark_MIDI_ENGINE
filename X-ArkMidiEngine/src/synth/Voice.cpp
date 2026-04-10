@@ -322,6 +322,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sampleDataSize = pcmDataSize;
     outputSampleRate = sampleRate;
     this->pitchBendSemitones = pitchBendSemitones;
+    perNotePitchSemitones = 0.0; // NoteOn 毎にリセット
     portamentoOffsetSemitones = 0.0;
     portamentoStepSemitones = 0.0;
     portamentoSamplesRemaining = 0;
@@ -609,7 +610,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     baseSampleStep = std::pow(2.0, baseSemitones / 12.0) *
                      static_cast<f64>(sampleHeader->sampleRate) / static_cast<f64>(outputSampleRate);
     sampleStepFixed = static_cast<i64>(std::llround(
-        baseSampleStep * std::pow(2.0, pitchBendSemitones / 12.0) * 4294967296.0));
+        baseSampleStep * std::pow(2.0, (pitchBendSemitones + perNotePitchSemitones) / 12.0) * 4294967296.0));
     RefreshOutputGains();
 }
 
@@ -1347,6 +1348,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
             const f64 portamentoSemitones = localPortamentoOffsetSemitones;
             const f64 pitchOffsetSemitones =
                 pitchBendSemitones +
+                perNotePitchSemitones +
                 portamentoSemitones +
                 static_cast<f64>(modEnvToPitchCents * localModEnvLevel + modLfoToPitchCents * modLfoValue + vibLfoToPitchCents * vibLfoValue) / 100.0;
             const i64 dynamicSampleStepFixed = static_cast<i64>(std::llround(

@@ -20,6 +20,10 @@ enum class MidiEventType : u8 {
     MetaTimeSig     = 0xF2, // 拍子記号
     MetaEndOfTrack  = 0xF3,
     MetaOther       = 0xFE,
+    // MIDI 2.0 Per-Note メッセージ（内部表現用）
+    PerNotePitchBend  = 0xF4, // Per-Note Pitch Bend, data1=note, value32=32-bit bend (center=0x80000000)
+    PerNoteRegCtrl    = 0xF5, // Per-Note Registered/Assignable Controller, data1=note, data2=index, value32
+    PerNoteManagement = 0xF6, // Per-Note Management, data1=note, data2=option_flags
     // 無効
     Invalid         = 0xFF,
 };

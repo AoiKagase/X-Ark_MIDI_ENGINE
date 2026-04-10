@@ -38,7 +38,8 @@ public:
     i64     samplePosFixed = 0;
     i64     sampleStepFixed = 0;
     f64     baseSampleStep = 0.0; // ピッチベンドなしのsampleStep（リアルタイム更新用）
-    f64     pitchBendSemitones = 0.0;
+    f64     pitchBendSemitones = 0.0;     // チャンネルレベルのピッチベンド
+    f64     perNotePitchSemitones = 0.0;  // MIDI 2.0 Per-Note Pitch Bend 寄与分
     f64     portamentoOffsetSemitones = 0.0;
     f64     portamentoStepSemitones = 0.0;
     u32     portamentoSamplesRemaining = 0;
@@ -142,10 +143,17 @@ public:
     bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
     void RefreshResolvedZoneControllers(const ResolvedZone& zone);
 
-    // ピッチベンドをリアルタイムで更新
-    void UpdatePitchBend(f64 pitchBendSemitones) {
-        this->pitchBendSemitones = pitchBendSemitones;
-        const f64 sampleStep = baseSampleStep * pow(2.0, pitchBendSemitones / 12.0);
+    // チャンネルレベルのピッチベンドをリアルタイムで更新（per-note 分を加算）
+    void UpdatePitchBend(f64 channelPitchSemitones) {
+        this->pitchBendSemitones = channelPitchSemitones;
+        const f64 sampleStep = baseSampleStep * pow(2.0, (channelPitchSemitones + perNotePitchSemitones) / 12.0);
+        sampleStepFixed = static_cast<i64>(std::llround(sampleStep * 4294967296.0));
+    }
+
+    // MIDI 2.0 Per-Note Pitch Bend をリアルタイムで更新
+    void UpdatePerNotePitchBend(f64 semitones) {
+        perNotePitchSemitones = semitones;
+        const f64 sampleStep = baseSampleStep * pow(2.0, (pitchBendSemitones + semitones) / 12.0);
         sampleStepFixed = static_cast<i64>(std::llround(sampleStep * 4294967296.0));
     }
 

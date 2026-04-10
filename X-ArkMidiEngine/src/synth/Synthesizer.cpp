@@ -505,6 +505,15 @@ void Synthesizer::HandleEvent(const MidiEvent& ev) {
     case MidiEventType::SysEx:
         HandleSysEx(ev);
         break;
+    case MidiEventType::PerNotePitchBend:
+        HandlePerNotePitchBend(ev.channel, ev.data1, ev.value32);
+        break;
+    case MidiEventType::PerNoteRegCtrl:
+        HandlePerNoteRegCtrl(ev.channel, ev.data1, ev.data2, ev.value32);
+        break;
+    case MidiEventType::PerNoteManagement:
+        HandlePerNoteManagement(ev.channel, ev.data1, ev.data2);
+        break;
     default:
         break;
     }
@@ -817,6 +826,30 @@ void Synthesizer::HandlePitchBend(u8 ch, u32 bend32) {
     // 現在鳴っているボイスのピッチをリアルタイム更新
     voicePool_.UpdateChannelPitch(ch, channels_[ch]);
     RefreshSf2ControllersForChannel(ch);
+}
+
+void Synthesizer::HandlePerNotePitchBend(u8 ch, u8 key, u32 pb32) {
+    // MIDI 2.0 Per-Note Pitch Bend: デフォルト ±2 半音のレンジ
+    constexpr f64 kRange = 2.0;
+    const f64 normalized = (static_cast<f64>(pb32) - 2147483648.0) / 2147483648.0; // -1.0 to +1.0
+    voicePool_.UpdatePerNotePitchBend(ch, key, normalized * kRange);
+}
+
+void Synthesizer::HandlePerNoteRegCtrl(u8 ch, u8 key, u8 index, u32 value) {
+    // Bank 0, Index 0 ("Pitch 7.25"): 7.25 固定小数点, 単位=半音, center=0x80000000
+    // 値の変換: offset = (i32)(value ^ 0x80000000), semitones = offset / 2^25
+    if (index == 0) {
+        const i32 offset = static_cast<i32>(value ^ 0x80000000u);
+        const f64 semitones = static_cast<f64>(offset) / 33554432.0; // 2^25
+        voicePool_.UpdatePerNotePitchBend(ch, key, semitones);
+    }
+    // 他のインデックスは現フェーズでは未実装
+}
+
+void Synthesizer::HandlePerNoteManagement(u8 ch, u8 key, u8 flags) {
+    // bit1: Reset Per-Note Controllers
+    if (flags & 0x02)
+        voicePool_.ResetPerNoteState(ch, key);
 }
 
 void Synthesizer::HandleSysEx(const MidiEvent& ev) {

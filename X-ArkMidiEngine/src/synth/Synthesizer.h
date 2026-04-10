@@ -127,6 +127,9 @@ private:
     void HandleChannelPressure(u8 ch, u8 pressure);
     void HandlePitchBend(u8 ch, u32 bend32); // bend32: center=0x80000000
     void HandleSysEx(const MidiEvent& ev);
+    void HandlePerNotePitchBend(u8 ch, u8 key, u32 pb32);
+    void HandlePerNoteRegCtrl(u8 ch, u8 key, u8 index, u32 value);
+    void HandlePerNoteManagement(u8 ch, u8 key, u8 flags);
     void RefreshSf2ControllersForChannel(u8 ch);
     bool HasAudibleEffectTail() const;
     void ResetGsEffectState();

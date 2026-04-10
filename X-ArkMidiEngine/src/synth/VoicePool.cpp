@@ -392,6 +392,22 @@ void VoicePool::UpdateChannelPitch(u8 channel, const ChannelState& state) {
     }
 }
 
+void VoicePool::UpdatePerNotePitchBend(u8 channel, u8 key, f64 perNoteSemitones) {
+    for (u16 i = 0; i < activeCount_; ++i) {
+        auto& v = voices_[activeIndices_[i]];
+        if (v.channel == channel && v.noteKey == key)
+            v.UpdatePerNotePitchBend(perNoteSemitones);
+    }
+}
+
+void VoicePool::ResetPerNoteState(u8 channel, u8 key) {
+    for (u16 i = 0; i < activeCount_; ++i) {
+        auto& v = voices_[activeIndices_[i]];
+        if (v.channel == channel && v.noteKey == key)
+            v.UpdatePerNotePitchBend(0.0);
+    }
+}
+
 void VoicePool::UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
     for (u16 i = 0; i < activeCount_; ++i) {
         auto& v = voices_[activeIndices_[i]];

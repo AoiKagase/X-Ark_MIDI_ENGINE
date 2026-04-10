@@ -248,8 +248,41 @@ void UmpDownConverter::ConvertMidi2Channel(u32 word0, u32 word1, u32 tick,
         out.push_back(makeCC(38, dataLsb));  // Data Entry LSB
         break;
     }
+    case kMidi2StatusPerNotePB: {
+        // Per-Note Pitch Bend: data1=note, value32=32-bit bend
+        ev.type    = MidiEventType::PerNotePitchBend;
+        ev.data1   = index1; // note number
+        ev.value32 = word1;  // 32-bit pitch bend (center=0x80000000)
+        out.push_back(ev);
+        break;
+    }
+    case kMidi2StatusRegPerNote: {
+        // Per-Note Registered Controller
+        ev.type    = MidiEventType::PerNoteRegCtrl;
+        ev.data1   = index1; // note number
+        ev.data2   = index2; // controller index
+        ev.value32 = word1;
+        out.push_back(ev);
+        break;
+    }
+    case kMidi2StatusAsgPerNote: {
+        // Per-Note Assignable Controller (Registered と同じルーティング)
+        ev.type    = MidiEventType::PerNoteRegCtrl;
+        ev.data1   = index1;
+        ev.data2   = index2;
+        ev.value32 = word1;
+        out.push_back(ev);
+        break;
+    }
+    case kMidi2StatusPerNoteMgmt: {
+        // Per-Note Management
+        ev.type  = MidiEventType::PerNoteManagement;
+        ev.data1 = index1; // note number
+        ev.data2 = index2; // option_flags (bit1=reset per-note controllers)
+        out.push_back(ev);
+        break;
+    }
     default:
-        // Per-Note Controller, Per-Note Pitch Bend 等は Phase 1 ではスキップ
         break;
     }
 }

@@ -44,6 +44,9 @@ public:
     // ピッチベンドをリアルタイム更新（チャンネルの全アクティブボイスに適用）
     void UpdatePitchBend(u8 channel, f64 pitchBendSemitones);
     void UpdateChannelPitch(u8 channel, const ChannelState& state);
+    // MIDI 2.0 Per-Note Pitch Bend（特定ノートのボイスにのみ適用）
+    void UpdatePerNotePitchBend(u8 channel, u8 key, f64 perNoteSemitones);
+    void ResetPerNoteState(u8 channel, u8 key);
     void UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
     void RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
                                f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
