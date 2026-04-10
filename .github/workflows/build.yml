@@ -1,0 +1,60 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build solution
+        run: msbuild msvc/XArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xark-midi-engine-windows-x64
+          path: |
+            build/msvc/bin/Release/XArkMidiEngine.dll
+            build/msvc/bin/Release/XArkMidiEngine.lib
+            build/msvc/bin/Release/XArkMidiEngine.exp
+            build/msvc/bin/Release/XArkMidiEngine.pdb
+          if-no-files-found: error
+
+  linux:
+    name: Linux (CMake)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build/cmake -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/cmake --config Release
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xark-midi-engine-linux
+          path: |
+            build/cmake/libXArkMidiEngine.so
+            build/cmake/XArkMidiTest
+            build/cmake/dump_midi_track
+            build/cmake/dump_sf2_zone
+            build/cmake/dump_dls_zone
+          if-no-files-found: error
