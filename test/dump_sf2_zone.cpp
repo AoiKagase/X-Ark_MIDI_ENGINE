@@ -160,10 +160,20 @@ int main(int argc, char* argv[]) {
         for (size_t zi = 0; zi < zones.size(); ++zi) {
             const auto& z = zones[zi];
             const auto* h = z.sample;
+            const i32 loopStartOff = z.generators[GEN_StartloopAddrsOffset] + z.generators[GEN_StartloopAddrsCoarse] * 32768;
+            const i32 loopEndOff = z.generators[GEN_EndloopAddrsOffset] + z.generators[GEN_EndloopAddrsCoarse] * 32768;
+            const i32 effectiveLoopStart = static_cast<i32>(h->loopStart) + loopStartOff;
+            const i32 effectiveLoopEnd = static_cast<i32>(h->loopEnd) + loopEndOff;
             
             printf("\nZone %zu:\n", zi);
             printf("  Sample: '%.20s' start=%u end=%u rate=%u\n",
                 h->sampleName, h->start, h->end, h->sampleRate);
+            printf("  Header Loop: start=%u end=%u len=%u\n",
+                h->loopStart, h->loopEnd, h->loopEnd > h->loopStart ? h->loopEnd - h->loopStart : 0);
+            printf("  Effective Loop: start=%d end=%d len=%d (offsets %+d / %+d)\n",
+                effectiveLoopStart, effectiveLoopEnd,
+                effectiveLoopEnd > effectiveLoopStart ? effectiveLoopEnd - effectiveLoopStart : 0,
+                loopStartOff, loopEndOff);
             
             i32 peak = 0;
             double sumSq = 0.0;

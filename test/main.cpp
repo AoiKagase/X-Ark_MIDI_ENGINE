@@ -80,13 +80,17 @@ int main(int argc, char* argv[]) {
     const unsigned int NUM_CHANNELS = 2;
     std::wstring midiPathW = ToWide(midiPath);
     std::wstring sf2PathW = ToWide(sf2Path);
+    XAmeCreateOptions options{};
+    options.structSize = sizeof(options);
+    options.compatibilityFlags = XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER;
 
     XAmeEngine engine = nullptr;
-    XAmeResult r = XAmeCreateEngineFromPaths(
+    XAmeResult r = XAmeCreateEngineWithOptions(
         midiPathW.c_str(),
         sf2PathW.c_str(),
         XAME_SOUNDBANK_AUTO,
         SAMPLE_RATE, NUM_CHANNELS,
+        &options,
         &engine);
 
     if (r != XAME_OK) {
