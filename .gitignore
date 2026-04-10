@@ -11,3 +11,5 @@
 *.pdb
 *.tlog
 *.user/msvc/.vs/
+/msvc/.vs
+msvc/XArkMidiEngine.vcxproj.user
