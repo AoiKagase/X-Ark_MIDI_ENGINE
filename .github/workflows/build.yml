@@ -24,8 +24,8 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Build solution
-        run: msbuild msvc/XArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
+      - name: Build DLL project
+        run: msbuild msvc/XArkMidiEngine.vcxproj /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
