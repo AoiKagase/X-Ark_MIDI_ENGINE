@@ -1,4 +1,10 @@
-﻿#include "../include/XArkMidiEngine.h"
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+#include "../include/XArkMidiEngine.h"
 #include "midi/MidiFile.h"
 #include "sf2/Sf2File.h"
 #include "dls/DlsFile.h"

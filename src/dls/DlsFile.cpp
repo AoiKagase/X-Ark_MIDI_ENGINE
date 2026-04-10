@@ -1,4 +1,10 @@
-﻿#include "DlsFile.h"
+﻿/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+#include "DlsFile.h"
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -753,4 +759,5 @@ bool DlsFile::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
 }
 
 } // namespace XArkMidi
+
 
