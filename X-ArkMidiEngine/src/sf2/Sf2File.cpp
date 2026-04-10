@@ -20,19 +20,11 @@ namespace {
 constexpr u16 kModSrcVelocity = 2u;
 
 // SF2 default modulator 1: velocity → InitialAttenuation
-// 400 * log10(127/vel) centibels (square law, FluidSynth/BASSMIDI互換)
-// NoteOn毎に呼ばれるため、128エントリのテーブルで log10 計算を排除
-const std::array<i32, 128> kVelAttenTable = []() {
-    std::array<i32, 128> t{};
-    t[0] = 960;
-    for (int v = 1; v < 127; ++v)
-        t[v] = static_cast<i32>(std::lround(400.0 * std::log10(127.0 / v)));
-    t[127] = 0;
-    return t;
-}();
-
-inline i32 ComputeDefaultVelocityAttenuationCb(u8 velocity) {
-    return kVelAttenTable[velocity];
+// 400 * log10(65535/vel) centibels (16-bit velocity, square law互換)
+inline i32 ComputeDefaultVelocityAttenuationCb(u16 velocity) {
+    if (velocity == 0) return 960;
+    if (velocity >= 65535) return 0;
+    return static_cast<i32>(std::lround(400.0 * std::log10(65535.0 / velocity)));
 }
 
 bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, std::string& outError) {
@@ -54,7 +46,7 @@ bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
     return sourceIndex == kModSrcVelocity;
 }
 
-double DecodeModSourceValue(u16 oper, u8 key, u8 velocity, const ModulatorContext* ctx, bool& supported) {
+double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorContext* ctx, bool& supported) {
     supported = false;
     if (oper == 0) {
         supported = true;
@@ -72,7 +64,7 @@ double DecodeModSourceValue(u16 oper, u8 key, u8 velocity, const ModulatorContex
         x = static_cast<double>(ctx->ccValues[index]) / 127.0;
     } else {
         switch (index) {
-        case 2: x = static_cast<double>(velocity) / 127.0; break;
+        case 2: x = static_cast<double>(velocity) / 65535.0; break;
         case 3: x = static_cast<double>(key) / 127.0; break;
         case 10:
             if (!ctx) return 0.0;
@@ -541,7 +533,7 @@ void Sf2File::ComputeSampleLoudnessGains() {
 
 // ジェネレーターマージ（インストグローバル→インストゾーン→プリセットゾーン）
 void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int instBagIdx, int presetBagIdx,
-                           const SampleHeader* sample, u8 key, u8 velocity,
+                           const SampleHeader* sample, u8 key, u16 velocity,
                            const ModulatorContext* ctx,
                            ResolvedZone& outZone) const {
     outZone.sample = sample;
@@ -672,7 +664,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
 }
 
 bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                              u8 key, u8 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const {
+                              u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const {
     const int modMax = static_cast<int>(mods.size());
     if (modStart < 0 || modStart > modMax) modStart = modMax;
     if (modEnd > modMax) modEnd = modMax;
@@ -715,10 +707,13 @@ void Sf2File::BuildPresetIndex() {
     }
 }
 
-bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
+bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                          std::vector<ResolvedZone>& outZones,
                          const ModulatorContext* ctx) const {
     outZones.clear();
+
+    // SF2 ゾーン範囲は 0-127 (u8) — 16-bit velocity を 7-bit に変換して比較
+    const u8 vel7 = static_cast<u8>(velocity >> 9);
 
     const u32 presetKey = (static_cast<u32>(bank) << 8) | static_cast<u32>(program);
     const auto presetIt = presetIndexMap_.find(presetKey);
@@ -779,7 +774,7 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
             }
 
             if (key < pkeyLo || key > pkeyHi) continue;
-            if (velocity < pvelLo || velocity > pvelHi) continue;
+            if (vel7 < pvelLo || vel7 > pvelHi) continue;
             if (instrumentIdx < 0 || instrumentIdx + 1 >= static_cast<int>(instruments_.size())) continue;
 
             // インスト層のバッグを走査
@@ -832,7 +827,7 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
                 }
 
                 if (key < ikeyLo || key > ikeyHi) continue;
-                if (velocity < ivelLo || velocity > ivelHi) continue;
+                if (vel7 < ivelLo || vel7 > ivelHi) continue;
                 if (sampleIdx < 0 || sampleIdx >= static_cast<int>(samples_.size())) continue;
 
                 const SFSample* smp = &samples_[sampleIdx];

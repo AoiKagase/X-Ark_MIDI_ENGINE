@@ -14,7 +14,7 @@ constexpr f32 kReverbFeedback = 0.50f;
 constexpr f32 kReverbWetMix = 0.80f;   // 0.65→0.80: リバーブリターンを増量
 constexpr f32 kMasterReverbSend = 0.20f; // 0.12→0.20: ドライ→リバーブへの送り増量
 constexpr f32 kMixGainSmooth = 0.0025f;
-constexpr f32 kMasterOutputGain = 0.80f; // リバーブ増量分を考慮して dry を抑制
+constexpr f32 kMasterOutputGain = 1.00f; // リバーブ増量分を考慮して dry を抑制
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
@@ -130,7 +130,7 @@ void AppendProgramSummaryLog(u16 requestedBank,
                              u8 channel,
                              u8 program,
                              u8 key,
-                             u8 velocity) {
+                             u16 velocity) {
     if (!IsProgramLoggingEnabled()) {
         return;
     }
@@ -155,7 +155,7 @@ void AppendProgramDebugLog(u16 requestedBank,
                            u8 channel,
                            u8 program,
                            u8 key,
-                           u8 velocity,
+                           u16 velocity,
                            const ChannelState& state,
                            const std::vector<ResolvedZone>& zones) {
     if (!IsProgramLoggingEnabled()) {
@@ -482,7 +482,7 @@ void Synthesizer::ResetGsEffectState() {
 void Synthesizer::HandleEvent(const MidiEvent& ev) {
     switch (ev.type) {
     case MidiEventType::NoteOn:
-        HandleNoteOn(ev.channel, ev.data1, ev.data2);
+        HandleNoteOn(ev.channel, ev.data1, ev.velocity16);
         break;
     case MidiEventType::NoteOff:
         HandleNoteOff(ev.channel, ev.data1);
@@ -510,7 +510,7 @@ void Synthesizer::HandleEvent(const MidiEvent& ev) {
     }
 }
 
-void Synthesizer::HandleNoteOn(u8 ch, u8 key, u8 vel) {
+void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     if (vel == 0) {
         HandleNoteOff(ch, key);
         return;

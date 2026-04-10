@@ -28,7 +28,7 @@ public:
     virtual SoundBankKind Kind() const = 0;
 
     virtual bool LoadFromMemory(const u8* data, size_t size) = 0;
-    virtual bool FindZones(u16 bank, u8 program, u8 key, u8 velocity,
+    virtual bool FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                            std::vector<ResolvedZone>& outZones,
                            const ModulatorContext* ctx = nullptr) const = 0;
 

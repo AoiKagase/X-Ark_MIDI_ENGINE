@@ -17,7 +17,7 @@ public:
     void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries);
 
     // プリセット検索: bank/program/key/velocity に一致する ResolvedZone リストを返す
-    bool FindZones(u16 bank, u8 program, u8 key, u8 velocity,
+    bool FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                    std::vector<ResolvedZone>& outZones,
                    const ModulatorContext* ctx = nullptr) const override;
 
@@ -84,12 +84,12 @@ private:
 
     // ジェネレーターマージ（インストグローバル→インストゾーン→プリセットゾーン）
     void ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int instBagIdx, int presetBagIdx,
-                     const SampleHeader* sample, u8 key, u8 velocity,
+                     const SampleHeader* sample, u8 key, u16 velocity,
                      const ModulatorContext* ctx,
                      ResolvedZone& outZone) const;
 
     bool ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                         u8 key, u8 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
+                         u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
     void BuildPresetIndex();
     void ComputeSampleLoudnessGains();
     bool ValidateSampleHeaders();

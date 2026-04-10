@@ -120,7 +120,7 @@ Voice* VoicePool::AllocVoice(u8 channel, u8 key) {
 }
 
 void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, size_t sampleDataSize,
-                        u16 bank, u8 channel, u8 program, u8 key, u8 velocity, u32 sampleRate,
+                        u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
                         f64 pitchBendSemitones, u8 exclusiveClass,
                         f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend, SoundBankKind soundBankKind,
                         const SynthCompatOptions& compatOptions,

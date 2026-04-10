@@ -119,7 +119,7 @@ private:
     OutputLimiter outputLimiter_;
 
     void HandleEvent(const MidiEvent& ev);
-    void HandleNoteOn(u8 ch, u8 key, u8 vel);
+    void HandleNoteOn(u8 ch, u8 key, u16 vel);
     void HandleNoteOff(u8 ch, u8 key);
     void HandleControlChange(u8 ch, u8 cc, u32 val32); // val32: 32-bit精度CC値
     void HandleProgramChange(u8 ch, u8 program);

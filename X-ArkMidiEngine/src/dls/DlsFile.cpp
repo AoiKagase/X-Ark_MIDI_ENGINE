@@ -640,10 +640,13 @@ void DlsFile::ApplyRegionToZone(const DlsRegion& region, const DlsWave& wave, Re
 
 }
 
-bool DlsFile::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
+bool DlsFile::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                         std::vector<ResolvedZone>& outZones,
                         const ModulatorContext* /*ctx*/) const {
     outZones.clear();
+
+    // DLS ゾーン範囲は 0-127 (u16) — 16-bit velocity を 7-bit に変換して比較
+    const u16 vel7 = velocity >> 9;
 
     const bool requestDrum = (bank == 128);
     const u16 requestBank = requestDrum ? 0 : bank;
@@ -657,7 +660,7 @@ bool DlsFile::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
 
         for (const auto& region : instrument.regions) {
             if (key < region.keyLow || key > region.keyHigh) continue;
-            if (velocity < region.velLow || velocity > region.velHigh) continue;
+            if (vel7 < region.velLow || vel7 > region.velHigh) continue;
 
             const DlsWave* wave = nullptr;
             if (!poolTableOffsets_.empty()) {
@@ -697,7 +700,7 @@ bool DlsFile::FindZones(u16 bank, u8 program, u8 key, u8 velocity,
                 if (conn.source == CONN_SRC_KEYNUMBER_LOCAL) {
                     sourceValue = static_cast<i32>(key) - 60;
                 } else if (conn.source == CONN_SRC_KEYONVELOCITY_LOCAL) {
-                    sourceValue = static_cast<i32>(velocity) - 64;
+                    sourceValue = static_cast<i32>(vel7) - 64;
                 } else {
                     return;
                 }

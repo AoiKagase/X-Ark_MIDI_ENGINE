@@ -15,7 +15,7 @@ public:
     bool LoadFromFile(const std::wstring& path);
     void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPoolTableEntries);
 
-    bool FindZones(u16 bank, u8 program, u8 key, u8 velocity,
+    bool FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                    std::vector<ResolvedZone>& outZones,
                    const ModulatorContext* ctx = nullptr) const override;
 

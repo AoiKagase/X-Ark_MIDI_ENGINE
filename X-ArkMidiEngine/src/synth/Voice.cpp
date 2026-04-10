@@ -304,7 +304,7 @@ void AdvanceEnvelope(EnvPhase& phase,
 }
 
 void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
-                   u16 bankNumber, u8 ch, u8 programNumber, u8 key, u8 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
+                   u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
                    SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
                    i32 portamentoSourceKey, u8 portamentoTime) {
     active         = true;
@@ -539,8 +539,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     filterZ1 = 0.0f;
     filterZ2 = 0.0f;
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
-    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/127) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(vel) / 127.0f));
+    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
+    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(vel) / 65535.0f));
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
@@ -583,8 +583,8 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
 
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
-    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/127) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(velocity) / 127.0f));
+    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
+    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(velocity) / 65535.0f));
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);

@@ -27,7 +27,7 @@ public:
     u8      channel  = 0;
     u8      program  = 0;
     u8      noteKey  = 0;
-    u8      velocity = 0;
+    u16     velocity = 0;
     u32     noteId   = 0;
     u8      exclusiveClass = 0;
     bool    sustainHeld = false; // Sustain Pedal 保留中
@@ -136,7 +136,7 @@ public:
 
     // NoteOn で初期化
     void NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
-                u16 bankNumber, u8 ch, u8 programNumber, u8 key, u8 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
+                u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
                 SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
                 i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
     bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
