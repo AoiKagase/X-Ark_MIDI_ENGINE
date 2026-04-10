@@ -22,7 +22,7 @@ public:
     void NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, size_t sampleDataSize,
                 u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
                 f64 pitchBendSemitones, u8 exclusiveClass,
-                f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend, SoundBankKind soundBankKind,
+                f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,
                 const SynthCompatOptions& compatOptions,
                 i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
 
@@ -44,9 +44,9 @@ public:
     // ピッチベンドをリアルタイム更新（チャンネルの全アクティブボイスに適用）
     void UpdatePitchBend(u8 channel, f64 pitchBendSemitones);
     void UpdateChannelPitch(u8 channel, const ChannelState& state);
-    void UpdateChannelMix(u8 channel, f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend);
+    void UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
     void RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
-                               f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend);
+                               f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
 
     // 全ボイスをレンダリング（outL, outR に加算）
     int RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR);

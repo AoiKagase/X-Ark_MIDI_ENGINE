@@ -17,8 +17,8 @@ constexpr f32 kInvPcmScale = 1.0f / 32768.0f;
 constexpr f32 kEnvelopeSilenceThreshold = 1.0e-5f;
 constexpr f64 kEnvelopeSilenceTarget = 1.0e-5;
 
-f32 NormalizeMidiSend(u8 value) {
-    return static_cast<f32>(value) / 127.0f;
+f32 NormalizeMidiSend(u32 value) {
+    return static_cast<f32>(value) / 4294967295.0f;
 }
 
 f32 NormalizeSf2EffectsSend(i32 value) {
@@ -613,8 +613,9 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     RefreshOutputGains();
 }
 
-void Voice::UpdateChannelMix(f32 volumeFactor, u8 pan, u8 reverbSendValue, u8 chorusSendValue) {
-    f32 channelPan = (static_cast<f32>(pan) - 64.0f) / 63.0f;
+void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
+    // 32-bit pan を正規化: 0→-1.0(左全振り), 0xFFFFFFFF→+1.0(右全振り), center≈0.0
+    f32 channelPan = static_cast<f32>(pan32) / 4294967295.0f * 2.0f - 1.0f;
     channelPan = std::max(-1.0f, std::min(1.0f, channelPan));
 
     f32 panGainL = std::sqrt(0.5f * (1.0f - channelPan));
@@ -622,8 +623,8 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u8 pan, u8 reverbSendValue, u8 ch
 
     channelGainL = volumeFactor * panGainL;
     channelGainR = volumeFactor * panGainR;
-    channelReverbSend = NormalizeMidiSend(reverbSendValue);
-    channelChorusSend = NormalizeMidiSend(chorusSendValue);
+    channelReverbSend = NormalizeMidiSend(reverbSend32);
+    channelChorusSend = NormalizeMidiSend(chorusSend32);
 
     reverbSend = std::clamp(presetReverbSend + channelReverbSend, 0.0f, 1.0f);
     chorusSend = std::clamp(presetChorusSend + channelChorusSend, 0.0f, 1.0f);

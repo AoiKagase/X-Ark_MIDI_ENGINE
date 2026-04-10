@@ -149,7 +149,7 @@ public:
         sampleStepFixed = static_cast<i64>(std::llround(sampleStep * 4294967296.0));
     }
 
-    void UpdateChannelMix(f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend);
+    void UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
 
     // NoteOff で Release フェーズへ移行
     void NoteOff();

@@ -122,7 +122,7 @@ Voice* VoicePool::AllocVoice(u8 channel, u8 key) {
 void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, size_t sampleDataSize,
                         u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
                         f64 pitchBendSemitones, u8 exclusiveClass,
-                        f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend, SoundBankKind soundBankKind,
+                        f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,
                         const SynthCompatOptions& compatOptions,
                         i32 portamentoSourceKey, u8 portamentoTime) {
     if (zones.empty()) {
@@ -166,7 +166,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
         v->NoteOn(zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
                   pitchBendSemitones, soundBankKind, compatOptions, portamentoSourceKey, portamentoTime);
         if (v->active) {
-            v->UpdateChannelMix(volumeFactor, pan, reverbSend, chorusSend);
+            v->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
             v->exclusiveClass = exclusiveClass;
             TrackVoice(voiceIndex);
         }
@@ -392,23 +392,23 @@ void VoicePool::UpdateChannelPitch(u8 channel, const ChannelState& state) {
     }
 }
 
-void VoicePool::UpdateChannelMix(u8 channel, f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend) {
+void VoicePool::UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
     for (u16 i = 0; i < activeCount_; ++i) {
         auto& v = voices_[activeIndices_[i]];
         if (v.channel != channel) continue;
-        v.UpdateChannelMix(volumeFactor, pan, reverbSend, chorusSend);
+        v.UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
     }
 }
 
 void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
-                                      f32 volumeFactor, u8 pan, u8 reverbSend, u8 chorusSend) {
+                                      f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
     std::vector<ResolvedZone> zones;
     for (u16 i = 0; i < activeCount_; ++i) {
         auto& v = voices_[activeIndices_[i]];
         if (v.channel != channel || !v.active) continue;
         zones.clear();
         if (!soundBank.FindZones(v.bank, v.program, v.noteKey, v.velocity, zones, &ctx)) {
-            v.UpdateChannelMix(volumeFactor, pan, reverbSend, chorusSend);
+            v.UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
             continue;
         }
         for (const auto& zone : zones) {
@@ -418,7 +418,7 @@ void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, co
             v.RefreshResolvedZoneControllers(zone);
             break;
         }
-        v.UpdateChannelMix(volumeFactor, pan, reverbSend, chorusSend);
+        v.UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
     }
 }
 

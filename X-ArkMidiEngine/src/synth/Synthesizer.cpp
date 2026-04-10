@@ -48,7 +48,7 @@ bool IsProgramLoggingEnabled() {
 }
 
 void ApplyChannelMix(VoicePool& voicePool, u8 ch, const ChannelState& state) {
-    voicePool.UpdateChannelMix(ch, state.VolumeFactor(), state.pan, state.reverbSend, state.chorusSend);
+    voicePool.UpdateChannelMix(ch, state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
 
 bool IsRpnSelected(const ChannelState& state) {
@@ -176,9 +176,9 @@ void AppendProgramDebugLog(u16 requestedBank,
         << " resolved_bank=" << resolvedBank
         << " channel_volume=" << static_cast<int>(state.volume32 >> 25)   // 32-bit→7-bit表示
         << " channel_expression=" << static_cast<int>(state.expression32 >> 25)
-        << " channel_pan=" << static_cast<int>(state.pan)
-        << " channel_reverb=" << static_cast<int>(state.reverbSend)
-        << " channel_chorus=" << static_cast<int>(state.chorusSend)
+        << " channel_pan=" << static_cast<int>(state.pan32 >> 25)      // 32-bit→7-bit表示
+        << " channel_reverb=" << static_cast<int>(state.reverbSend32 >> 25)
+        << " channel_chorus=" << static_cast<int>(state.chorusSend32 >> 25)
         << " zones=" << zones.size()
         << '\n';
 
@@ -569,8 +569,8 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
 
     voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleDataCount(),
                       resolvedBank, ch, state.program, key, vel, sampleRate_,
-                      pitchBend, excClass, state.VolumeFactor(), state.pan,
-                      state.reverbSend, state.chorusSend, soundBank_->Kind(), compatOptions_,
+                      pitchBend, excClass, state.VolumeFactor(), state.pan32,
+                      state.reverbSend32, state.chorusSend32, soundBank_->Kind(), compatOptions_,
                       portamentoSourceKey, state.portamentoTime);
     state.lastNoteKey = key;
     state.portamentoControlKey = 0xFF;
@@ -608,8 +608,8 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         state.volume32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
-    case 10: // Pan
-        state.pan = val;
+    case 10: // Pan (32-bit精度で保持)
+        state.pan32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
     case 11: // Expression (32-bit精度で保持)
@@ -639,12 +639,12 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
     case 84: // Portamento Control
         state.portamentoControlKey = val;
         break;
-    case 91: // Reverb Send Level
-        state.reverbSend = val;
+    case 91: // Reverb Send Level (32-bit精度で保持)
+        state.reverbSend32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
-    case 93: // Chorus Send Level
-        state.chorusSend = val;
+    case 93: // Chorus Send Level (32-bit精度で保持)
+        state.chorusSend32 = val32;
         ApplyChannelMix(voicePool_, ch, state);
         break;
     case 98: // NRPN LSB
@@ -966,7 +966,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
-                                     state.VolumeFactor(), state.pan, state.reverbSend, state.chorusSend);
+                                     state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
 
 } // namespace XArkMidi

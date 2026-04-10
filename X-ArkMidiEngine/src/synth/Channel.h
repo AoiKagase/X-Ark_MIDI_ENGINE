@@ -18,9 +18,11 @@ struct ChannelState {
     // Scale7To32(127) = 0xFFFFFFFF (full volume)
     u32  volume32     = 0xFFFFFFFFu; // CC7
     u32  expression32 = 0xFFFFFFFFu; // CC11
-    u8   pan        = 64;   // CC10 (64=センター)
-    u8   reverbSend = 40;   // CC91 (GM/BASSMIDI default)
-    u8   chorusSend = 0;    // CC93
+    // MIDI 2.0 対応: 32-bit pan/reverbSend/chorusSend
+    // MIDI 1.0 由来の場合は 7-bit からビットレプリケーションでアップスケール済み
+    u32  pan32       = 0x81020408u; // CC10, Scale7To32(64), center
+    u32  reverbSend32 = 0x50A14285u; // CC91, Scale7To32(40), GM/BASSMIDI default
+    u32  chorusSend32 = 0u;          // CC93
     bool sustain    = false; // CC64 >= 64
     bool sostenuto  = false; // CC66 >= 64
     bool softPedal  = false; // CC67 >= 64
@@ -101,9 +103,9 @@ struct ChannelState {
         pitchBendRangeCents = 0;
         volume32     = 0xFFFFFFFFu; // Scale7To32(127)
         expression32 = 0xFFFFFFFFu;
-        pan        = 64;
-        reverbSend = 40;
-        chorusSend = 0;
+        pan32       = 0x81020408u; // Scale7To32(64), center
+        reverbSend32 = 0x50A14285u; // Scale7To32(40), GM/BASSMIDI default
+        chorusSend32 = 0u;
         sustain    = false;
         sostenuto  = false;
         softPedal  = false;
@@ -127,10 +129,10 @@ struct ChannelState {
         for (int i = 0; i < 128; ++i) polyPressure[i] = 0;
         for (int i = 0; i < 128; ++i) noteTuningCents[i] = 0;
         ccValues[7]  = 127;  // volume32=0xFFFFFFFF の 7-bit 相当
-        ccValues[10] = pan;
+        ccValues[10] = 64;   // pan32=Scale7To32(64) の 7-bit 相当
         ccValues[11] = 127;  // expression32=0xFFFFFFFF の 7-bit 相当
-        ccValues[91] = reverbSend;
-        ccValues[93] = chorusSend;
+        ccValues[91] = 40;   // reverbSend32=Scale7To32(40) の 7-bit 相当
+        ccValues[93] = 0;    // chorusSend32=0 の 7-bit 相当
         ccValues[64] = 0;
         ccValues[66] = 0;
         ccValues[67] = 0;
