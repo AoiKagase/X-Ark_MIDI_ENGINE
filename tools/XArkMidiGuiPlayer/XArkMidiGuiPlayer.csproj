@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <AssemblyName>XArkMidiGuiPlayer</AssemblyName>
+    <RootNamespace>XArkMidiGuiPlayer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\XArkMidiEngine.cs" Link="XArkMidiEngine.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\build\msvc\bin\Release\XArkMidiEngine.dll">
+      <Link>XArkMidiEngine.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
