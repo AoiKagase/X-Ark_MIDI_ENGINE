@@ -16,6 +16,14 @@ struct SynthCompatOptions {
     bool sf2ZeroLengthLoopRetrigger = false;
 };
 
+struct SpecialVoiceRoute {
+    bool enabled = false;
+    f64 detuneSemitones = 0.0;
+    f32 pan = 0.0f;
+    bool clampAboveRoot = false;
+    i32 clampRootKey = -1;
+};
+
 enum class EnvPhase : u8 {
     Delay,
     Attack,
@@ -28,6 +36,8 @@ enum class EnvPhase : u8 {
 
 class Voice {
 public:
+    static constexpr u16 kInvalidLinkedVoice = 0xFFFF;
+
     bool    active   = false;
     u16     bank     = 0;
     u8      channel  = 0;
@@ -136,6 +146,9 @@ public:
     f32      chorusGainL = 0.0f;
     f32      chorusGainR = 0.0f;
     const SampleHeader* sampleHeader = nullptr;
+    SpecialVoiceRoute specialRoute;
+    bool     ownedByParent = false;
+    u16      linkedVoiceIndex = kInvalidLinkedVoice;
 
     // サンプルデータ参照（非所有）
     const i16* sampleData     = nullptr;
@@ -145,8 +158,12 @@ public:
     void NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
                 u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
                 SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
+                const SpecialVoiceRoute& specialRoute = {},
                 i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
     bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
+    bool HasLinkedVoice() const { return linkedVoiceIndex != kInvalidLinkedVoice; }
+    void LinkVoice(u16 index) { linkedVoiceIndex = index; }
+    void ClearLinkedVoice() { linkedVoiceIndex = kInvalidLinkedVoice; }
     void RefreshResolvedZoneControllers(const ResolvedZone& zone);
 
     // チャンネルレベルのピッチベンドをリアルタイムで更新（per-note 分を加算）
@@ -169,7 +186,12 @@ public:
     void NoteOff();
 
     // 強制停止
-    void Kill() { active = false; envPhase = EnvPhase::Off; }
+    void Kill() {
+        active = false;
+        envPhase = EnvPhase::Off;
+        ownedByParent = false;
+        linkedVoiceIndex = kInvalidLinkedVoice;
+    }
 
     // 1フレームレンダリング（outL, outR に加算）
     void Render(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR);
@@ -178,6 +200,7 @@ public:
     bool IsFinished() const { return envPhase == EnvPhase::Off; }
 
 private:
+    void ApplyPan(f32 pan);
     void RefreshOutputGains();
 };
 

@@ -264,6 +264,52 @@ XAmeResult XAmeRender(
     return XAME_OK;
 }
 
+XAmeResult XAmeSetChannelMuteMask(XAmeEngine engine, unsigned int channelMask) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    engine->synthesizer.SetChannelMuteMask(channelMask);
+    return XAME_OK;
+}
+
+XAmeResult XAmeSetChannelSoloMask(XAmeEngine engine, unsigned int channelMask) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    engine->synthesizer.SetChannelSoloMask(channelMask);
+    return XAME_OK;
+}
+
+unsigned int XAmeGetChannelMuteMask(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetChannelMuteMask();
+}
+
+unsigned int XAmeGetChannelSoloMask(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetChannelSoloMask();
+}
+
+int XAmeGetChannelProgram(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return -1;
+    }
+    return engine->synthesizer.GetChannelProgram(channel);
+}
+
+unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetChannelActiveNoteCount(channel);
+}
+
 int XAmeIsFinished(XAmeEngine engine) {
     if (!engine || !engine->initialized) return 1;
     return engine->synthesizer.IsFinished() ? 1 : 0;

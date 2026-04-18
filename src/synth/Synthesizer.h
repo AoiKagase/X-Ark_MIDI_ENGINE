@@ -9,6 +9,7 @@
 #include "Channel.h"
 #include "../midi/MidiSequencer.h"
 #include "../soundbank/SoundBank.h"
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -66,6 +67,12 @@ public:
     u32 Render(i16* buf, u32 numFrames);
 
     bool IsFinished() const;
+    void SetChannelMuteMask(u32 channelMask) { channelMuteMask_.store(channelMask & 0xFFFFu, std::memory_order_relaxed); }
+    void SetChannelSoloMask(u32 channelMask) { channelSoloMask_.store(channelMask & 0xFFFFu, std::memory_order_relaxed); }
+    u32 GetChannelMuteMask() const { return channelMuteMask_.load(std::memory_order_relaxed); }
+    u32 GetChannelSoloMask() const { return channelSoloMask_.load(std::memory_order_relaxed); }
+    int GetChannelProgram(u32 channel) const;
+    u32 GetChannelActiveNoteCount(u32 channel) const;
 
     const std::string& ErrorMessage() const { return errorMsg_; }
 
@@ -123,6 +130,10 @@ private:
     std::vector<f32> chorusBlockR_;
     std::vector<ResolvedZone> zoneScratch_;
     OutputLimiter outputLimiter_;
+    std::atomic<u32> channelMuteMask_{0};
+    std::atomic<u32> channelSoloMask_{0};
+    std::array<std::atomic<u8>, MIDI_CHANNEL_COUNT> channelProgramView_{};
+    std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelActiveNoteCountView_{};
 
     void HandleEvent(const MidiEvent& ev);
     void HandleNoteOn(u8 ch, u8 key, u16 vel);

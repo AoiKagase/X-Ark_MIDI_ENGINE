@@ -24,6 +24,8 @@ static u32 MakeFourCC(const char* s) {
 namespace {
 
 constexpr u16 kModSrcVelocity = 2u;
+constexpr u16 kModSrcCc1 = 0x0081u;
+constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
 
 // SF2 default modulator 1: velocity → InitialAttenuation
 // 400 * log10(65535/vel) centibels (16-bit velocity, square law互換)
@@ -50,6 +52,26 @@ bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
     }
     const u16 sourceIndex = mod.sfModSrcOper & 0x7Fu;
     return sourceIndex == kModSrcVelocity;
+}
+
+bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc1 &&
+           mod.sfModDestOper == GEN_VibLfoToPitch &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == 0;
+}
+
+bool HasMatchingModulator(const std::vector<SFModList>& mods, int modStart, int modEnd,
+                          bool (*predicate)(const SFModList&)) {
+    const int modMax = static_cast<int>(mods.size());
+    if (modStart < 0 || modStart > modMax) modStart = modMax;
+    if (modEnd > modMax) modEnd = modMax;
+    for (int i = modStart; i < modEnd; ++i) {
+        if (predicate(mods[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorContext* ctx, bool& supported) {
@@ -116,11 +138,6 @@ double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorConte
         return directionNegative ? (1.0 - x) : x;
     }
     return directionNegative ? (1.0 - 2.0 * x) : (2.0 * x - 1.0);
-}
-
-void AddPitchCents(i32* generators, i32 cents) {
-    if (cents == 0) return;
-    generators[GEN_FineTune] += cents;
 }
 
 i32 ClampGeneratorValue(u16 oper, i32 value) {
@@ -221,9 +238,11 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
-        AddPitchCents(zone.generators, delta);
-        zone.generators[GEN_CoarseTune] = ClampGeneratorValue(GEN_CoarseTune, zone.generators[GEN_CoarseTune]);
-        zone.generators[GEN_FineTune] = ClampGeneratorValue(GEN_FineTune, zone.generators[GEN_FineTune]);
+        // Pitch-related destinations are independent generators.
+        // Converting them into FineTune here collapses CC1/aftertouch vibrato depth
+        // into a static detune and effectively disables time-varying modulation.
+        zone.generators[dest] =
+            ClampGeneratorValue(dest, zone.generators[dest] + delta);
         break;
     case GEN_DelayVolEnv:
     case GEN_AttackVolEnv:
@@ -633,12 +652,18 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     }
 
     bool hasVelocityToAttenuationMod = false;
+    bool hasCc1ToVibLfoPitchMod = false;
     if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
         hasVelocityToAttenuationMod |= ApplyModulators(
             instMods_,
             instBags_[globalInstBagIdx].wInstModNdx,
             instBags_[globalInstBagIdx + 1].wInstModNdx,
             key, velocity, ctx, outZone);
+        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
+            instMods_,
+            instBags_[globalInstBagIdx].wInstModNdx,
+            instBags_[globalInstBagIdx + 1].wInstModNdx,
+            IsCc1ToVibLfoPitchMod);
     }
     if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
         hasVelocityToAttenuationMod |= ApplyModulators(
@@ -646,6 +671,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             instBags_[instBagIdx].wInstModNdx,
             instBags_[instBagIdx + 1].wInstModNdx,
             key, velocity, ctx, outZone);
+        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
+            instMods_,
+            instBags_[instBagIdx].wInstModNdx,
+            instBags_[instBagIdx + 1].wInstModNdx,
+            IsCc1ToVibLfoPitchMod);
     }
     if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
         hasVelocityToAttenuationMod |= ApplyModulators(
@@ -653,6 +683,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             presetBags_[globalPresetBagIdx].wModNdx,
             presetBags_[globalPresetBagIdx + 1].wModNdx,
             key, velocity, ctx, outZone);
+        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
+            presetMods_,
+            presetBags_[globalPresetBagIdx].wModNdx,
+            presetBags_[globalPresetBagIdx + 1].wModNdx,
+            IsCc1ToVibLfoPitchMod);
     }
     if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
         hasVelocityToAttenuationMod |= ApplyModulators(
@@ -660,12 +695,23 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             presetBags_[presetBagIdx].wModNdx,
             presetBags_[presetBagIdx + 1].wModNdx,
             key, velocity, ctx, outZone);
+        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
+            presetMods_,
+            presetBags_[presetBagIdx].wModNdx,
+            presetBags_[presetBagIdx + 1].wModNdx,
+            IsCc1ToVibLfoPitchMod);
     }
 
     if (!hasVelocityToAttenuationMod) {
         const i32 delta = ComputeDefaultVelocityAttenuationCb(velocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
+    }
+    if (ctx && !hasCc1ToVibLfoPitchMod && ctx->ccValues[1] != 0) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc1ToVibLfoPitchCents) *
+            (static_cast<double>(ctx->ccValues[1]) / 127.0)));
+        ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
     }
 }
 
@@ -698,6 +744,7 @@ bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, 
     }
     return hasVelocityToAttenuationMod;
 }
+
 
 void Sf2File::BuildPresetIndex() {
     presetIndexMap_.clear();

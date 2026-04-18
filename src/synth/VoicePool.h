@@ -58,11 +58,14 @@ public:
                                f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
 
     // 全ボイスをレンダリング（outL, outR に加算）
-    int RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR);
-    int RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames);
+    int RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR,
+                     u32 audibleChannelMask = 0xFFFFu);
+    int RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames,
+                    u32 audibleChannelMask = 0xFFFFu);
 
     // アクティブなボイス数
     int ActiveCount() const;
+    void GetActiveRootNoteCountsPerChannel(std::array<u32, MIDI_CHANNEL_COUNT>& counts) const;
 
 private:
     struct WorkerRange {
@@ -95,11 +98,13 @@ private:
     u16 activeWorkerCount_ = 0;
     u16 completedWorkers_ = 0;
     u32 workerNumFrames_ = 0;
+    u32 workerAudibleChannelMask_ = 0xFFFFu;
     bool stopWorkers_ = false;
 
     // ボイスを確保する（空きがなければスティール）
     Voice* AllocVoice(u8 channel, u8 key);
     bool HasActiveNote(u8 channel, u8 key, u32 noteId) const;
+    static bool IsChannelAudible(u32 audibleChannelMask, u8 channel);
     void TrackVoice(u16 index);
     void UntrackVoice(u16 index);
     void WorkerLoop(u16 workerIndex);
@@ -107,4 +112,3 @@ private:
 };
 
 } // namespace XArkMidi
-

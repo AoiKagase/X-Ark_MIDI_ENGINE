@@ -99,6 +99,13 @@ XAME_API XAmeResult XAmeRender(
     unsigned int*  outWritten
 );
 
+XAME_API XAmeResult XAmeSetChannelMuteMask(XAmeEngine engine, unsigned int channelMask);
+XAME_API XAmeResult XAmeSetChannelSoloMask(XAmeEngine engine, unsigned int channelMask);
+XAME_API unsigned int XAmeGetChannelMuteMask(XAmeEngine engine);
+XAME_API unsigned int XAmeGetChannelSoloMask(XAmeEngine engine);
+XAME_API int XAmeGetChannelProgram(XAmeEngine engine, unsigned int channel);
+XAME_API unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int channel);
+
 XAME_API int XAmeIsFinished(XAmeEngine engine);
 XAME_API void XAmeDestroyEngine(XAmeEngine engine);
 XAME_API const char* XAmeGetVersion(void);

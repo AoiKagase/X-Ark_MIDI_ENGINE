@@ -80,6 +80,28 @@ public static class XArkMidiEngine
         out uint outWritten);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetChannelMuteMask(
+        IntPtr engine,
+        uint channelMask);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetChannelSoloMask(
+        IntPtr engine,
+        uint channelMask);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint XAmeGetChannelMuteMask(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint XAmeGetChannelSoloMask(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int XAmeGetChannelProgram(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint XAmeGetChannelActiveNoteCount(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int XAmeIsFinished(IntPtr engine);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -175,6 +197,50 @@ public static class XArkMidiEngine
                 if (_disposed) return true;
                 return XAmeIsFinished(_handle) != 0;
             }
+        }
+
+        public uint ChannelMuteMask
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetChannelMuteMask(_handle);
+            }
+            set
+            {
+                ThrowIfDisposed();
+                var result = XAmeSetChannelMuteMask(_handle, value);
+                if (result != XAmeResult.OK)
+                    throw new XArkMidiException(result, GetLastError());
+            }
+        }
+
+        public uint ChannelSoloMask
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetChannelSoloMask(_handle);
+            }
+            set
+            {
+                ThrowIfDisposed();
+                var result = XAmeSetChannelSoloMask(_handle, value);
+                if (result != XAmeResult.OK)
+                    throw new XArkMidiException(result, GetLastError());
+            }
+        }
+
+        public int GetChannelProgram(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelProgram(_handle, channel);
+        }
+
+        public uint GetChannelActiveNoteCount(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelActiveNoteCount(_handle, channel);
         }
 
         public short[] RenderAll(uint chunkFrames = 4096)

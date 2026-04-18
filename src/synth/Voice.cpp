@@ -22,6 +22,7 @@ constexpr i32 kFilterQCbMax = 960;
 constexpr f32 kInvPcmScale = 1.0f / 32768.0f;
 constexpr f32 kEnvelopeSilenceThreshold = 1.0e-5f;
 constexpr f64 kEnvelopeSilenceTarget = 1.0e-5;
+constexpr f32 kMinimumLoopReleaseSeconds = 0.005f;
 
 f32 NormalizeMidiSend(u32 value) {
     return static_cast<f32>(value) / 4294967295.0f;
@@ -312,6 +313,7 @@ void AdvanceEnvelope(EnvPhase& phase,
 void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
                    u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
                    SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
+                   const SpecialVoiceRoute& newSpecialRoute,
                    i32 portamentoSourceKey, u8 portamentoTime) {
     active         = true;
     bank           = bankNumber;
@@ -327,6 +329,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sampleData     = pcmData;
     sampleDataSize = pcmDataSize;
     outputSampleRate = sampleRate;
+    specialRoute = newSpecialRoute;
     this->pitchBendSemitones = pitchBendSemitones;
     perNotePitchSemitones = 0.0; // NoteOn 毎にリセット
     portamentoOffsetSemitones = 0.0;
@@ -376,7 +379,6 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
         return;
     }
 
-    samplePosFixed = ToFixedSamplePos(sampleStartIndex);
     sampleEnd      = static_cast<u32>(std::min(sampleEndIndex, sampleDataLimit));
     loopStart      = static_cast<u32>(std::min(loopStartIndex, sampleDataLimit));
     loopEnd        = static_cast<u32>(std::min(loopEndIndex, sampleDataLimit));
@@ -407,6 +409,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sampleEndFixed = ToFixedSamplePos(static_cast<i32>(sampleEnd));
     loopStartFixed = ToFixedSamplePos(static_cast<i32>(loopStart));
     loopEndFixed = ToFixedSamplePos(static_cast<i32>(loopEnd));
+    samplePosFixed = ToFixedSamplePos(sampleStartIndex);
     ignoreNoteOffUntilSampleEnd =
         (soundBankKind == SoundBankKind::Dls && zone.noTruncation && !looping);
 
@@ -416,12 +419,24 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
                   : smp->originalPitch;
     // ScaleTuning: cents/semitone (デフォルト100 = 通常の半音スケール)
     f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) + smp->pitchCorrection; // cents
+    // SF2 sample header pitchCorrection is part of the sample's original pitch.
+    // A positive correction means the recorded sample is sharper than originalPitch,
+    // so playback for a target key must subtract it from the resampling offset.
+    f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) - smp->pitchCorrection; // cents
     f64 coarseTune        = static_cast<f64>(gen[GEN_CoarseTune]);                        // semitones
 
-    f64 baseSemitones = static_cast<f64>(key - rootKey) * scaleTuningFactor
+    i32 effectiveKey = static_cast<i32>(key);
+    if (specialRoute.enabled && specialRoute.clampAboveRoot &&
+        specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
+        effectiveKey = specialRoute.clampRootKey;
+    }
+
+    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor
                       + coarseTune
                       + fineTune / 100.0;
+    if (specialRoute.enabled) {
+        baseSemitones += specialRoute.detuneSemitones;
+    }
 
     // dwSampleRate == 0 は不正SF2: ゼロ除算を防ぎ無音で終了
     if (smp->sampleRate == 0 || sampleRate == 0) {
@@ -551,7 +566,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
-    useModEnv = (filterModEnvToFcCents != 0);
+    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
     if (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f) {
         ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, sampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
         filterEnabled = true;
@@ -562,9 +577,11 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     // GEN_Pan: SF2 の ±500 をそのまま使用
     // → L/R ゾーンの音響的分離が自然な厚みを生む (BASSMIDI 互換)
     // → リバーブで空間的な広がりを補う
-    const f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
-    baseGainL = std::sqrt(0.5f * (1.0f - pan));
-    baseGainR = std::sqrt(0.5f * (1.0f + pan));
+    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
+    if (specialRoute.enabled) {
+        pan = specialRoute.pan;
+    }
+    ApplyPan(pan);
     channelGainL = 1.0f;
     channelGainR = 1.0f;
     presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
@@ -600,19 +617,24 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     modLfoToVolumeCb = static_cast<f32>(gen[GEN_ModLfoToVolume]);
     modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
     vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
-    useModEnv = (filterModEnvToFcCents != 0);
+    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
 
-    const f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
-    baseGainL = std::sqrt(0.5f * (1.0f - pan));
-    baseGainR = std::sqrt(0.5f * (1.0f + pan));
+    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
+    if (specialRoute.enabled) {
+        pan = specialRoute.pan;
+    }
+    ApplyPan(pan);
     presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
     presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
 
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) + sampleHeader->pitchCorrection;
+    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - sampleHeader->pitchCorrection;
     const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
-    const f64 baseSemitones = static_cast<f64>(noteKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
+    f64 baseSemitones = static_cast<f64>(noteKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
+    if (specialRoute.enabled) {
+        baseSemitones += specialRoute.detuneSemitones;
+    }
     baseSampleStep = std::pow(2.0, baseSemitones / 12.0) *
                      static_cast<f64>(sampleHeader->sampleRate) / static_cast<f64>(outputSampleRate);
     sampleStepFixed = static_cast<i64>(std::llround(
@@ -632,10 +654,15 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
     channelGainR = volumeFactor * panGainR;
     channelReverbSend = NormalizeMidiSend(reverbSend32);
     channelChorusSend = NormalizeMidiSend(chorusSend32);
-
     reverbSend = std::clamp(presetReverbSend + channelReverbSend, 0.0f, 1.0f);
     chorusSend = std::clamp(presetChorusSend + channelChorusSend, 0.0f, 1.0f);
     RefreshOutputGains();
+}
+
+void Voice::ApplyPan(f32 pan) {
+    pan = std::clamp(pan, -1.0f, 1.0f);
+    baseGainL = std::sqrt(0.5f * (1.0f - pan));
+    baseGainR = std::sqrt(0.5f * (1.0f + pan));
 }
 
 void Voice::RefreshOutputGains() {
@@ -661,11 +688,19 @@ void Voice::NoteOff() {
         }
         envPhase       = EnvPhase::Release;
         envSampleCount = 0;
-        envReleaseRate = ComputeReleaseRate(envLevel, envReleaseTimeSeconds, outputSampleRate);
+        const f32 effectiveReleaseTime =
+            ((looping || loopUntilRelease) && envReleaseTimeSeconds < kMinimumLoopReleaseSeconds)
+                ? kMinimumLoopReleaseSeconds
+                : envReleaseTimeSeconds;
+        envReleaseRate = ComputeReleaseRate(envLevel, effectiveReleaseTime, outputSampleRate);
         if (modEnvPhase != EnvPhase::Off && modEnvPhase != EnvPhase::Release) {
             modEnvPhase = EnvPhase::Release;
             modEnvSampleCount = 0;
-            modEnvReleaseRate = ComputeReleaseRate(modEnvLevel, modEnvReleaseTimeSeconds, outputSampleRate);
+            const f32 effectiveModReleaseTime =
+                ((looping || loopUntilRelease) && modEnvReleaseTimeSeconds < kMinimumLoopReleaseSeconds)
+                    ? kMinimumLoopReleaseSeconds
+                    : modEnvReleaseTimeSeconds;
+            modEnvReleaseRate = ComputeReleaseRate(modEnvLevel, effectiveModReleaseTime, outputSampleRate);
         }
     }
 }
@@ -785,21 +820,21 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 }
 
                 if (localIntegralStep) {
-                    MixConstantChunkScalar<false, false, true>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<false, false, true>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 } else {
-                    MixConstantChunkScalar<false, false, false>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<false, false, false>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 }
             } else if (hasReverb && hasChorus) {
                 if (localAvx2UnitStep && TryMixConstantChunkAvx2<true, true>(
@@ -813,21 +848,21 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 }
 
                 if (localIntegralStep) {
-                    MixConstantChunkScalar<true, true, true>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<true, true, true>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 } else {
-                    MixConstantChunkScalar<true, true, false>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<true, true, false>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 }
             } else if (hasReverb) {
                 if (localAvx2UnitStep && TryMixConstantChunkAvx2<true, false>(
@@ -841,21 +876,21 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 }
 
                 if (localIntegralStep) {
-                    MixConstantChunkScalar<true, false, true>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<true, false, true>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 } else {
-                    MixConstantChunkScalar<true, false, false>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<true, false, false>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 }
             } else {
                 if (localAvx2UnitStep && TryMixConstantChunkAvx2<false, true>(
@@ -869,21 +904,21 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 }
 
                 if (localIntegralStep) {
-                    MixConstantChunkScalar<false, true, true>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<false, true, true>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 } else {
-                    MixConstantChunkScalar<false, true, false>(
-                        outL, outR, reverbL, reverbR, chorusL, chorusR,
-                        sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
-                        localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
-                        localDryGainL, localDryGainR,
-                        localReverbGainL, localReverbGainR,
-                        localChorusGainL, localChorusGainR);
+                        MixConstantChunkScalar<false, true, false>(
+                            outL, outR, reverbL, reverbR, chorusL, chorusR,
+                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
+                            localDryGainL, localDryGainR,
+                            localReverbGainL, localReverbGainR,
+                            localChorusGainL, localChorusGainR);
                 }
             }
 
@@ -1311,22 +1346,22 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
 
     u32 offset = 0;
     while (offset < numFrames) {
-        const u32 chunkFrames = ComputeRenderableFrames(localSamplePosFixed, localSampleStepFixed, sampleBoundaryFixed, numFrames - offset);
-        if (chunkFrames == 0) {
-            if (localLooping) {
+        const u32 chunkFrames = numFrames - offset;
+
+        for (u32 i = 0; i < chunkFrames; ++i) {
+            while (localSamplePosFixed >= sampleBoundaryFixed) {
+                if (!localLooping) {
+                    commitState(false);
+                    return;
+                }
                 const i64 loopLenFixed = localLoopEndFixed - localLoopStartFixed;
                 if (loopLenFixed <= 0) {
                     commitState(false);
                     return;
                 }
                 localSamplePosFixed = localLoopStartFixed + ((localSamplePosFixed - localLoopStartFixed) % loopLenFixed);
-                continue;
             }
-            commitState(false);
-            return;
-        }
 
-        for (u32 i = 0; i < chunkFrames; ++i) {
             AdvanceEnvelope(localEnvPhase, localEnvLevel, localEnvSampleCount, envDelayEnd, envAttackRate,
                             envHoldEnd, envDecayRate, envSustainLevel, envReleaseRate);
             if (localUseModEnv) {

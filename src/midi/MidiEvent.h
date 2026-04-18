@@ -61,4 +61,3 @@ struct MidiEvent {
 };
 
 } // namespace XArkMidi
-

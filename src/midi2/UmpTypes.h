@@ -93,9 +93,13 @@ inline u32 Scale7To32(u8 v) {
 // 14-bit (0-16383) → 32-bit (0-4294967295)
 // Pitch Bend など 14-bit 値のアップスケールに使用する。
 inline u32 Scale14To32(u16 v) {
-    return (static_cast<u32>(v) << 18)
-         | (static_cast<u32>(v) << 4)
-         | (v >> 10);
+    const i32 centered = static_cast<i32>(v) - 8192;
+    if (centered <= 0) {
+        const u64 magnitude = static_cast<u64>(-centered);
+        return 0x80000000u - static_cast<u32>((magnitude * 0x80000000ull) / 8192ull);
+    }
+    const u64 magnitude = static_cast<u64>(centered);
+    return 0x80000000u + static_cast<u32>((magnitude * 0x7FFFFFFFull) / 8191ull);
 }
 
 } // namespace XArkMidi

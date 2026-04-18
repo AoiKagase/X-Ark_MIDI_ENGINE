@@ -163,6 +163,31 @@ void AppendProgramSummaryLog(u16 requestedBank,
         << '\n';
 }
 
+void AppendProgramMissLog(u16 requestedBank,
+                          SoundBankKind bankKind,
+                          u8 channel,
+                          u8 program,
+                          u8 key,
+                          u16 velocity,
+                          const ChannelState& state) {
+    if (!IsProgramLoggingEnabled()) {
+        return;
+    }
+    std::ofstream log(kProgramSummaryLogPath, std::ios::app);
+    if (!log) {
+        return;
+    }
+    log << "note_on_miss"
+        << " bank_kind=" << SoundBankKindName(bankKind)
+        << " ch=" << static_cast<int>(channel)
+        << " program=" << static_cast<int>(program)
+        << " key=" << static_cast<int>(key)
+        << " vel=" << static_cast<int>(velocity)
+        << " requested_bank=" << requestedBank
+        << " is_drum=" << (state.isDrum ? 1 : 0)
+        << '\n';
+}
+
 void AppendProgramDebugLog(u16 requestedBank,
                            u16 resolvedBank,
                            SoundBankKind bankKind,
@@ -170,6 +195,7 @@ void AppendProgramDebugLog(u16 requestedBank,
                            u8 program,
                            u8 key,
                            u16 velocity,
+                           u32 outputSampleRate,
                            const ChannelState& state,
                            const std::vector<ResolvedZone>& zones) {
     if (!IsProgramLoggingEnabled()) {
@@ -200,6 +226,30 @@ void AppendProgramDebugLog(u16 requestedBank,
         const auto& zone = zones[i];
         const auto* sample = zone.sample;
         const auto& gen = zone.generators;
+        f64 computedRoot = -1.0;
+        f64 computedSampleCorrection = 0.0;
+        f64 computedBaseSemitones = 0.0;
+        f64 computedFinalSemitones = 0.0;
+        f64 computedSampleStep = 0.0;
+        if (sample && sample->sampleRate != 0 && outputSampleRate != 0) {
+            const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0)
+                ? gen[GEN_OverridingRootKey]
+                : sample->originalPitch;
+            const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
+            const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - sample->pitchCorrection;
+            const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
+            computedRoot = static_cast<f64>(rootKey);
+            computedSampleCorrection = static_cast<f64>(sample->pitchCorrection);
+            computedBaseSemitones =
+                static_cast<f64>(key - rootKey) * scaleTuningFactor +
+                coarseTune +
+                fineTune / 100.0;
+            computedFinalSemitones = computedBaseSemitones + state.TotalPitchSemitonesForKey(key);
+            computedSampleStep =
+                std::pow(2.0, computedFinalSemitones / 12.0) *
+                static_cast<f64>(sample->sampleRate) /
+                static_cast<f64>(outputSampleRate);
+        }
         log << "  zone[" << i << "]"
             << " sample_start=" << (sample ? sample->start : 0)
             << " sample_end=" << (sample ? sample->end : 0)
@@ -213,6 +263,11 @@ void AppendProgramDebugLog(u16 requestedBank,
             << " coarse_tune=" << gen[GEN_CoarseTune]
             << " fine_tune=" << gen[GEN_FineTune]
             << " scale_tuning=" << gen[GEN_ScaleTuning]
+            << " computed_root=" << computedRoot
+            << " computed_sample_corr=" << computedSampleCorrection
+            << " computed_base_semitones=" << computedBaseSemitones
+            << " computed_final_semitones=" << computedFinalSemitones
+            << " computed_sample_step=" << computedSampleStep
             << " initial_atten_cb=" << gen[GEN_InitialAttenuation]
             << " filter_fc=" << gen[GEN_InitialFilterFc]
             << " filter_q=" << gen[GEN_InitialFilterQ]
@@ -257,6 +312,14 @@ f32 NormalizeGs7Bit(u8 value) {
 f32 Lerp(f32 a, f32 b, f32 t) {
     return a + (b - a) * t;
 }
+
+u32 ResolveAudibleChannelMask(u32 muteMask, u32 soloMask) {
+    const u32 mask16 = 0xFFFFu;
+    const u32 effectiveMuteMask = muteMask & mask16;
+    const u32 effectiveSoloMask = soloMask & mask16;
+    const u32 baseMask = (effectiveSoloMask != 0) ? effectiveSoloMask : mask16;
+    return baseMask & ~effectiveMuteMask & mask16;
+}
 }
 
 bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
@@ -281,6 +344,12 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     dcBlockPrevInR_   = 0.0f;
     dcBlockPrevOutL_  = 0.0f;
     dcBlockPrevOutR_  = 0.0f;
+    channelMuteMask_.store(0, std::memory_order_relaxed);
+    channelSoloMask_.store(0, std::memory_order_relaxed);
+    for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+        channelProgramView_[ch].store(0, std::memory_order_relaxed);
+        channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
+    }
     ResetProgramDebugLog();
 
     const size_t reverbSize = DelaySamples(sampleRate, 97.0f);
@@ -293,10 +362,10 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     const size_t chorusSize = DelaySamples(sampleRate, 32.0f);
     chorusDelayL_.assign(chorusSize, 0.0f);
     chorusDelayR_.assign(chorusSize, 0.0f);
-    chorusBaseTapL_ = DelaySamples(sampleRate, 11.0f);
-    chorusBaseTapR_ = DelaySamples(sampleRate, 14.0f);
-    chorusDepthTapL_ = DelaySamples(sampleRate, 2.8f);
-    chorusDepthTapR_ = DelaySamples(sampleRate, 3.1f);
+    chorusBaseTapL_ = DelaySamples(sampleRate, 2.0f);
+    chorusBaseTapR_ = DelaySamples(sampleRate, 3.0f);
+    chorusDepthTapL_ = DelaySamples(sampleRate, 0.7f);
+    chorusDepthTapR_ = DelaySamples(sampleRate, 0.8f);
     zoneScratch_.clear();
     zoneScratch_.reserve(16);
 
@@ -304,6 +373,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
         channels_[ch].Reset();
         channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
+        channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
     }
 
     if (!sequencer_.Init(midi, sampleRate)) {
@@ -350,12 +420,20 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
         std::fill_n(reverbBlockR_.data(), blockFrames, 0.0f);
         std::fill_n(chorusBlockL_.data(), blockFrames, 0.0f);
         std::fill_n(chorusBlockR_.data(), blockFrames, 0.0f);
+        const u32 audibleChannelMask = ResolveAudibleChannelMask(
+            channelMuteMask_.load(std::memory_order_relaxed),
+            channelSoloMask_.load(std::memory_order_relaxed));
 
         const int activeVoices = voicePool_.RenderBlock(
             dryBlockL_.data(), dryBlockR_.data(),
             reverbBlockL_.data(), reverbBlockR_.data(),
             chorusBlockL_.data(), chorusBlockR_.data(),
-            blockFrames);
+            blockFrames, audibleChannelMask);
+        std::array<u32, MIDI_CHANNEL_COUNT> activeRootCounts{};
+        voicePool_.GetActiveRootNoteCountsPerChannel(activeRootCounts);
+        for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+            channelActiveNoteCountView_[ch].store(activeRootCounts[ch], std::memory_order_relaxed);
+        }
         const f32 targetMixGain = ComputeMixGain(activeVoices);
         const f32 effectiveChorusFeedback = kChorusFeedback * gsChorusFeedbackScale_;
         const f32 effectiveChorusWetMix = kChorusWetMix * gsChorusWetScale_;
@@ -385,14 +463,24 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
                 const f32 baseTapR = static_cast<f32>(chorusBaseTapR_) * gsChorusDelayScale_;
                 const f32 depthTapL = static_cast<f32>(chorusDepthTapL_) * gsChorusDepthScale_;
                 const f32 depthTapR = static_cast<f32>(chorusDepthTapR_) * gsChorusDepthScale_;
-                const size_t tapL = static_cast<size_t>(std::max(1.0f, baseTapL + (chorusSin_ + 1.0f) * 0.5f * depthTapL));
-                const size_t tapR = static_cast<size_t>(std::max(1.0f, baseTapR + (chorusCos_ + 1.0f) * 0.5f * depthTapR));
-                const size_t wrappedTapL = tapL % size;
-                const size_t wrappedTapR = tapR % size;
-                const size_t idxL = (chorusIndex_ >= wrappedTapL) ? (chorusIndex_ - wrappedTapL) : (chorusIndex_ + size - wrappedTapL);
-                const size_t idxR = (chorusIndex_ >= wrappedTapR) ? (chorusIndex_ - wrappedTapR) : (chorusIndex_ + size - wrappedTapR);
-                const f32 chorusWetL = chorusDelayL_[idxL];
-                const f32 chorusWetR = chorusDelayR_[idxR];
+                // 線形補間でコーラスタップを読む: 整数切り捨てによる離散ジャンプを除去し
+                // ピッチ変動の滑らかさを改善する
+                const f32 fTapL = std::max(1.0f, baseTapL + (chorusSin_ + 1.0f) * 0.5f * depthTapL);
+                const f32 fTapR = std::max(1.0f, baseTapR + (chorusCos_ + 1.0f) * 0.5f * depthTapR);
+                const size_t iTapL = static_cast<size_t>(fTapL);
+                const size_t iTapR = static_cast<size_t>(fTapR);
+                const f32 fracL = fTapL - static_cast<f32>(iTapL);
+                const f32 fracR = fTapR - static_cast<f32>(iTapR);
+                const size_t wL0 = iTapL % size;
+                const size_t wL1 = (iTapL + 1) % size;
+                const size_t wR0 = iTapR % size;
+                const size_t wR1 = (iTapR + 1) % size;
+                const size_t idxL0 = (chorusIndex_ >= wL0) ? (chorusIndex_ - wL0) : (chorusIndex_ + size - wL0);
+                const size_t idxL1 = (chorusIndex_ >= wL1) ? (chorusIndex_ - wL1) : (chorusIndex_ + size - wL1);
+                const size_t idxR0 = (chorusIndex_ >= wR0) ? (chorusIndex_ - wR0) : (chorusIndex_ + size - wR0);
+                const size_t idxR1 = (chorusIndex_ >= wR1) ? (chorusIndex_ - wR1) : (chorusIndex_ + size - wR1);
+                const f32 chorusWetL = chorusDelayL_[idxL0] * (1.0f - fracL) + chorusDelayL_[idxL1] * fracL;
+                const f32 chorusWetR = chorusDelayR_[idxR0] * (1.0f - fracR) + chorusDelayR_[idxR1] * fracR;
                 chorusDelayL_[chorusIndex_] = chorusInL + chorusWetR * effectiveChorusFeedback;
                 chorusDelayR_[chorusIndex_] = chorusInR + chorusWetL * effectiveChorusFeedback;
                 ++chorusIndex_;
@@ -465,6 +553,20 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
 
 bool Synthesizer::IsFinished() const {
     return finished_;
+}
+
+int Synthesizer::GetChannelProgram(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return -1;
+    }
+    return static_cast<int>(channelProgramView_[channel].load(std::memory_order_relaxed));
+}
+
+u32 Synthesizer::GetChannelActiveNoteCount(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0;
+    }
+    return channelActiveNoteCountView_[channel].load(std::memory_order_relaxed);
 }
 
 bool Synthesizer::HasAudibleEffectTail() const {
@@ -540,9 +642,12 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     }
 
     auto& state = channels_[ch];
-    // ドラムチャンネルはbank=128固定。通常チャンネルはbank番号（0-127 MSB単位）をそのまま使用
-    u16 bank = state.isDrum ? static_cast<u16>(MIDI_DRUM_BANK) : state.bank;
-    u16 resolvedBank = bank;
+    // ドラムチャンネルは標準GMの bank 128 を既定値にしつつ、
+    // MIDI側で明示されたドラムバリエーションバンクも先に試す。
+    const u16 requestedBank = state.bank;
+    u16 resolvedBank = state.isDrum
+        ? static_cast<u16>((requestedBank != 0) ? requestedBank : MIDI_DRUM_BANK)
+        : requestedBank;
 
     zoneScratch_.clear();
     ModulatorContext ctx{};
@@ -552,24 +657,60 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.pitchBend = state.PitchBend14();
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
-    if (!soundBank_->FindZones(bank, state.program, key, vel, zoneScratch_, &ctx)) {
+
+    auto tryResolveZones = [&](u16 bankToTry) -> bool {
+        zoneScratch_.clear();
+        if (!soundBank_->FindZones(bankToTry, state.program, key, vel, zoneScratch_, &ctx)) {
+            return false;
+        }
+        resolvedBank = bankToTry;
+        return true;
+    };
+
+    bool foundZones = false;
+    u8 resolvedProgram = state.program;
+    if (state.isDrum) {
+        if (requestedBank != 0) {
+            foundZones = tryResolveZones(requestedBank);
+        }
+        if (!foundZones && resolvedBank != static_cast<u16>(MIDI_DRUM_BANK)) {
+            foundZones = tryResolveZones(static_cast<u16>(MIDI_DRUM_BANK));
+        }
+        if (!foundZones && state.program != 0) {
+            zoneScratch_.clear();
+            if (requestedBank != 0 && soundBank_->FindZones(requestedBank, 0, key, vel, zoneScratch_, &ctx)) {
+                foundZones = true;
+                resolvedBank = requestedBank;
+                resolvedProgram = 0;
+            }
+        }
+        if (!foundZones && state.program != 0) {
+            zoneScratch_.clear();
+            if (soundBank_->FindZones(static_cast<u16>(MIDI_DRUM_BANK), 0, key, vel, zoneScratch_, &ctx)) {
+                foundZones = true;
+                resolvedBank = static_cast<u16>(MIDI_DRUM_BANK);
+                resolvedProgram = 0;
+            }
+        }
+    } else {
+        foundZones = tryResolveZones(requestedBank);
         // 一部のGM MIDIは melodic channel に非0 bank を送るが、実際のSF2は bank 0 にしか
         // プリセットを持たないことが多い。ドラム以外は bank 0 へ一度だけフォールバックする。
-        if (bank != 0 && !state.isDrum) {
+        if (!foundZones && requestedBank != 0) {
             zoneScratch_.clear();
-            if (!soundBank_->FindZones(0, state.program, key, vel, zoneScratch_, &ctx)) {
-                return;
-            }
-            resolvedBank = 0;
-        } else {
-            // ゾーンが見つからない場合は無音
-            return;
+            foundZones = tryResolveZones(0);
         }
     }
 
+    if (!foundZones) {
+        AppendProgramMissLog(requestedBank, soundBank_->Kind(), ch, state.program, key, vel, state);
+        return;
+    }
+
     if (ShouldLogProgram(state.program)) {
-        AppendProgramSummaryLog(bank, resolvedBank, soundBank_->Kind(), ch, state.program, key, vel);
-        AppendProgramDebugLog(bank, resolvedBank, soundBank_->Kind(), ch, state.program, key, vel, state, zoneScratch_);
+        AppendProgramSummaryLog(requestedBank, resolvedBank, soundBank_->Kind(), ch, resolvedProgram, key, vel);
+        AppendProgramDebugLog(requestedBank, resolvedBank, soundBank_->Kind(), ch, resolvedProgram, key, vel,
+                              sampleRate_, state, zoneScratch_);
     }
 
     if (state.monoMode) {
@@ -591,7 +732,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     }
 
     voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleDataCount(),
-                      resolvedBank, ch, state.program, key, vel, sampleRate_,
+                      resolvedBank, ch, resolvedProgram, key, vel, sampleRate_,
                       pitchBend, excClass, state.VolumeFactor(), state.pan32,
                       state.reverbSend32, state.chorusSend32, soundBank_->Kind(), compatOptions_,
                       portamentoSourceKey, state.portamentoTime);
@@ -821,6 +962,7 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
 
 void Synthesizer::HandleProgramChange(u8 ch, u8 program) {
     channels_[ch].program = program;
+    channelProgramView_[ch].store(program, std::memory_order_relaxed);
 }
 
 void Synthesizer::HandlePolyPressure(u8 ch, u8 key, u8 pressure) {
