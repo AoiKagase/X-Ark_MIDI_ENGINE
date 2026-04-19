@@ -14,6 +14,7 @@ namespace XArkMidiGuiPlayer;
 public sealed class MainForm : Form
 {
     private const int ChannelCount = 16;
+    private const int KeyMaskWordCount = 4;
     private readonly TextBox _midiPathTextBox = new() { Width = 520 };
     private readonly TextBox _soundFontPathTextBox = new() { Width = 520 };
     private readonly Button _browseMidiButton = new() { Text = "Open MIDI..." };
@@ -26,6 +27,8 @@ public sealed class MainForm : Form
     private readonly BindingList<ChannelRow> _channels = new();
     private readonly OpenFileDialog _midiDialog = new() { Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*" };
     private readonly OpenFileDialog _soundFontDialog = new() { Filter = "SoundFont (*.sf2)|*.sf2|All files (*.*)|*.*" };
+    private readonly Label _keyboardLabel = new() { AutoSize = true, Text = "Keyboard: Ch 1" };
+    private readonly PianoKeyboardControl _keyboard = new() { Dock = DockStyle.Fill, Height = 120, MinimumSize = new Size(0, 120) };
 
     private WaveOutPlayer? _player;
     private bool _suppressMaskEvents;
@@ -65,12 +68,14 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 5,
             Padding = new Padding(12),
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
 
         var filePanel = new TableLayoutPanel {
             AutoSize = true,
@@ -104,6 +109,8 @@ public sealed class MainForm : Form
         root.Controls.Add(filePanel, 0, 0);
         root.Controls.Add(controlPanel, 0, 1);
         root.Controls.Add(_channelGrid, 0, 2);
+        root.Controls.Add(_keyboardLabel, 0, 3);
+        root.Controls.Add(_keyboard, 0, 4);
         Controls.Add(root);
     }
 
@@ -180,6 +187,7 @@ public sealed class MainForm : Form
                 ApplyMasksToPlayer();
             }
         };
+        _channelGrid.SelectionChanged += (_, _) => UpdateKeyboardLabel();
     }
 
     private void BrowseFile(OpenFileDialog dialog, TextBox textBox)
@@ -281,11 +289,15 @@ public sealed class MainForm : Form
                 _channels[i].ActiveNotes = 0;
                 _channels[i].Lamp = string.Empty;
             }
+            _keyboard.ActiveKeyMasks = new uint[KeyMaskWordCount];
+            _keyboard.ClearTransientEvents();
             UpdateLampStyles();
+            UpdateKeyboardLabel();
             return;
         }
 
         var snapshot = _player.GetChannelSnapshot();
+        var channelEvents = _player.PopChannelKeyEvents();
         _suppressMaskEvents = true;
         try {
             for (int i = 0; i < ChannelCount; ++i) {
@@ -300,8 +312,27 @@ public sealed class MainForm : Form
         } finally {
             _suppressMaskEvents = false;
         }
+        var selectedChannel = SelectedChannelIndex();
+        _keyboard.ActiveKeyMasks = snapshot.ActiveKeyMasks[selectedChannel];
+        _keyboard.ApplyChannelEvents(selectedChannel, channelEvents);
         UpdateLampStyles();
+        UpdateKeyboardLabel();
         _statusLabel.Text = _player.IsFinished ? "Finished" : "Playing";
+    }
+
+    private int SelectedChannelIndex()
+    {
+        if (_channelGrid.CurrentRow?.Index is int rowIndex &&
+            rowIndex >= 0 && rowIndex < ChannelCount) {
+            return rowIndex;
+        }
+        return 0;
+    }
+
+    private void UpdateKeyboardLabel()
+    {
+        var channelIndex = SelectedChannelIndex();
+        _keyboardLabel.Text = $"Keyboard: Ch {channelIndex + 1}";
     }
 
     private void UpdateLampStyles()
@@ -395,6 +426,7 @@ public sealed class ChannelRow : INotifyPropertyChanged
 public sealed class WaveOutPlayer : IDisposable
 {
     private const int ChannelCount = 16;
+    private const int KeyMaskWordCount = 4;
     private const int SampleRate = 44100;
     private const int NumChannels = 2;
     private const int FramesPerBuffer = 2048;
@@ -451,7 +483,7 @@ public sealed class WaveOutPlayer : IDisposable
 
             for (int i = 0; i < BufferCount; ++i) {
                 var buffer = new WaveBuffer(FramesPerBuffer * NumChannels);
-                result = NativeMethods.waveOutPrepareHeader(_waveOut, ref buffer.Header, Marshal.SizeOf<WaveHeader>());
+                result = NativeMethods.waveOutPrepareHeader(_waveOut, buffer.HeaderPointer, Marshal.SizeOf<WaveHeader>());
                 if (result != 0) {
                     buffer.Dispose();
                     throw new InvalidOperationException($"waveOutPrepareHeader failed: {result}");
@@ -483,16 +515,37 @@ public sealed class WaveOutPlayer : IDisposable
             }
             var programs = new int[ChannelCount];
             var activeNotes = new uint[ChannelCount];
+            var activeKeyMasks = new uint[ChannelCount][];
             for (uint ch = 0; ch < ChannelCount; ++ch) {
                 programs[ch] = _engine.GetChannelProgram(ch);
                 activeNotes[ch] = _engine.GetChannelActiveNoteCount(ch);
+                var channelMasks = new uint[KeyMaskWordCount];
+                for (uint wordIndex = 0; wordIndex < KeyMaskWordCount; ++wordIndex) {
+                    channelMasks[wordIndex] = _engine.GetChannelActiveKeyMaskWord(ch, wordIndex);
+                }
+                activeKeyMasks[ch] = channelMasks;
             }
             return new ChannelSnapshot(
                 programs,
                 activeNotes,
+                activeKeyMasks,
                 _engine.ChannelMuteMask,
                 _engine.ChannelSoloMask);
         }
+    }
+
+    public List<XArkMidiEngine.ChannelKeyEvent> PopChannelKeyEvents()
+    {
+        var result = new List<XArkMidiEngine.ChannelKeyEvent>();
+        lock (_engineLock) {
+            if (_engine is null) {
+                return result;
+            }
+            while (_engine.TryPopChannelKeyEvent(out var channelKeyEvent)) {
+                result.Add(channelKeyEvent);
+            }
+        }
+        return result;
     }
 
     private void PlaybackLoop(CancellationToken cancellationToken)
@@ -502,6 +555,7 @@ public sealed class WaveOutPlayer : IDisposable
             while (!cancellationToken.IsCancellationRequested) {
                 int queuedCount = 0;
                 foreach (var buffer in _buffers) {
+                    buffer.RefreshHeader();
                     if ((buffer.Header.dwFlags & NativeConstants.WHDR_INQUEUE) != 0) {
                         ++queuedCount;
                         continue;
@@ -534,7 +588,8 @@ public sealed class WaveOutPlayer : IDisposable
 
                     buffer.Header.dwBufferLength = (uint)(written * NumChannels * sizeof(short));
                     buffer.Header.dwFlags &= ~NativeConstants.WHDR_DONE;
-                    var result = NativeMethods.waveOutWrite(_waveOut, ref buffer.Header, Marshal.SizeOf<WaveHeader>());
+                    buffer.CommitHeader();
+                    var result = NativeMethods.waveOutWrite(_waveOut, buffer.HeaderPointer, Marshal.SizeOf<WaveHeader>());
                     if (result != 0) {
                         throw new InvalidOperationException($"waveOutWrite failed: {result}");
                     }
@@ -569,7 +624,7 @@ public sealed class WaveOutPlayer : IDisposable
 
         if (_waveOut != IntPtr.Zero) {
             foreach (var buffer in _buffers) {
-                NativeMethods.waveOutUnprepareHeader(_waveOut, ref buffer.Header, Marshal.SizeOf<WaveHeader>());
+                NativeMethods.waveOutUnprepareHeader(_waveOut, buffer.HeaderPointer, Marshal.SizeOf<WaveHeader>());
             }
             NativeMethods.waveOutClose(_waveOut);
             _waveOut = IntPtr.Zero;
@@ -597,17 +652,172 @@ public sealed class WaveOutPlayer : IDisposable
     }
 }
 
-public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes, uint MuteMask, uint SoloMask)
+public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes, uint[][] ActiveKeyMasks, uint MuteMask, uint SoloMask)
 {
-    public static ChannelSnapshot Empty { get; } = new(new int[16], new uint[16], 0, 0);
+    public static ChannelSnapshot Empty { get; } = new(new int[16], new uint[16], CreateEmptyKeyMasks(), 0, 0);
+
+    private static uint[][] CreateEmptyKeyMasks()
+    {
+        var result = new uint[16][];
+        for (int i = 0; i < result.Length; ++i) {
+            result[i] = new uint[4];
+        }
+        return result;
+    }
+}
+
+internal sealed class PianoKeyboardControl : Control
+{
+    private static readonly int[] WhiteKeySemitones = { 0, 2, 4, 5, 7, 9, 11 };
+
+    private uint[] _activeKeyMasks = new uint[4];
+    private readonly long[] _recentNoteOffUntilTicks = new long[128];
+
+    public PianoKeyboardControl()
+    {
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+        BackColor = Color.WhiteSmoke;
+    }
+
+    public uint[] ActiveKeyMasks
+    {
+        get => _activeKeyMasks;
+        set
+        {
+            _activeKeyMasks = (value is not null && value.Length == 4) ? value : new uint[4];
+            Invalidate();
+        }
+    }
+
+    public void ClearTransientEvents()
+    {
+        Array.Clear(_recentNoteOffUntilTicks, 0, _recentNoteOffUntilTicks.Length);
+        Invalidate();
+    }
+
+    public void ApplyChannelEvents(int channelIndex, IReadOnlyList<XArkMidiEngine.ChannelKeyEvent> events)
+    {
+        if (events.Count == 0) {
+            return;
+        }
+        long now = Environment.TickCount64;
+        const long noteOffFlashMs = 140;
+        bool changed = false;
+        foreach (var channelEvent in events) {
+            if (channelEvent.Channel != channelIndex || channelEvent.Key >= 128) {
+                continue;
+            }
+            if (channelEvent.IsNoteOn != 0) {
+                _recentNoteOffUntilTicks[channelEvent.Key] = 0;
+            } else {
+                _recentNoteOffUntilTicks[channelEvent.Key] = now + noteOffFlashMs;
+            }
+            changed = true;
+        }
+        if (changed) {
+            Invalidate();
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+
+        e.Graphics.Clear(Color.FromArgb(248, 248, 248));
+
+        const int midiStart = 21;
+        const int midiEnd = 108;
+        const int totalWhiteKeys = 52;
+        var whiteKeyWidth = Math.Max(8f, (float)ClientSize.Width / totalWhiteKeys);
+        var whiteKeyHeight = Math.Max(60, ClientSize.Height - 1);
+        var blackKeyWidth = whiteKeyWidth * 0.62f;
+        var blackKeyHeight = whiteKeyHeight * 0.62f;
+
+        var whiteRects = new Dictionary<int, RectangleF>();
+        int whiteIndex = 0;
+        for (int midiKey = midiStart; midiKey <= midiEnd; ++midiKey) {
+            int semitone = midiKey % 12;
+            if (Array.IndexOf(WhiteKeySemitones, semitone) < 0) {
+                continue;
+            }
+            var rect = new RectangleF(whiteIndex * whiteKeyWidth, 0, whiteKeyWidth, whiteKeyHeight);
+            whiteRects[midiKey] = rect;
+            bool isActive = IsKeyActive(midiKey);
+            bool isRecentOff = IsRecentNoteOff(midiKey);
+            using var brush = new SolidBrush(
+                isActive ? Color.FromArgb(167, 224, 255) :
+                isRecentOff ? Color.FromArgb(255, 221, 221) :
+                Color.White);
+            e.Graphics.FillRectangle(brush, rect);
+            e.Graphics.DrawRectangle(Pens.Gray, rect.X, rect.Y, rect.Width, rect.Height);
+            ++whiteIndex;
+        }
+
+        for (int midiKey = midiStart; midiKey <= midiEnd; ++midiKey) {
+            if (IsWhiteKey(midiKey)) {
+                continue;
+            }
+            int leftWhiteKey = midiKey - 1;
+            while (leftWhiteKey >= midiStart && !IsWhiteKey(leftWhiteKey)) {
+                --leftWhiteKey;
+            }
+            int rightWhiteKey = midiKey + 1;
+            while (rightWhiteKey <= midiEnd && !IsWhiteKey(rightWhiteKey)) {
+                ++rightWhiteKey;
+            }
+            if (!whiteRects.TryGetValue(leftWhiteKey, out var leftRect)) {
+                continue;
+            }
+            float x;
+            if (whiteRects.TryGetValue(rightWhiteKey, out var rightRect)) {
+                x = ((leftRect.Right + rightRect.Left) * 0.5f) - blackKeyWidth * 0.5f;
+            } else {
+                x = leftRect.Right - blackKeyWidth * 0.5f;
+            }
+            var rect = new RectangleF(x, 0, blackKeyWidth, blackKeyHeight);
+            bool isActive = IsKeyActive(midiKey);
+            bool isRecentOff = IsRecentNoteOff(midiKey);
+            using var brush = new SolidBrush(
+                isActive ? Color.FromArgb(72, 160, 220) :
+                isRecentOff ? Color.FromArgb(170, 72, 72) :
+                Color.FromArgb(32, 32, 32));
+            e.Graphics.FillRectangle(brush, rect);
+            e.Graphics.DrawRectangle(Pens.Black, rect.X, rect.Y, rect.Width, rect.Height);
+        }
+    }
+
+    private bool IsKeyActive(int midiKey)
+    {
+        if (midiKey < 0 || midiKey >= 128) {
+            return false;
+        }
+        int wordIndex = midiKey >> 5;
+        uint bitMask = 1u << (midiKey & 31);
+        return (_activeKeyMasks[wordIndex] & bitMask) != 0;
+    }
+
+    private bool IsRecentNoteOff(int midiKey)
+    {
+        return midiKey >= 0 &&
+               midiKey < _recentNoteOffUntilTicks.Length &&
+               _recentNoteOffUntilTicks[midiKey] > Environment.TickCount64;
+    }
+
+    private static bool IsWhiteKey(int midiKey)
+    {
+        return Array.IndexOf(WhiteKeySemitones, midiKey % 12) >= 0;
+    }
 }
 
 internal sealed class WaveBuffer : IDisposable
 {
     private GCHandle _sampleHandle;
+    private readonly int _headerSize = Marshal.SizeOf<WaveHeader>();
 
     public short[] Samples { get; }
     public WaveHeader Header;
+    public IntPtr HeaderPointer { get; }
 
     public WaveBuffer(int sampleCount)
     {
@@ -617,10 +827,25 @@ internal sealed class WaveBuffer : IDisposable
             lpData = _sampleHandle.AddrOfPinnedObject(),
             dwBufferLength = (uint)(sampleCount * sizeof(short)),
         };
+        HeaderPointer = Marshal.AllocHGlobal(_headerSize);
+        CommitHeader();
+    }
+
+    public void CommitHeader()
+    {
+        Marshal.StructureToPtr(Header, HeaderPointer, fDeleteOld: false);
+    }
+
+    public void RefreshHeader()
+    {
+        Header = Marshal.PtrToStructure<WaveHeader>(HeaderPointer);
     }
 
     public void Dispose()
     {
+        if (HeaderPointer != IntPtr.Zero) {
+            Marshal.FreeHGlobal(HeaderPointer);
+        }
         if (_sampleHandle.IsAllocated) {
             _sampleHandle.Free();
         }
@@ -672,19 +897,19 @@ internal static class NativeMethods
     [DllImport("winmm.dll")]
     public static extern int waveOutPrepareHeader(
         IntPtr hWaveOut,
-        ref WaveHeader lpWaveOutHdr,
+        IntPtr lpWaveOutHdr,
         int uSize);
 
     [DllImport("winmm.dll")]
     public static extern int waveOutWrite(
         IntPtr hWaveOut,
-        ref WaveHeader lpWaveOutHdr,
+        IntPtr lpWaveOutHdr,
         int uSize);
 
     [DllImport("winmm.dll")]
     public static extern int waveOutUnprepareHeader(
         IntPtr hWaveOut,
-        ref WaveHeader lpWaveOutHdr,
+        IntPtr lpWaveOutHdr,
         int uSize);
 
     [DllImport("winmm.dll")]

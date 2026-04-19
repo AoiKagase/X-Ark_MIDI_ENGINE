@@ -13,3 +13,4 @@
 *.user/msvc/.vs/
 /msvc/.vs
 msvc/XArkMidiEngine.vcxproj.user
+/.dotnet-home
