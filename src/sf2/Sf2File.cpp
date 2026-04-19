@@ -27,6 +27,22 @@ constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcCc1 = 0x0081u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
 
+inline u8 ResolveForcedKey(u8 key, const ResolvedZone& zone) {
+    const i32 forcedKey = zone.generators[GEN_Keynum];
+    if (forcedKey >= 0 && forcedKey <= 127) {
+        return static_cast<u8>(forcedKey);
+    }
+    return key;
+}
+
+inline u16 ResolveForcedVelocity(u16 velocity, const ResolvedZone& zone) {
+    const i32 forcedVelocity = zone.generators[GEN_Velocity];
+    if (forcedVelocity >= 0 && forcedVelocity <= 127) {
+        return static_cast<u16>((forcedVelocity * 65535 + 63) / 127);
+    }
+    return velocity;
+}
+
 // SF2 default modulator 1: velocity → InitialAttenuation
 // 400 * log10(65535/vel) centibels (16-bit velocity, square law互換)
 inline i32 ComputeDefaultVelocityAttenuationCb(u16 velocity) {
@@ -639,12 +655,6 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         case GEN_Instrument:
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), presetLayer[g]);
             break;
-        case GEN_InitialAttenuation:
-            // SF2仕様上はプリセット層のInitialAttenuationは加算対象だが、
-            // フル加算だとリード/パッド間のバランスが崩れるため48%のみ加算する。
-            // （200 cb * 48 / 100 = 96 cb）
-            outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), outZone.generators[g] + (presetLayer[g] * 48) / 100);
-            break;
         default:
             outZone.generators[g] = ClampGeneratorValue(static_cast<u16>(g), outZone.generators[g] + presetLayer[g]);
             break;
@@ -654,11 +664,13 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     bool hasVelocityToAttenuationMod = false;
     bool hasCc1ToVibLfoPitchMod = false;
     if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
+        const u8 effectiveKey = ResolveForcedKey(key, outZone);
+        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         hasVelocityToAttenuationMod |= ApplyModulators(
             instMods_,
             instBags_[globalInstBagIdx].wInstModNdx,
             instBags_[globalInstBagIdx + 1].wInstModNdx,
-            key, velocity, ctx, outZone);
+            effectiveKey, effectiveVelocity, ctx, outZone);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             instMods_,
             instBags_[globalInstBagIdx].wInstModNdx,
@@ -666,11 +678,13 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             IsCc1ToVibLfoPitchMod);
     }
     if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
+        const u8 effectiveKey = ResolveForcedKey(key, outZone);
+        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         hasVelocityToAttenuationMod |= ApplyModulators(
             instMods_,
             instBags_[instBagIdx].wInstModNdx,
             instBags_[instBagIdx + 1].wInstModNdx,
-            key, velocity, ctx, outZone);
+            effectiveKey, effectiveVelocity, ctx, outZone);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             instMods_,
             instBags_[instBagIdx].wInstModNdx,
@@ -678,11 +692,13 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             IsCc1ToVibLfoPitchMod);
     }
     if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        const u8 effectiveKey = ResolveForcedKey(key, outZone);
+        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         hasVelocityToAttenuationMod |= ApplyModulators(
             presetMods_,
             presetBags_[globalPresetBagIdx].wModNdx,
             presetBags_[globalPresetBagIdx + 1].wModNdx,
-            key, velocity, ctx, outZone);
+            effectiveKey, effectiveVelocity, ctx, outZone);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             presetMods_,
             presetBags_[globalPresetBagIdx].wModNdx,
@@ -690,11 +706,13 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             IsCc1ToVibLfoPitchMod);
     }
     if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        const u8 effectiveKey = ResolveForcedKey(key, outZone);
+        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         hasVelocityToAttenuationMod |= ApplyModulators(
             presetMods_,
             presetBags_[presetBagIdx].wModNdx,
             presetBags_[presetBagIdx + 1].wModNdx,
-            key, velocity, ctx, outZone);
+            effectiveKey, effectiveVelocity, ctx, outZone);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             presetMods_,
             presetBags_[presetBagIdx].wModNdx,
@@ -702,8 +720,9 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             IsCc1ToVibLfoPitchMod);
     }
 
+    const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
     if (!hasVelocityToAttenuationMod) {
-        const i32 delta = ComputeDefaultVelocityAttenuationCb(velocity);
+        const i32 delta = ComputeDefaultVelocityAttenuationCb(effectiveVelocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
     }

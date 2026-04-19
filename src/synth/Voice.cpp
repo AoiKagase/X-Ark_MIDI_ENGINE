@@ -32,6 +32,22 @@ f32 NormalizeSf2EffectsSend(i32 value) {
     return std::clamp(static_cast<f32>(value) / 1000.0f, 0.0f, 1.0f);
 }
 
+u8 ResolveForcedKey(u8 key, const i32* gen) {
+    const i32 forcedKey = gen[GEN_Keynum];
+    if (forcedKey >= 0 && forcedKey <= 127) {
+        return static_cast<u8>(forcedKey);
+    }
+    return key;
+}
+
+u16 ResolveForcedVelocity(u16 velocity, const i32* gen) {
+    const i32 forcedVelocity = gen[GEN_Velocity];
+    if (forcedVelocity >= 0 && forcedVelocity <= 127) {
+        return static_cast<u16>((forcedVelocity * 65535 + 63) / 127);
+    }
+    return velocity;
+}
+
 f32 TriangleLfoValue(f32 phase) {
     const f32 wrapped = phase - std::floor(phase);
     return 1.0f - 4.0f * std::fabs(wrapped - 0.5f);
@@ -360,6 +376,9 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     const i32* gen = zone.generators;
     const SampleHeader* smp = zone.sample;
     sampleHeader = smp;
+    const u8 effectiveKeyU8 = ResolveForcedKey(key, gen);
+    const u16 effectiveVelocityU16 = ResolveForcedVelocity(vel, gen);
+    i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
 
     // ---- サンプル範囲 ----
     i32 startOff     = gen[GEN_StartAddrsOffset]     + gen[GEN_StartAddrsCoarseOffset]   * 32768;
@@ -425,7 +444,6 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) - smp->pitchCorrection; // cents
     f64 coarseTune        = static_cast<f64>(gen[GEN_CoarseTune]);                        // semitones
 
-    i32 effectiveKey = static_cast<i32>(key);
     if (specialRoute.enabled && specialRoute.clampAboveRoot &&
         specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
         effectiveKey = specialRoute.clampRootKey;
@@ -471,8 +489,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     f64 sustainCb   = static_cast<f64>(gen[GEN_SustainVolEnv]);
 
     // KeynumToVolEnvHold/Decay: キー番号による補正（SF2 spec 8.1.1）
-    f64 holdMod  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvHold])  * (60 - key) / 1200.0);
-    f64 decayMod = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvDecay]) * (60 - key) / 1200.0);
+    f64 holdMod  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvHold])  * (60 - effectiveKey) / 1200.0);
+    f64 decayMod = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvDecay]) * (60 - effectiveKey) / 1200.0);
     holdTime  *= holdMod;
     decayTime *= decayMod;
 
@@ -510,8 +528,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     f64 modReleaseTime = TimecentsToSeconds(gen[GEN_ReleaseModEnv]);
     f64 modSustainRaw  = static_cast<f64>(gen[GEN_SustainModEnv]);
 
-    f64 modHoldScale  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvHold])  * (60 - key) / 1200.0);
-    f64 modDecayScale = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvDecay]) * (60 - key) / 1200.0);
+    f64 modHoldScale  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvHold])  * (60 - effectiveKey) / 1200.0);
+    f64 modDecayScale = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvDecay]) * (60 - effectiveKey) / 1200.0);
     modHoldTime  *= modHoldScale;
     modDecayTime *= modDecayScale;
 
@@ -562,7 +580,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     filterZ2 = 0.0f;
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
     // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(vel) / 65535.0f));
+    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(effectiveVelocityU16) / 65535.0f));
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
@@ -602,13 +620,16 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     }
 
     const i32* gen = zone.generators;
+    const u8 effectiveKeyU8 = ResolveForcedKey(noteKey, gen);
+    const u16 effectiveVelocityU16 = ResolveForcedVelocity(velocity, gen);
+    const i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
     const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
     attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
     if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
 
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
     // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(velocity) / 65535.0f));
+    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(effectiveVelocityU16) / 65535.0f));
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
@@ -631,7 +652,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
     const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - sampleHeader->pitchCorrection;
     const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
-    f64 baseSemitones = static_cast<f64>(noteKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
+    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
     if (specialRoute.enabled) {
         baseSemitones += specialRoute.detuneSemitones;
     }
