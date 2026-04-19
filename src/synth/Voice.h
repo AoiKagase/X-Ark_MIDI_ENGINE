@@ -14,6 +14,7 @@ namespace XArkMidi {
 
 struct SynthCompatOptions {
     bool sf2ZeroLengthLoopRetrigger = false;
+    bool enableSf2SamplePitchCorrection = false;
 };
 
 struct SpecialVoiceRoute {
@@ -146,6 +147,7 @@ public:
     f32      chorusGainL = 0.0f;
     f32      chorusGainR = 0.0f;
     const SampleHeader* sampleHeader = nullptr;
+    SynthCompatOptions compatOptions{};
     SpecialVoiceRoute specialRoute;
     bool     ownedByParent = false;
     u16      linkedVoiceIndex = kInvalidLinkedVoice;

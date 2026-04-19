@@ -38,6 +38,7 @@ public static class XArkMidiEngine
     {
         None = 0,
         Sf2ZeroLengthLoopRetrigger = 1 << 0,
+        EnableSf2SamplePitchCorrection = 1 << 1,
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -51,6 +52,17 @@ public static class XArkMidiEngine
 
         public static CreateOptions Default()
             => new CreateOptions { StructSize = (uint)Marshal.SizeOf<CreateOptions>() };
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ChannelKeyEvent
+    {
+        public byte Channel;
+        public byte Key;
+        public byte IsNoteOn;
+        public byte Reserved;
+        public ushort Velocity;
+        public ushort Reserved2;
     }
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -100,6 +112,12 @@ public static class XArkMidiEngine
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern uint XAmeGetChannelActiveNoteCount(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint XAmeGetChannelActiveKeyMaskWord(IntPtr engine, uint channel, uint wordIndex);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int XAmePopChannelKeyEvent(IntPtr engine, out ChannelKeyEvent outEvent);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int XAmeIsFinished(IntPtr engine);
@@ -241,6 +259,18 @@ public static class XArkMidiEngine
         {
             ThrowIfDisposed();
             return XAmeGetChannelActiveNoteCount(_handle, channel);
+        }
+
+        public uint GetChannelActiveKeyMaskWord(uint channel, uint wordIndex)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelActiveKeyMaskWord(_handle, channel, wordIndex);
+        }
+
+        public bool TryPopChannelKeyEvent(out ChannelKeyEvent channelKeyEvent)
+        {
+            ThrowIfDisposed();
+            return XAmePopChannelKeyEvent(_handle, out channelKeyEvent) != 0;
         }
 
         public short[] RenderAll(uint chunkFrames = 4096)

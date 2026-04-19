@@ -41,6 +41,7 @@ typedef enum XAmeSoundBankKind_ {
 typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_NONE = 0,
     XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER = 1u << 0,
+    XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION = 1u << 1,
 } XAmeCompatibilityFlags;
 
 typedef struct XAmeCreateOptions_ {
@@ -50,6 +51,15 @@ typedef struct XAmeCreateOptions_ {
     unsigned int        maxDlsPoolTableEntries;
     unsigned int        compatibilityFlags;
 } XAmeCreateOptions;
+
+typedef struct XAmeChannelKeyEvent_ {
+    unsigned char channel;
+    unsigned char key;
+    unsigned char isNoteOn;
+    unsigned char reserved;
+    unsigned short velocity;
+    unsigned short reserved2;
+} XAmeChannelKeyEvent;
 
 typedef struct XAmeEngine_* XAmeEngine;
 
@@ -105,6 +115,8 @@ XAME_API unsigned int XAmeGetChannelMuteMask(XAmeEngine engine);
 XAME_API unsigned int XAmeGetChannelSoloMask(XAmeEngine engine);
 XAME_API int XAmeGetChannelProgram(XAmeEngine engine, unsigned int channel);
 XAME_API unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int channel);
+XAME_API unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex);
+XAME_API int XAmePopChannelKeyEvent(XAmeEngine engine, XAmeChannelKeyEvent* outEvent);
 
 XAME_API int XAmeIsFinished(XAmeEngine engine);
 XAME_API void XAmeDestroyEngine(XAmeEngine engine);

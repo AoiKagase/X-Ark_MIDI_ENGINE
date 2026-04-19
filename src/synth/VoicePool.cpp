@@ -26,6 +26,13 @@ constexpr f64 kSpecialLayerFifthTolerance = 0.35;
 constexpr f64 kSpecialLayerDetuneSemitones = 0.035;
 constexpr f32 kSpecialLayerPanSpread = 0.58f;
 
+f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
+    if (!sample || !compatOptions.enableSf2SamplePitchCorrection) {
+        return 0.0;
+    }
+    return static_cast<f64>(sample->pitchCorrection);
+}
+
 f32 EstimateVoiceAudibility(const Voice& voice) {
     const f32 channelGain = std::max(voice.channelGainL, voice.channelGainR);
     return voice.envLevel * voice.attenuation * channelGain;
@@ -134,14 +141,14 @@ std::string SampleNameString(const SampleHeader* sample) {
     return std::string(sample->sampleName, sample->sampleName + length);
 }
 
-f64 ComputeZoneBaseSemitones(const ResolvedZone& zone, u8 key) {
+f64 ComputeZoneBaseSemitones(const ResolvedZone& zone, u8 key, const SynthCompatOptions& compatOptions) {
     if (!zone.sample) {
         return 0.0;
     }
     const i32* gen = zone.generators;
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : zone.sample->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - zone.sample->pitchCorrection;
+    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(zone.sample, compatOptions);
     const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
     return static_cast<f64>(key - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
 }
@@ -199,7 +206,8 @@ bool PlanTargetsSample(const ProgramLayerPlan& plan, const SampleHeader* sample)
 
 SpecialRouteDecision DetectSpecialSf2LayerRoute(const std::vector<ResolvedZone>& zones,
                                                 SoundBankKind soundBankKind,
-                                                u8 key) {
+                                                u8 key,
+                                                const SynthCompatOptions& compatOptions) {
     SpecialRouteDecision decision;
     if (!kEnableSpecialSf2Route) {
         return decision;
@@ -224,8 +232,8 @@ SpecialRouteDecision DetectSpecialSf2LayerRoute(const std::vector<ResolvedZone>&
         return decision;
     }
 
-    const f64 semitones0 = ComputeZoneBaseSemitones(zone0, key);
-    const f64 semitones1 = ComputeZoneBaseSemitones(zone1, key);
+    const f64 semitones0 = ComputeZoneBaseSemitones(zone0, key, compatOptions);
+    const f64 semitones1 = ComputeZoneBaseSemitones(zone1, key, compatOptions);
     const f64 interval = std::fabs(semitones1 - semitones0);
     if (std::fabs(interval - kSpecialLayerFifthSemitones) > kSpecialLayerFifthTolerance) {
         return decision;
@@ -283,14 +291,15 @@ void AppendSpecialRouteDebugLog(u8 channel,
 
 std::vector<ProgramLayerPlan> BuildProgramLayerPlans(const std::vector<ResolvedZone>& zones,
                                                      SoundBankKind soundBankKind,
-                                                     u8 key) {
+                                                     u8 key,
+                                                     const SynthCompatOptions& compatOptions) {
     std::vector<ProgramLayerPlan> plans;
     if (zones.empty()) {
         return plans;
     }
 
     const SpecialRouteDecision specialRouteDecision =
-        DetectSpecialSf2LayerRoute(zones, soundBankKind, key);
+        DetectSpecialSf2LayerRoute(zones, soundBankKind, key, compatOptions);
     if (specialRouteDecision.enabled) {
         ProgramLayerPlan aggregatedPlan;
         aggregatedPlan.aggregated = true;
@@ -664,11 +673,11 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
 
     u32 noteId = nextNoteId_++;
     noteQueue_[channel][key].push_back(noteId);
-    const SpecialRouteDecision specialRouteDecision = DetectSpecialSf2LayerRoute(zones, soundBankKind, key);
+    const SpecialRouteDecision specialRouteDecision = DetectSpecialSf2LayerRoute(zones, soundBankKind, key, compatOptions);
     if (specialRouteDecision.enabled) {
         AppendSpecialRouteDebugLog(channel, program, key, noteId, zones, specialRouteDecision);
     }
-    const std::vector<ProgramLayerPlan> layerPlans = BuildProgramLayerPlans(zones, soundBankKind, key);
+    const std::vector<ProgramLayerPlan> layerPlans = BuildProgramLayerPlans(zones, soundBankKind, key, compatOptions);
 
     for (const auto& layerPlan : layerPlans) {
         if (!layerPlan.aggregated || layerPlan.entries.size() != 2 ||
@@ -1266,6 +1275,24 @@ void VoicePool::GetActiveRootNoteCountsPerChannel(std::array<u32, MIDI_CHANNEL_C
         if (v.channel < MIDI_CHANNEL_COUNT && v.envPhase != EnvPhase::Off) {
             ++counts[v.channel];
         }
+    }
+}
+
+void VoicePool::GetActiveRootKeyMasksPerChannel(std::array<std::array<u32, 4>, MIDI_CHANNEL_COUNT>& masks) const {
+    for (auto& channelMasks : masks) {
+        channelMasks.fill(0);
+    }
+    for (u16 i = 0; i < activeCount_; ++i) {
+        const auto& v = voices_[activeIndices_[i]];
+        if (!v.active || !IsTrackedRootVoice(v) || v.envPhase == EnvPhase::Off) {
+            continue;
+        }
+        if (v.channel >= MIDI_CHANNEL_COUNT || v.noteKey >= 128) {
+            continue;
+        }
+        const u32 wordIndex = static_cast<u32>(v.noteKey >> 5);
+        const u32 bitMask = 1u << (v.noteKey & 31);
+        masks[v.channel][wordIndex] |= bitMask;
     }
 }
 

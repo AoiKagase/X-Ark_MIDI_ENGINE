@@ -66,6 +66,7 @@ public:
     // アクティブなボイス数
     int ActiveCount() const;
     void GetActiveRootNoteCountsPerChannel(std::array<u32, MIDI_CHANNEL_COUNT>& counts) const;
+    void GetActiveRootKeyMasksPerChannel(std::array<std::array<u32, 4>, MIDI_CHANNEL_COUNT>& masks) const;
 
 private:
     struct WorkerRange {

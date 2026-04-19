@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{C4D5E6F7-A8B9-4012-BCDE-0123456789AB}</ProjectGuid>
+    <RootNamespace>MidiDump</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>MidiDump</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)..\build\msvc\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)..\build\msvc\obj\MidiDump\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\src\common;$(ProjectDir)..\src\midi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\tests\dump_midi_timeline.cpp" />
+    <ClCompile Include="..\src\midi\MidiFile.cpp" />
+    <ClCompile Include="..\src\midi\MidiTrack.cpp" />
+    <ClCompile Include="..\src\midi2\Midi2File.cpp" />
+    <ClCompile Include="..\src\midi2\UmpDownConverter.cpp" />
+    <ClCompile Include="..\src\common\BinaryReader.cpp" />
+    <ClCompile Include="..\src\common\FileUtil.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\midi\MidiFile.h" />
+    <ClInclude Include="..\src\midi\MidiTrack.h" />
+    <ClInclude Include="..\src\midi\MidiEvent.h" />
+    <ClInclude Include="..\src\midi2\Midi2File.h" />
+    <ClInclude Include="..\src\midi2\UmpDownConverter.h" />
+    <ClInclude Include="..\src\midi2\UmpTypes.h" />
+    <ClInclude Include="..\src\common\BinaryReader.h" />
+    <ClInclude Include="..\src\common\FileUtil.h" />
+    <ClInclude Include="..\src\common\Types.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

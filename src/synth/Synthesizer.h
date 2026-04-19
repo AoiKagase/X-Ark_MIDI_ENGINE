@@ -10,6 +10,8 @@
 #include "../midi/MidiSequencer.h"
 #include "../soundbank/SoundBank.h"
 #include <atomic>
+#include <deque>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -57,6 +59,13 @@ private:
 
 class Synthesizer {
 public:
+    struct ChannelKeyEvent {
+        u8 channel = 0;
+        u8 key = 0;
+        u8 isNoteOn = 0;
+        u16 velocity = 0;
+    };
+
     bool Init(const MidiFile* midi, const SoundBank* soundBank,
               u32 sampleRate, u32 numChannels,
               const SynthCompatOptions& compatOptions = {});
@@ -73,6 +82,8 @@ public:
     u32 GetChannelSoloMask() const { return channelSoloMask_.load(std::memory_order_relaxed); }
     int GetChannelProgram(u32 channel) const;
     u32 GetChannelActiveNoteCount(u32 channel) const;
+    u32 GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const;
+    bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
 
     const std::string& ErrorMessage() const { return errorMsg_; }
 
@@ -134,6 +145,10 @@ private:
     std::atomic<u32> channelSoloMask_{0};
     std::array<std::atomic<u8>, MIDI_CHANNEL_COUNT> channelProgramView_{};
     std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelActiveNoteCountView_{};
+    std::array<std::array<std::atomic<u32>, 4>, MIDI_CHANNEL_COUNT> channelActiveKeyMasksView_{};
+    std::array<std::array<u16, 128>, MIDI_CHANNEL_COUNT> channelHeldKeyCounts_{};
+    mutable std::mutex channelKeyEventMutex_;
+    std::deque<ChannelKeyEvent> channelKeyEvents_;
 
     void HandleEvent(const MidiEvent& ev);
     void HandleNoteOn(u8 ch, u8 key, u16 vel);
@@ -150,6 +165,7 @@ private:
     void RefreshSf2ControllersForChannel(u8 ch);
     bool HasAudibleEffectTail() const;
     void ResetGsEffectState();
+    void PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity);
 };
 
 } // namespace XArkMidi

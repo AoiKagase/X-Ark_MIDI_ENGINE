@@ -61,6 +61,13 @@ bool IsProgramLoggingEnabled() {
     return enabled;
 }
 
+f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
+    if (!sample || !compatOptions.enableSf2SamplePitchCorrection) {
+        return 0.0;
+    }
+    return static_cast<f64>(sample->pitchCorrection);
+}
+
 void ApplyChannelMix(VoicePool& voicePool, u8 ch, const ChannelState& state) {
     voicePool.UpdateChannelMix(ch, state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
@@ -197,7 +204,8 @@ void AppendProgramDebugLog(u16 requestedBank,
                            u16 velocity,
                            u32 outputSampleRate,
                            const ChannelState& state,
-                           const std::vector<ResolvedZone>& zones) {
+                           const std::vector<ResolvedZone>& zones,
+                           const SynthCompatOptions& compatOptions) {
     if (!IsProgramLoggingEnabled()) {
         return;
     }
@@ -236,10 +244,10 @@ void AppendProgramDebugLog(u16 requestedBank,
                 ? gen[GEN_OverridingRootKey]
                 : sample->originalPitch;
             const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-            const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - sample->pitchCorrection;
+            const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sample, compatOptions);
             const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
             computedRoot = static_cast<f64>(rootKey);
-            computedSampleCorrection = static_cast<f64>(sample->pitchCorrection);
+            computedSampleCorrection = EffectiveSamplePitchCorrection(sample, compatOptions);
             computedBaseSemitones =
                 static_cast<f64>(key - rootKey) * scaleTuningFactor +
                 coarseTune +
@@ -349,6 +357,10 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
         channelProgramView_[ch].store(0, std::memory_order_relaxed);
         channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
     }
     ResetProgramDebugLog();
 
@@ -539,8 +551,13 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     // MIDI ファイルが EndOfTrack 前に NoteOff を省略している場合に対処
     if (sequencer_.IsFinished() && !seqEndNotified_) {
         seqEndNotified_ = true;
-        for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch)
+        for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
             voicePool_.AllNotesOff(ch);
+            channelHeldKeyCounts_[ch].fill(0);
+            for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+                channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+            }
+        }
     }
 
     // シーケンサー完了後もボイスが鳴り終わるまで続ける
@@ -569,6 +586,23 @@ u32 Synthesizer::GetChannelActiveNoteCount(u32 channel) const {
     return channelActiveNoteCountView_[channel].load(std::memory_order_relaxed);
 }
 
+u32 Synthesizer::GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const {
+    if (channel >= MIDI_CHANNEL_COUNT || wordIndex >= 4) {
+        return 0;
+    }
+    return channelActiveKeyMasksView_[channel][wordIndex].load(std::memory_order_relaxed);
+}
+
+bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {
+    std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
+    if (channelKeyEvents_.empty()) {
+        return false;
+    }
+    eventOut = channelKeyEvents_.front();
+    channelKeyEvents_.pop_front();
+    return true;
+}
+
 bool Synthesizer::HasAudibleEffectTail() const {
     const auto hasAudibleSample = [](const std::vector<f32>& buffer) {
         for (f32 sample : buffer) {
@@ -593,6 +627,20 @@ void Synthesizer::ResetGsEffectState() {
     gsChorusDelayScale_ = 1.0f;
     gsChorusDepthScale_ = 1.0f;
     gsChorusRateScale_ = 1.0f;
+}
+
+void Synthesizer::PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity) {
+    constexpr size_t kMaxQueuedEvents = 4096;
+    std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
+    if (channelKeyEvents_.size() >= kMaxQueuedEvents) {
+        channelKeyEvents_.pop_front();
+    }
+    channelKeyEvents_.push_back(ChannelKeyEvent {
+        ch,
+        key,
+        static_cast<u8>(isNoteOn ? 1 : 0),
+        velocity,
+    });
 }
 
 void Synthesizer::HandleEvent(const MidiEvent& ev) {
@@ -639,6 +687,16 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     if (vel == 0) {
         HandleNoteOff(ch, key);
         return;
+    }
+    PushChannelKeyEvent(ch, key, true, vel);
+    if (ch < MIDI_CHANNEL_COUNT && key < 128) {
+        if (channelHeldKeyCounts_[ch][key] < std::numeric_limits<u16>::max()) {
+            ++channelHeldKeyCounts_[ch][key];
+        }
+        const u32 wordIndex = static_cast<u32>(key >> 5);
+        const u32 bitMask = 1u << (key & 31);
+        const u32 currentMask = channelActiveKeyMasksView_[ch][wordIndex].load(std::memory_order_relaxed);
+        channelActiveKeyMasksView_[ch][wordIndex].store(currentMask | bitMask, std::memory_order_relaxed);
     }
 
     auto& state = channels_[ch];
@@ -710,7 +768,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     if (ShouldLogProgram(state.program)) {
         AppendProgramSummaryLog(requestedBank, resolvedBank, soundBank_->Kind(), ch, resolvedProgram, key, vel);
         AppendProgramDebugLog(requestedBank, resolvedBank, soundBank_->Kind(), ch, resolvedProgram, key, vel,
-                              sampleRate_, state, zoneScratch_);
+                              sampleRate_, state, zoneScratch_, compatOptions_);
     }
 
     if (state.monoMode) {
@@ -741,6 +799,18 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
 }
 
 void Synthesizer::HandleNoteOff(u8 ch, u8 key) {
+    PushChannelKeyEvent(ch, key, false, 0);
+    if (ch < MIDI_CHANNEL_COUNT && key < 128) {
+        if (channelHeldKeyCounts_[ch][key] > 0) {
+            --channelHeldKeyCounts_[ch][key];
+        }
+        if (channelHeldKeyCounts_[ch][key] == 0) {
+            const u32 wordIndex = static_cast<u32>(key >> 5);
+            const u32 bitMask = 1u << (key & 31);
+            const u32 currentMask = channelActiveKeyMasksView_[ch][wordIndex].load(std::memory_order_relaxed);
+            channelActiveKeyMasksView_[ch][wordIndex].store(currentMask & ~bitMask, std::memory_order_relaxed);
+        }
+    }
     voicePool_.NoteOff(ch, key, channels_[ch].sustain);
 }
 
@@ -899,6 +969,10 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         break;
     case 120: // All Sound Off
         voicePool_.AllSoundOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     case 121: // Reset All Controllers
         state.ResetControllersOnly();
@@ -911,22 +985,42 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         break;
     case 123: // All Notes Off
         voicePool_.AllNotesOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     case 124: // Omni Off
         state.omniMode = false;
         voicePool_.AllNotesOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     case 125: // Omni On
         state.omniMode = true;
         voicePool_.AllNotesOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     case 126: // Mono On
         state.monoMode = true;
         voicePool_.AllNotesOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     case 127: // Poly On
         state.monoMode = false;
         voicePool_.AllNotesOff(ch);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
         break;
     default:
         break;

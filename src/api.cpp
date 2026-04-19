@@ -60,6 +60,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
         const u32 flags = options->compatibilityFlags;
         compatOptions.sf2ZeroLengthLoopRetrigger =
             (flags & XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER) != 0;
+        compatOptions.enableSf2SamplePitchCorrection =
+            (flags & XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION) != 0;
     }
     return compatOptions;
 }
@@ -308,6 +310,30 @@ unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int chann
         return 0;
     }
     return engine->synthesizer.GetChannelActiveNoteCount(channel);
+}
+
+unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetChannelActiveKeyMaskWord(channel, wordIndex);
+}
+
+int XAmePopChannelKeyEvent(XAmeEngine engine, XAmeChannelKeyEvent* outEvent) {
+    if (!engine || !engine->initialized || !outEvent) {
+        return 0;
+    }
+    Synthesizer::ChannelKeyEvent event{};
+    if (!engine->synthesizer.PopChannelKeyEvent(event)) {
+        return 0;
+    }
+    outEvent->channel = event.channel;
+    outEvent->key = event.key;
+    outEvent->isNoteOn = event.isNoteOn;
+    outEvent->reserved = 0;
+    outEvent->velocity = event.velocity;
+    outEvent->reserved2 = 0;
+    return 1;
 }
 
 int XAmeIsFinished(XAmeEngine engine) {

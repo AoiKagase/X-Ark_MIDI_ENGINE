@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <string>
 
 #include "../src/sf2/Sf2File.h"
 #include "../src/sf2/Sf2Types.h"
@@ -73,6 +74,14 @@ static const char* GenName(int g) {
     }
 }
 
+static std::string TrimName(const char* name, size_t len) {
+    size_t end = len;
+    while (end > 0 && (name[end - 1] == '\0' || name[end - 1] == ' ')) {
+        --end;
+    }
+    return std::string(name, name + end);
+}
+
 void PrintNonDefaultGens(const i32 gens[GEN_COUNT], const i32 defaults[GEN_COUNT], const char* header) {
     printf("  %s:\n", header);
     bool hasContent = false;
@@ -108,6 +117,118 @@ int main(int argc, char* argv[]) {
     printf("=== SF2 Analysis: %s ===\n", argv[1]);
     printf("Samples: %zu, Presets: %zu, Instruments: %zu\n\n", 
         sampleCount, sf2.PresetCount(), sf2.InstrumentCount());
+
+    if (argc >= 3 && std::strcmp(argv[2], "--scan-pitch") == 0) {
+        size_t nonZeroPitchCorrection = 0;
+        size_t nonDefaultRoot = 0;
+        for (size_t i = 0; i < sf2.SampleHeaderCount(); ++i) {
+            const auto* h = sf2.SampleHeaders(i);
+            if (!h) continue;
+            if (h->pitchCorrection != 0) ++nonZeroPitchCorrection;
+            if (h->originalPitch != 60) ++nonDefaultRoot;
+        }
+
+        printf("=== Pitch Scan Summary ===\n");
+        printf("Sample headers: nonZeroPitchCorrection=%zu nonDefaultOriginalPitch=%zu\n\n",
+            nonZeroPitchCorrection, nonDefaultRoot);
+
+        const i32* defaults = GetSF2GeneratorDefaults();
+        for (size_t pi = 0; pi + 1 < sf2.PresetCount(); ++pi) {
+            const auto* preset = sf2.Preset(pi);
+            if (!preset) continue;
+
+            int globalPresetBag = -1;
+            int localPresetBag = -1;
+            if (!sf2.GetPresetBagIndices(preset->wBank, static_cast<u8>(preset->wPreset), globalPresetBag, localPresetBag)) {
+                continue;
+            }
+
+            i32 presetGlobalGens[GEN_COUNT] = {0};
+            i32 presetLocalGens[GEN_COUNT] = {0};
+            if (globalPresetBag >= 0) {
+                sf2.GetPresetGeneratorLayer(globalPresetBag, presetGlobalGens);
+            }
+            sf2.GetPresetGeneratorLayer(localPresetBag, presetLocalGens);
+
+            const int instrumentIdx = presetLocalGens[GEN_Instrument];
+            std::vector<Sf2File::ZoneInfo> instZones;
+            if (instrumentIdx >= 0) {
+                sf2.GetInstrumentLocalZones(instrumentIdx, instZones);
+            }
+
+            bool reportPreset = false;
+            int tunedZoneCount = 0;
+            int pitchCorrectedSamples = 0;
+            for (const auto& zone : instZones) {
+                const auto* sample = sf2.SampleHeaders(static_cast<size_t>(zone.sampleId));
+                if (!sample) continue;
+                const bool tunedZone =
+                    zone.generators[GEN_CoarseTune] != defaults[GEN_CoarseTune] ||
+                    zone.generators[GEN_FineTune] != defaults[GEN_FineTune] ||
+                    zone.generators[GEN_ScaleTuning] != defaults[GEN_ScaleTuning] ||
+                    zone.generators[GEN_OverridingRootKey] != defaults[GEN_OverridingRootKey];
+                if (tunedZone) {
+                    reportPreset = true;
+                    ++tunedZoneCount;
+                }
+                if (sample->pitchCorrection != 0) {
+                    reportPreset = true;
+                    ++pitchCorrectedSamples;
+                }
+            }
+
+            const bool presetHasPitchGen =
+                presetGlobalGens[GEN_CoarseTune] != defaults[GEN_CoarseTune] ||
+                presetGlobalGens[GEN_FineTune] != defaults[GEN_FineTune] ||
+                presetGlobalGens[GEN_ScaleTuning] != defaults[GEN_ScaleTuning] ||
+                presetGlobalGens[GEN_OverridingRootKey] != defaults[GEN_OverridingRootKey] ||
+                presetLocalGens[GEN_CoarseTune] != defaults[GEN_CoarseTune] ||
+                presetLocalGens[GEN_FineTune] != defaults[GEN_FineTune] ||
+                presetLocalGens[GEN_ScaleTuning] != defaults[GEN_ScaleTuning] ||
+                presetLocalGens[GEN_OverridingRootKey] != defaults[GEN_OverridingRootKey];
+            reportPreset = reportPreset || presetHasPitchGen;
+
+            if (!reportPreset) {
+                continue;
+            }
+
+            printf("Preset bank=%u program=%u name='%s' tunedZones=%d pitchCorrectedSamples=%d\n",
+                preset->wBank, preset->wPreset, TrimName(preset->achPresetName, 20).c_str(),
+                tunedZoneCount, pitchCorrectedSamples);
+
+            if (presetHasPitchGen) {
+                if (globalPresetBag >= 0) {
+                    printf("  Preset global pitch gens: coarse=%d fine=%d scale=%d root=%d\n",
+                        presetGlobalGens[GEN_CoarseTune], presetGlobalGens[GEN_FineTune],
+                        presetGlobalGens[GEN_ScaleTuning], presetGlobalGens[GEN_OverridingRootKey]);
+                }
+                printf("  Preset local pitch gens: coarse=%d fine=%d scale=%d root=%d\n",
+                    presetLocalGens[GEN_CoarseTune], presetLocalGens[GEN_FineTune],
+                    presetLocalGens[GEN_ScaleTuning], presetLocalGens[GEN_OverridingRootKey]);
+            }
+
+            for (size_t iz = 0; iz < instZones.size(); ++iz) {
+                const auto& zone = instZones[iz];
+                const auto* sample = sf2.SampleHeaders(static_cast<size_t>(zone.sampleId));
+                if (!sample) continue;
+                const bool tunedZone =
+                    zone.generators[GEN_CoarseTune] != defaults[GEN_CoarseTune] ||
+                    zone.generators[GEN_FineTune] != defaults[GEN_FineTune] ||
+                    zone.generators[GEN_ScaleTuning] != defaults[GEN_ScaleTuning] ||
+                    zone.generators[GEN_OverridingRootKey] != defaults[GEN_OverridingRootKey] ||
+                    sample->pitchCorrection != 0;
+                if (!tunedZone) continue;
+
+                printf("  Zone %zu sample='%.20s' sampleRoot=%d samplePitchCorrection=%d coarse=%d fine=%d scale=%d root=%d keyRange=%d-%d\n",
+                    iz, sample->sampleName, static_cast<int>(sample->originalPitch), static_cast<int>(sample->pitchCorrection),
+                    zone.generators[GEN_CoarseTune], zone.generators[GEN_FineTune],
+                    zone.generators[GEN_ScaleTuning], zone.generators[GEN_OverridingRootKey],
+                    zone.keyLo, zone.keyHi);
+            }
+            printf("\n");
+        }
+        return 0;
+    }
 
     if (argc >= 5) {
         u16 bank = static_cast<u16>(atoi(argv[2]));
@@ -170,10 +291,23 @@ int main(int argc, char* argv[]) {
             const i32 loopEndOff = z.generators[GEN_EndloopAddrsOffset] + z.generators[GEN_EndloopAddrsCoarse] * 32768;
             const i32 effectiveLoopStart = static_cast<i32>(h->loopStart) + loopStartOff;
             const i32 effectiveLoopEnd = static_cast<i32>(h->loopEnd) + loopEndOff;
+            const i32 rootKey = (z.generators[GEN_OverridingRootKey] >= 0)
+                ? z.generators[GEN_OverridingRootKey]
+                : static_cast<i32>(h->originalPitch);
+            const double scaleTuning = static_cast<double>(z.generators[GEN_ScaleTuning]) / 100.0;
+            const double fineTune = static_cast<double>(z.generators[GEN_FineTune]) - static_cast<double>(h->pitchCorrection);
+            const double coarseTune = static_cast<double>(z.generators[GEN_CoarseTune]);
+            const double baseSemitones =
+                static_cast<double>(key - rootKey) * scaleTuning +
+                coarseTune +
+                fineTune / 100.0;
             
             printf("\nZone %zu:\n", zi);
             printf("  Sample: '%.20s' start=%u end=%u rate=%u\n",
                 h->sampleName, h->start, h->end, h->sampleRate);
+            printf("  Pitch: sampleRoot=%d samplePitchCorrection=%d rootKey=%d coarseTune=%.2f fineTune=%.2f scaleTuning=%.2f baseSemitones=%.4f\n",
+                static_cast<int>(h->originalPitch), static_cast<int>(h->pitchCorrection), rootKey,
+                coarseTune, fineTune, scaleTuning, baseSemitones);
             printf("  Header Loop: start=%u end=%u len=%u\n",
                 h->loopStart, h->loopEnd, h->loopEnd > h->loopStart ? h->loopEnd - h->loopStart : 0);
             printf("  Effective Loop: start=%d end=%d len=%d (offsets %+d / %+d)\n",

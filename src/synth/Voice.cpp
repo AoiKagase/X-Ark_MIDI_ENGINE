@@ -24,6 +24,13 @@ constexpr f32 kEnvelopeSilenceThreshold = 1.0e-5f;
 constexpr f64 kEnvelopeSilenceTarget = 1.0e-5;
 constexpr f32 kMinimumLoopReleaseSeconds = 0.005f;
 
+f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
+    if (!sample || !compatOptions.enableSf2SamplePitchCorrection) {
+        return 0.0;
+    }
+    return static_cast<f64>(sample->pitchCorrection);
+}
+
 f32 NormalizeMidiSend(u32 value) {
     return static_cast<f32>(value) / 4294967295.0f;
 }
@@ -345,6 +352,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sampleData     = pcmData;
     sampleDataSize = pcmDataSize;
     outputSampleRate = sampleRate;
+    this->compatOptions = compatOptions;
     specialRoute = newSpecialRoute;
     this->pitchBendSemitones = pitchBendSemitones;
     perNotePitchSemitones = 0.0; // NoteOn 毎にリセット
@@ -441,7 +449,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     // SF2 sample header pitchCorrection is part of the sample's original pitch.
     // A positive correction means the recorded sample is sharper than originalPitch,
     // so playback for a target key must subtract it from the resampling offset.
-    f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) - smp->pitchCorrection; // cents
+    f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(smp, this->compatOptions); // cents
     f64 coarseTune        = static_cast<f64>(gen[GEN_CoarseTune]);                        // semitones
 
     if (specialRoute.enabled && specialRoute.clampAboveRoot &&
@@ -650,7 +658,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
 
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - sampleHeader->pitchCorrection;
+    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sampleHeader, compatOptions);
     const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
     f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
     if (specialRoute.enabled) {
