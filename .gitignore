@@ -1,4 +1,5 @@
 /.claude/
+/CLAUDE.md
 /.dotnet/
 /.vs/
 /build/
@@ -10,7 +11,10 @@
 *.obj
 *.pdb
 *.tlog
-*.user/msvc/.vs/
-/msvc/.vs
+*.user
+**/.vs/
+**/bin/
+**/obj/
+/msvc/.vs/
 msvc/XArkMidiEngine.vcxproj.user
 /.dotnet-home
