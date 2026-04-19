@@ -22,6 +22,38 @@ public sealed class MainForm : Form
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
     private readonly Button _stopButton = new() { Text = "Stop", Width = 90, Enabled = false };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
+    private readonly GroupBox _createOptionsGroup = new() { Dock = DockStyle.Top, Text = "Engine Create Options", AutoSize = true };
+    private readonly NumericUpDown _maxSampleDataBytesUpDown = new() {
+        Width = 150,
+        Minimum = 0,
+        Maximum = decimal.MaxValue,
+        Increment = 1024 * 1024,
+        ThousandsSeparator = true,
+    };
+    private readonly NumericUpDown _maxSf2PdtaEntriesUpDown = new() {
+        Width = 150,
+        Minimum = 0,
+        Maximum = uint.MaxValue,
+        ThousandsSeparator = true,
+    };
+    private readonly NumericUpDown _maxDlsPoolTableEntriesUpDown = new() {
+        Width = 150,
+        Minimum = 0,
+        Maximum = uint.MaxValue,
+        ThousandsSeparator = true,
+    };
+    private readonly CheckBox _sf2ZeroLengthLoopRetriggerCheckBox = new() {
+        AutoSize = true,
+        Text = "SF2 zero-length loop retrigger",
+    };
+    private readonly CheckBox _enableSf2SamplePitchCorrectionCheckBox = new() {
+        AutoSize = true,
+        Text = "Enable SF2 sample pitch correction",
+    };
+    private readonly CheckBox _multiplySf2MidiEffectsSendsCheckBox = new() {
+        AutoSize = true,
+        Text = "Multiply SF2 MIDI effects sends",
+    };
     private readonly DataGridView _channelGrid = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
     private readonly BindingList<ChannelRow> _channels = new();
@@ -68,9 +100,10 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             Padding = new Padding(12),
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
@@ -104,14 +137,61 @@ public sealed class MainForm : Form
         controlPanel.Controls.Add(new Label { AutoSize = true, Width = 20 });
         controlPanel.Controls.Add(_statusLabel);
 
+        ConfigureCreateOptionsPanel();
         ConfigureGrid();
 
         root.Controls.Add(filePanel, 0, 0);
         root.Controls.Add(controlPanel, 0, 1);
-        root.Controls.Add(_channelGrid, 0, 2);
-        root.Controls.Add(_keyboardLabel, 0, 3);
-        root.Controls.Add(_keyboard, 0, 4);
+        root.Controls.Add(_createOptionsGroup, 0, 2);
+        root.Controls.Add(_channelGrid, 0, 3);
+        root.Controls.Add(_keyboardLabel, 0, 4);
+        root.Controls.Add(_keyboard, 0, 5);
         Controls.Add(root);
+    }
+
+    private void ConfigureCreateOptionsPanel()
+    {
+        var layout = new TableLayoutPanel {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            ColumnCount = 4,
+            RowCount = 4,
+            Padding = new Padding(8),
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        layout.Controls.Add(new Label { AutoSize = true, Text = "Max sample bytes", Anchor = AnchorStyles.Left }, 0, 0);
+        layout.Controls.Add(_maxSampleDataBytesUpDown, 1, 0);
+        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 0);
+
+        layout.Controls.Add(new Label { AutoSize = true, Text = "Max SF2 pdta entries", Anchor = AnchorStyles.Left }, 0, 1);
+        layout.Controls.Add(_maxSf2PdtaEntriesUpDown, 1, 1);
+        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 1);
+
+        layout.Controls.Add(new Label { AutoSize = true, Text = "Max DLS pool entries", Anchor = AnchorStyles.Left }, 0, 2);
+        layout.Controls.Add(_maxDlsPoolTableEntriesUpDown, 1, 2);
+        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 2);
+
+        var flagsPanel = new FlowLayoutPanel {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 6, 0, 0),
+        };
+        flagsPanel.Controls.Add(_sf2ZeroLengthLoopRetriggerCheckBox);
+        flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
+        flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
+
+        layout.Controls.Add(new Label { AutoSize = true, Text = "Compatibility", Anchor = AnchorStyles.Left }, 0, 3);
+        layout.Controls.Add(flagsPanel, 1, 3);
+        layout.SetColumnSpan(flagsPanel, 3);
+
+        _createOptionsGroup.Controls.Add(layout);
+        UpdateCreateOptionsEnabledState();
     }
 
     private void ConfigureGrid()
@@ -218,13 +298,14 @@ public sealed class MainForm : Form
         }
 
         try {
-            var player = new WaveOutPlayer(_midiPathTextBox.Text, _soundFontPathTextBox.Text);
+            var player = new WaveOutPlayer(_midiPathTextBox.Text, _soundFontPathTextBox.Text, CreatePlayerOptions());
             player.PlaybackStopped += OnPlaybackStopped;
             _player = player;
             ApplyMasksToPlayer();
             _playButton.Enabled = false;
             _stopButton.Enabled = true;
             _statusLabel.Text = "Playing";
+            UpdateCreateOptionsEnabledState();
             await player.StartAsync();
         } catch (Exception ex) {
             StopPlayback();
@@ -238,6 +319,7 @@ public sealed class MainForm : Form
             _playButton.Enabled = true;
             _stopButton.Enabled = false;
             _statusLabel.Text = "Idle";
+            UpdateCreateOptionsEnabledState();
             return;
         }
         var player = _player;
@@ -248,6 +330,7 @@ public sealed class MainForm : Form
         _playButton.Enabled = true;
         _stopButton.Enabled = false;
         _statusLabel.Text = playbackException is null ? "Stopped" : "Error";
+        UpdateCreateOptionsEnabledState();
         RefreshUiState();
         if (playbackException is not null && !IsDisposed) {
             MessageBox.Show(this, playbackException.Message, "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -346,6 +429,42 @@ public sealed class MainForm : Form
         }
     }
 
+    private XArkMidiEngine.CreateOptions CreatePlayerOptions()
+    {
+        var options = XArkMidiEngine.CreateOptions.Default();
+        options.MaxSampleDataBytes = DecimalToUInt64(_maxSampleDataBytesUpDown.Value);
+        options.MaxSf2PdtaEntries = DecimalToUInt32(_maxSf2PdtaEntriesUpDown.Value);
+        options.MaxDlsPoolTableEntries = DecimalToUInt32(_maxDlsPoolTableEntriesUpDown.Value);
+
+        XArkMidiEngine.CompatibilityFlags flags = XArkMidiEngine.CompatibilityFlags.None;
+        if (_sf2ZeroLengthLoopRetriggerCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.Sf2ZeroLengthLoopRetrigger;
+        }
+        if (_enableSf2SamplePitchCorrectionCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.EnableSf2SamplePitchCorrection;
+        }
+        if (_multiplySf2MidiEffectsSendsCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.MultiplySf2MidiEffectsSends;
+        }
+        options.CompatibilityFlags = flags;
+        return options;
+    }
+
+    private void UpdateCreateOptionsEnabledState()
+    {
+        _createOptionsGroup.Enabled = _player is null;
+    }
+
+    private static uint DecimalToUInt32(decimal value)
+    {
+        return decimal.ToUInt32(decimal.Truncate(value));
+    }
+
+    private static ulong DecimalToUInt64(decimal value)
+    {
+        return decimal.ToUInt64(decimal.Truncate(value));
+    }
+
     private static string ProgramNameFor(int channelIndex, int zeroBasedProgram)
     {
         if (channelIndex == 9) {
@@ -434,6 +553,7 @@ public sealed class WaveOutPlayer : IDisposable
 
     private readonly string _midiPath;
     private readonly string _soundFontPath;
+    private readonly XArkMidiEngine.CreateOptions _createOptions;
     private readonly List<WaveBuffer> _buffers = new();
     private readonly object _engineLock = new();
     private XArkMidiEngine.Engine? _engine;
@@ -447,10 +567,11 @@ public sealed class WaveOutPlayer : IDisposable
 
     public event EventHandler? PlaybackStopped;
 
-    public WaveOutPlayer(string midiPath, string soundFontPath)
+    public WaveOutPlayer(string midiPath, string soundFontPath, XArkMidiEngine.CreateOptions createOptions)
     {
         _midiPath = midiPath;
         _soundFontPath = soundFontPath;
+        _createOptions = createOptions;
     }
 
     public bool IsFinished => _engine?.IsFinished ?? true;
@@ -464,7 +585,7 @@ public sealed class WaveOutPlayer : IDisposable
         try {
             _engine = new XArkMidiEngine.Engine(_midiPath, _soundFontPath,
                 XArkMidiEngine.SoundBankKind.Sf2, SampleRate, NumChannels,
-                XArkMidiEngine.CreateOptions.Default());
+                _createOptions);
 
             var format = new WaveFormatEx {
                 wFormatTag = 1,
