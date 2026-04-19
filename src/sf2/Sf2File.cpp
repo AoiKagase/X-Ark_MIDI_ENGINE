@@ -10,7 +10,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <map>
+#include <tuple>
 namespace XArkMidi {
 
 // RIFF FourCC ヘルパー
@@ -25,6 +28,7 @@ namespace {
 
 constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcCc1 = 0x0081u;
+constexpr u16 kModSrcLink = 127u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
 // sfModTransOper と sfModSrcOper の curve type は別物。
 // sfModSrcOper の concave / convex / switch は DecodeModSourceValue() が処理し、
@@ -100,6 +104,10 @@ bool IsPlainVelocitySource(u16 oper) {
     return oper == kModSrcVelocity;
 }
 
+bool IsLinkModSource(u16 oper) {
+    return (oper & 0x7Fu) == kModSrcLink && (oper & 0x80u) == 0;
+}
+
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
     if (mod.sfModDestOper != GEN_InitialAttenuation || mod.sfModTransOper != kModTransformLinear) {
         return false;
@@ -129,13 +137,74 @@ bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
            mod.sfModTransOper == kModTransformLinear;
 }
 
-bool HasMatchingModulator(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                          bool (*predicate)(const SFModList&)) {
+struct ZoneModEntry {
+    SFModList mod{};
+    bool ignored = false;
+    std::vector<int> incomingLinks;
+};
+
+std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModList>& mods, int modStart, int modEnd) {
     const int modMax = static_cast<int>(mods.size());
     if (modStart < 0 || modStart > modMax) modStart = modMax;
+    if (modEnd < modStart) modEnd = modStart;
     if (modEnd > modMax) modEnd = modMax;
+
+    std::vector<ZoneModEntry> entries;
+    entries.reserve(modEnd - modStart);
+    std::map<std::tuple<u16, u16, u16>, int> duplicateMap;
+
     for (int i = modStart; i < modEnd; ++i) {
-        if (predicate(mods[i])) {
+        const SFModList& mod = mods[i];
+        const bool isTerminal =
+            mod.sfModSrcOper == 0 &&
+            mod.sfModDestOper == 0 &&
+            mod.modAmount == 0 &&
+            mod.sfModAmtSrcOper == 0 &&
+            mod.sfModTransOper == 0;
+        if (isTerminal) {
+            continue;
+        }
+
+        ZoneModEntry entry;
+        entry.mod = mod;
+        entry.ignored = IsLinkModSource(mod.sfModAmtSrcOper);
+        entries.push_back(entry);
+
+        const auto key = std::make_tuple(mod.sfModSrcOper, mod.sfModDestOper, mod.sfModAmtSrcOper);
+        auto it = duplicateMap.find(key);
+        if (it != duplicateMap.end()) {
+            entries[it->second].ignored = true;
+        }
+        duplicateMap[key] = static_cast<int>(entries.size()) - 1;
+    }
+
+    for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+        if (entries[i].ignored) {
+            continue;
+        }
+        const u16 dest = entries[i].mod.sfModDestOper;
+        if ((dest & 0x8000u) == 0) {
+            continue;
+        }
+        const int targetIndex = static_cast<int>(dest & 0x7FFFu);
+        if (targetIndex < 0 || targetIndex >= static_cast<int>(entries.size())) {
+            entries[i].ignored = true;
+            continue;
+        }
+        entries[targetIndex].incomingLinks.push_back(i);
+    }
+
+    return entries;
+}
+
+bool HasMatchingModulator(const std::vector<SFModList>& mods, int modStart, int modEnd,
+                          bool (*predicate)(const SFModList&)) {
+    const std::vector<ZoneModEntry> entries = BuildEffectiveZoneModEntries(mods, modStart, modEnd);
+
+    for (const auto& entry : entries) {
+        if (!entry.ignored &&
+            (entry.mod.sfModDestOper & 0x8000u) == 0 &&
+            predicate(entry.mod)) {
             return true;
         }
     }
@@ -229,6 +298,7 @@ bool IsSupportedModSourceOperDefinition(u16 oper) {
     case 13:
     case 14:
     case 16:
+    case 127:
         return true;
     default:
         return false;
@@ -1142,32 +1212,87 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
 
 bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
                               u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const {
-    const int modMax = static_cast<int>(mods.size());
-    if (modStart < 0 || modStart > modMax) modStart = modMax;
-    if (modEnd > modMax) modEnd = modMax;
     bool hasVelocityToAttenuationMod = false;
+    std::vector<ZoneModEntry> entries = BuildEffectiveZoneModEntries(mods, modStart, modEnd);
+    std::vector<int> state(entries.size(), 0);
+    std::vector<bool> cycle(entries.size(), false);
+    std::vector<double> output(entries.size(), 0.0);
 
-    for (int i = modStart; i < modEnd; ++i) {
-        const auto& mod = mods[i];
-        if (IsVelocityToInitialAttenuationMod(mod)) {
-            hasVelocityToAttenuationMod = true;
+    std::function<bool(int)> evalOutput = [&](int index) -> bool {
+        if (index < 0 || index >= static_cast<int>(entries.size()) || entries[index].ignored) {
+            return false;
         }
-        if (mod.sfModDestOper >= GEN_COUNT) continue;
-        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
+        if (state[index] == 2) {
+            return !cycle[index];
+        }
+        if (state[index] == 1) {
+            cycle[index] = true;
+            entries[index].ignored = true;
+            return false;
+        }
+
+        state[index] = 1;
+        const SFModList& mod = entries[index].mod;
 
         bool sourceSupported = false;
-        const double source = DecodeModSourceValue(mod.sfModSrcOper, key, velocity, ctx, sourceSupported);
-        if (!sourceSupported) continue;
+        double source = 0.0;
+        if (IsLinkModSource(mod.sfModSrcOper)) {
+            double linkedSum = 0.0;
+            bool hasLinkedInput = false;
+            for (int incoming : entries[index].incomingLinks) {
+                if (!evalOutput(incoming)) {
+                    continue;
+                }
+                hasLinkedInput = true;
+                linkedSum += output[incoming];
+            }
+            if (!hasLinkedInput || cycle[index]) {
+                entries[index].ignored = true;
+                state[index] = 2;
+                return false;
+            }
+            source = linkedSum;
+            sourceSupported = true;
+        } else {
+            source = DecodeModSourceValue(mod.sfModSrcOper, key, velocity, ctx, sourceSupported);
+            if (!sourceSupported) {
+                entries[index].ignored = true;
+                state[index] = 2;
+                return false;
+            }
+        }
+
         bool transformSupported = false;
         const double transformedSource = ApplyModSourceTransform(source, mod.sfModTransOper, transformSupported);
-        if (!transformSupported) continue;
+        if (!transformSupported) {
+            entries[index].ignored = true;
+            state[index] = 2;
+            return false;
+        }
 
         bool amountSupported = false;
         const double amountSource = DecodeModSourceValue(mod.sfModAmtSrcOper, key, velocity, ctx, amountSupported);
         const double amountScale = amountSupported ? amountSource : 1.0;
-        i32 delta = static_cast<i32>(std::lround(static_cast<double>(mod.modAmount) * transformedSource * amountScale));
-        if (delta == 0) continue;
+        output[index] = static_cast<double>(mod.modAmount) * transformedSource * amountScale;
+        state[index] = 2;
+        return !cycle[index];
+    };
 
+    for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+        const auto& mod = entries[i].mod;
+        if (entries[i].ignored) {
+            continue;
+        }
+        if (IsVelocityToInitialAttenuationMod(mod)) {
+            hasVelocityToAttenuationMod = true;
+        }
+        if ((mod.sfModDestOper & 0x8000u) != 0) continue;
+        if (mod.sfModDestOper >= GEN_COUNT) continue;
+        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
+        if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
+
+        const i32 delta = static_cast<i32>(std::lround(output[i]));
+        if (delta == 0) continue;
         ApplyModulatorDelta(zone, mod.sfModDestOper, delta);
     }
     return hasVelocityToAttenuationMod;
@@ -1192,7 +1317,8 @@ void Sf2File::ScanUnsupportedModulators() {
             const bool unsupportedSource = !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
             const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
             const bool unsupportedDestination =
-                (mod.sfModDestOper >= GEN_COUNT) || !IsSupportedModulatorDestination(mod.sfModDestOper);
+                ((mod.sfModDestOper & 0x8000u) == 0) &&
+                ((mod.sfModDestOper >= GEN_COUNT) || !IsSupportedModulatorDestination(mod.sfModDestOper));
             if (unsupportedTransform) {
                 ++unsupportedModulatorTransformCount_;
             }

@@ -466,6 +466,37 @@ namespace {
             "Preset-level sample address offsets should be ignored");
     }
 
+    void TestDuplicateModulatorsUseLastDefinition() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(2, GEN_Pan, 100, 0, 0));
+        config.instMods.push_back(MakeMod(2, GEN_Pan, 300, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_Pan] == 300,
+            "Duplicate modulators should ignore the earlier definition");
+    }
+
+    void TestLinkedModulatorsFeedTargetSource() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0, static_cast<u16>(0x8000u | 2u), 100, 0, 0));
+        config.instMods.push_back(MakeMod(2, static_cast<u16>(0x8000u | 2u), 200, 0, 0));
+        config.instMods.push_back(MakeMod(127, GEN_Pan, 1, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_Pan] == 300,
+            "Linked modulators should sum into the target modulator source");
+    }
+
     void TestAbsoluteTransformSupport() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(static_cast<u16>(14 | 0x0200), GEN_InitialAttenuation, 100, 0, 2));
@@ -818,6 +849,10 @@ int main() {
     TestInstrumentZoneTerminalSampleRule();
     g_currentTestName = "TestPresetLevelIllegalSampleGeneratorsIgnored";
     TestPresetLevelIllegalSampleGeneratorsIgnored();
+    g_currentTestName = "TestDuplicateModulatorsUseLastDefinition";
+    TestDuplicateModulatorsUseLastDefinition();
+    g_currentTestName = "TestLinkedModulatorsFeedTargetSource";
+    TestLinkedModulatorsFeedTargetSource();
     g_currentTestName = "TestUnsupportedTransformReporting";
     TestUnsupportedTransformReporting();
     g_currentTestName = "TestEffectsSendMixPolicy";
