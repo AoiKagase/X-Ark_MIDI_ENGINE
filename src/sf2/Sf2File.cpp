@@ -26,22 +26,11 @@ namespace {
 constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcCc1 = 0x0081u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
-// ---------------------------------------------------------------------------
-// sfModTransOper の対応表（SF2 spec §8.2.4）
-//
-//   0 = Linear   : SF2 2.01 公式定義。出力をそのまま使用する。
-//   1 = Concave  : SF2 拡張。Source curve の concave と同一の sin カーブ変換。
-//   2 = Absolute : SF2 2.01 公式定義。出力の絶対値を取る。
-//   3 = Switch   : SF2 拡張。Source curve の switch と同一の閾値変換。
-//
-// SF2 2.01 仕様書では 0/2 のみが定義されているが、
-// FluidSynth 等の主要実装は 0〜3 をすべて受け付けるため、
-// 実用上の互換性のために 1/3 も対応する。
-// ---------------------------------------------------------------------------
-constexpr u16 kModTransformLinear   = 0u;
-constexpr u16 kModTransformConcave  = 1u;
+// sfModTransOper と sfModSrcOper の curve type は別物。
+// sfModSrcOper の concave / convex / switch は DecodeModSourceValue() が処理し、
+// sfModTransOper は SF2 2.01 で定義されている Linear / Absolute のみ扱う。
+constexpr u16 kModTransformLinear = 0u;
 constexpr u16 kModTransformAbsolute = 2u;
-constexpr u16 kModTransformSwitch   = 3u;
 
 inline u8 ResolveForcedKey(u8 key, const ResolvedZone& zone) {
     const i32 forcedKey = zone.generators[GEN_Keynum];
@@ -215,21 +204,16 @@ bool IsSupportedModSourceOperDefinition(u16 oper) {
 }
 
 bool IsSupportedModTransform(u16 oper) {
-    // 0(Linear), 1(Concave), 2(Absolute), 3(Switch) をすべて対応とみなす
-    return oper <= 3u;
+    return oper == kModTransformLinear || oper == kModTransformAbsolute;
 }
 
 double ApplyModSourceTransform(double value, u16 oper, bool& supported) {
     supported = true;
     switch (oper) {
-    case kModTransformLinear:   // 0: そのまま
+    case kModTransformLinear:
         return value;
-    case kModTransformConcave:  // 1: sin カーブ（DecodeModSourceValue の type=1 と同一）
-        return std::sin(value * (3.14159265358979323846 / 2.0));
-    case kModTransformAbsolute: // 2: 絶対値（SF2 2.01 公式）
+    case kModTransformAbsolute:
         return std::fabs(value);
-    case kModTransformSwitch:   // 3: 0.5 閾値スイッチ（DecodeModSourceValue の type=3 と同一）
-        return (value >= 0.5) ? 1.0 : 0.0;
     default:
         supported = false;
         return 0.0;
@@ -425,6 +409,7 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     errorMsg_.clear();
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
+    hasIgnoredSm24_ = false;
 
     try {
         BinaryReader r(data, size);

@@ -2,6 +2,7 @@
 #include "../src/sf2/Sf2Types.h"
 #include "../src/synth/Interpolator.h"
 #include "../src/synth/Voice.h"
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -397,73 +398,30 @@ namespace {
         Require(zone.generators[GEN_ModEnvToPitch] == 600,
             "Pitch wheel sensitivity amount source should scale pitch bend modulation");
     }
-    // ---------------------------------------------------------------------------
-    // sfModTransOper の Concave / Switch が実際に適用されることを確認
-    // ---------------------------------------------------------------------------
-    void TestModTransformConcaveAndSwitch() {
-        // ---- Concave transform (sfModTransOper=1) ----
+    void TestSourceCurvesSupport() {
+        const u16 velocityConcave = static_cast<u16>(2u | (1u << 10));
+        const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
+        const u16 velocitySwitch = static_cast<u16>(2u | (3u << 10));
+
         {
             MinimalSf2Config config;
-            // source: velocity (index=2, unipolar, linear curve = type 0)
-                // dest  : GEN_Pan, amount=500
-                // transform: 1 = Concave → sin(source * π/2)
-                // velocity=65535 → source=1.0 → sin(π/2)=1.0 → delta=500 → pan=500
-            config.instMods.push_back(MakeMod(
-                /*src=*/2,
-                /*dest=*/GEN_Pan,
-                /*amount=*/500,
-                /*amtSrc=*/0,
-                /*transform=*/1));
+            config.instMods.push_back(MakeMod(velocityConcave, GEN_Pan, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocityConvex, GEN_InitialAttenuation, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocitySwitch, GEN_ModEnvToPitch, 500, 0, 0));
+
             const std::vector<u8> bytes = BuildMinimalSf2(config);
             Sf2File sf2;
             Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
-            // Concave transform は未対応扱いにならないはず
-            Require(sf2.UnsupportedModulatorTransformCount() == 0,
-                "Concave sfModTransOper(1) must not be counted as unsupported");
 
             std::vector<ResolvedZone> zones;
-            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-            Require(zone.generators[GEN_Pan] == 500,
-                "Concave sfModTransOper: velocity=max should drive pan to +500");
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, nullptr, zones);
+            Require(zone.generators[GEN_Pan] == 354,
+                "Concave source curve should map mid velocity to sin(pi/4)");
+            Require(zone.generators[GEN_InitialAttenuation] == 146,
+                "Convex source curve should map mid velocity to 1-cos(pi/4)");
+            Require(zone.generators[GEN_ModEnvToPitch] == 500,
+                "Switch source curve should step to 1.0 at mid velocity");
         }
-
-        // ---- Switch transform (sfModTransOper=3) ----
-        {
-            MinimalSf2Config config;
-            // source: velocity (index=2, unipolar) >= 0.5 → switch output = 1.0
-                // velocity=65535 → source=1.0 >= 0.5 → 1.0 → delta=200
-            config.instMods.push_back(MakeMod(
-                /*src=*/2,
-                /*dest=*/GEN_InitialAttenuation,
-                /*amount=*/200,
-                /*amtSrc=*/0,
-                /*transform=*/3));
-            const std::vector<u8> bytes = BuildMinimalSf2(config);
-            Sf2File sf2;
-            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
-            Require(sf2.UnsupportedModulatorTransformCount() == 0,
-                "Switch sfModTransOper(3) must not be counted as unsupported");
-
-            // velocity=65535 での switch は 1.0 → delta=200 が加算される
-            // デフォルトの velocity→attenuation も加算されるが、
-            // ここでは「switch が適用されて attenuation が増加していること」を確認する
-            std::vector<ResolvedZone> zones;
-            const ResolvedZone& zone60 = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-            const i32 attenWithSwitch = zone60.generators[GEN_InitialAttenuation];
-
-            // switch off のケース: velocity=0 → source=0.0 < 0.5 → switch output=0.0 → delta=0
-            // ただし default velocity→attenuation は velocity=0 で 960 になる
-            zones.clear();
-            Require(sf2.FindZones(0, 0, 60, 1, zones, nullptr), "FindZones at low velocity should succeed");
-            Require(zones.size() == 1, "Expected one zone at low velocity");
-            const i32 attenWithSwitchOff = zones[0].generators[GEN_InitialAttenuation];
-
-            // velocity=65535 の方が switch delta=200 が加算されているはず
-            // (default attenuation は vel=65535 の方が小さいので、switch 効果が 200 以上差として現れる)
-            Require(attenWithSwitch < attenWithSwitchOff,
-                "Switch sfModTransOper: high velocity should add positive attenuation delta");
-        }
-
     }
 
     // ---------------------------------------------------------------------------
@@ -511,46 +469,37 @@ namespace {
     // sm24 チャンクを含む SF2 で HasIgnoredSm24() が true になることを確認
     // ---------------------------------------------------------------------------
     void TestSm24Detection() {
-        // 最小 SF2 に sm24 チャンクを追加したバイナリを手作りする
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
+        const std::vector<u8> original = bytes;
 
-        // sfbk の sdta LIST チャンクを探して sm24 サブチャンクを挿入する
-        // 簡易版: smpl の直後に sm24(8バイトのダミー) を差し込む
-        // BuildMinimalSf2 が生成した sdta LIST の末尾に追記する形式で再ビルドする
-        // ここでは LIST チャンク再構築は複雑なので、
-        // sm24 を含む最小バイナリを直接組み立てる
+        const std::array<u8, 8> sm24Chunk = { 's', 'm', '2', '4', 0, 0, 0, 0 };
+        auto insertSm24 = [&](std::vector<u8>& file) {
+            const size_t sdtaPos = file.size() - 4;
+            file.insert(file.begin() + static_cast<std::ptrdiff_t>(sdtaPos), sm24Chunk.begin(), sm24Chunk.end());
+            auto addLE32 = [&](size_t offset, u32 delta) {
+                const u32 value =
+                    static_cast<u32>(file[offset]) |
+                    (static_cast<u32>(file[offset + 1]) << 8) |
+                    (static_cast<u32>(file[offset + 2]) << 16) |
+                    (static_cast<u32>(file[offset + 3]) << 24);
+                const u32 updated = value + delta;
+                file[offset] = static_cast<u8>(updated & 0xFFu);
+                file[offset + 1] = static_cast<u8>((updated >> 8) & 0xFFu);
+                file[offset + 2] = static_cast<u8>((updated >> 16) & 0xFFu);
+                file[offset + 3] = static_cast<u8>((updated >> 24) & 0xFFu);
+            };
+            addLE32(4, static_cast<u32>(sm24Chunk.size()));
+            addLE32(28, static_cast<u32>(sm24Chunk.size()));
+        };
+        insertSm24(bytes);
 
-        // smpl チャンク(64サンプル) + sm24 チャンク(64バイトのゼロ)を持つ sdta を作成
-        auto AppendU16LE_l = [](std::vector<u8>& v, u16 x) {
-            v.push_back(x & 0xFFu); v.push_back((x >> 8) & 0xFFu); };
-        auto AppendU32LE_l = [](std::vector<u8>& v, u32 x) {
-            v.push_back(x & 0xFFu); v.push_back((x >> 8) & 0xFFu);
-            v.push_back((x >> 16) & 0xFFu); v.push_back((x >> 24) & 0xFFu); };
-        auto AppendFourCC = [](std::vector<u8>& v, const char* s) {
-            v.push_back(s[0]); v.push_back(s[1]); v.push_back(s[2]); v.push_back(s[3]); };
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 with sm24 chunk should load");
+        Require(sf2.HasIgnoredSm24(), "HasIgnoredSm24 should be true when sm24 chunk is present");
 
-        std::vector<u8> smplData(128, 0);  // 64 * 2 bytes of silence
-        std::vector<u8> sm24Data(64, 0);   // 64 bytes (lower 8-bit extension)
-
-        std::vector<u8> sdtaPayload;
-        AppendFourCC(sdtaPayload, "smpl");
-        AppendU32LE_l(sdtaPayload, static_cast<u32>(smplData.size()));
-        sdtaPayload.insert(sdtaPayload.end(), smplData.begin(), smplData.end());
-        AppendFourCC(sdtaPayload, "sm24");
-        AppendU32LE_l(sdtaPayload, static_cast<u32>(sm24Data.size()));
-        sdtaPayload.insert(sdtaPayload.end(), sm24Data.begin(), sm24Data.end());
-
-        // この sdtaPayload を使って BuildMinimalSf2 相当を再構築するのは煩雑なため、
-        // 既存の bytes の sdta LIST を上書きするのではなく、
-        // Sf2File が sm24 を検出・無視・フラグ立てする仕組みのみをテストする。
-        // → 実際の SF2 ファイルで HasIgnoredSm24() を使う際の統合テストは
-        //   実 SF2 音源で行うことを推奨。ここではフラグの初期値のみ確認する。
-        Sf2File sf2_no_sm24;
-        Require(sf2_no_sm24.LoadFromMemory(bytes.data(), bytes.size()), "Base SF2 load failed");
-        Require(!sf2_no_sm24.HasIgnoredSm24(),
-            "HasIgnoredSm24 should be false when no sm24 chunk is present");
-
+        Require(sf2.LoadFromMemory(original.data(), original.size()), "Base SF2 reload failed");
+        Require(!sf2.HasIgnoredSm24(), "HasIgnoredSm24 should reset on subsequent loads");
     }
 
 } // namespace
@@ -563,7 +512,7 @@ int main() {
     TestEnvelopePitchAndKeynumScaling();
     TestPressureSources();
     TestPitchWheelSensitivityAmountSource();
-    TestModTransformConcaveAndSwitch();
+    TestSourceCurvesSupport();
     TestVelocityZoneBoundary();
     TestSm24Detection();
     std::printf("sf2_compliance: all tests passed\n");
