@@ -665,8 +665,6 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             }
         }
     }
-    noteQueue_[channel][key].clear();
-
     // ExclusiveClass が非ゼロなら同クラスのボイスを停止
     if (exclusiveClass != 0)
         KillExclusiveClass(channel, exclusiveClass);
