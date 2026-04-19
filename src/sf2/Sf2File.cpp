@@ -76,6 +76,26 @@ bool ValidateChunkSizeMultiple(u32 size, u32 recordSize, const char* chunkName, 
     return true;
 }
 
+bool IsIllegalPresetSampleGenerator(u16 oper) {
+    switch (oper) {
+    case GEN_StartAddrsOffset:
+    case GEN_EndAddrsOffset:
+    case GEN_StartloopAddrsOffset:
+    case GEN_EndloopAddrsOffset:
+    case GEN_StartAddrsCoarseOffset:
+    case GEN_EndAddrsCoarseOffset:
+    case GEN_StartloopAddrsCoarse:
+    case GEN_EndloopAddrsCoarse:
+    case GEN_SampleID:
+    case GEN_SampleModes:
+    case GEN_ExclusiveClass:
+    case GEN_OverridingRootKey:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool IsPlainVelocitySource(u16 oper) {
     return oper == kModSrcVelocity;
 }
@@ -843,6 +863,88 @@ bool Sf2File::ValidateSampleHeaders() {
     return true;
 }
 
+bool Sf2File::AnalyzePresetBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
+                               u8& outVelLo, u8& outVelHi, int& outInstrumentIdx) const {
+    outIsGlobal = false;
+    outKeyLo = 0;
+    outKeyHi = 127;
+    outVelLo = 0;
+    outVelHi = 127;
+    outInstrumentIdx = -1;
+
+    if (bagIdx < 0 || bagIdx + 1 >= static_cast<int>(presetBags_.size())) {
+        return false;
+    }
+
+    int genStart = presetBags_[bagIdx].wGenNdx;
+    int genEnd = presetBags_[bagIdx + 1].wGenNdx;
+    const int genMax = static_cast<int>(presetGens_.size());
+    if (genStart < 0 || genStart > genMax) genStart = genMax;
+    if (genEnd < genStart) genEnd = genStart;
+    if (genEnd > genMax) genEnd = genMax;
+
+    bool hasInstrument = false;
+    for (int g = genStart; g < genEnd; ++g) {
+        const u16 oper = presetGens_[g].sfGenOper;
+        if (oper == GEN_Instrument) {
+            outInstrumentIdx = presetGens_[g].genAmount.wAmount;
+            hasInstrument = true;
+            break;
+        }
+        if (oper == GEN_KeyRange) {
+            outKeyLo = presetGens_[g].genAmount.ranges.lo;
+            outKeyHi = presetGens_[g].genAmount.ranges.hi;
+        } else if (oper == GEN_VelRange) {
+            outVelLo = presetGens_[g].genAmount.ranges.lo;
+            outVelHi = presetGens_[g].genAmount.ranges.hi;
+        }
+    }
+
+    outIsGlobal = !hasInstrument;
+    return true;
+}
+
+bool Sf2File::AnalyzeInstrumentBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
+                                   u8& outVelLo, u8& outVelHi, int& outSampleIdx) const {
+    outIsGlobal = false;
+    outKeyLo = 0;
+    outKeyHi = 127;
+    outVelLo = 0;
+    outVelHi = 127;
+    outSampleIdx = -1;
+
+    if (bagIdx < 0 || bagIdx + 1 >= static_cast<int>(instBags_.size())) {
+        return false;
+    }
+
+    int genStart = instBags_[bagIdx].wInstGenNdx;
+    int genEnd = instBags_[bagIdx + 1].wInstGenNdx;
+    const int genMax = static_cast<int>(instGens_.size());
+    if (genStart < 0 || genStart > genMax) genStart = genMax;
+    if (genEnd < genStart) genEnd = genStart;
+    if (genEnd > genMax) genEnd = genMax;
+
+    bool hasSampleId = false;
+    for (int g = genStart; g < genEnd; ++g) {
+        const u16 oper = instGens_[g].sfGenOper;
+        if (oper == GEN_SampleID) {
+            outSampleIdx = instGens_[g].genAmount.wAmount;
+            hasSampleId = true;
+            break;
+        }
+        if (oper == GEN_KeyRange) {
+            outKeyLo = instGens_[g].genAmount.ranges.lo;
+            outKeyHi = instGens_[g].genAmount.ranges.hi;
+        } else if (oper == GEN_VelRange) {
+            outVelLo = instGens_[g].genAmount.ranges.lo;
+            outVelHi = instGens_[g].genAmount.ranges.hi;
+        }
+    }
+
+    outIsGlobal = !hasSampleId;
+    return true;
+}
+
 void Sf2File::ComputeSampleLoudnessGains() {
     // SF2仕様にはサンプル間ラウドネス正規化は存在しないため何もしない。
     // normCompensation_ = 1.0f, 各 loudnessGain = 1.0f のまま（デフォルト値）。
@@ -875,7 +977,9 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         if (genEnd   > pgenMax) genEnd = pgenMax;
         for (int g = genStart; g < genEnd; ++g) {
             u16 oper = presetGens_[g].sfGenOper;
+            if (oper == GEN_Instrument) break;
             if (oper >= GEN_COUNT) continue;
+            if (IsIllegalPresetSampleGenerator(oper)) continue;
             if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
                 layer[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.wAmount));
             } else {
@@ -895,6 +999,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         if (genEnd   > igenMax) genEnd = igenMax;
         for (int g = genStart; g < genEnd; ++g) {
             u16 oper = instGens_[g].sfGenOper;
+            if (oper == GEN_SampleID) break;
             if (oper >= GEN_COUNT) continue;
             if (oper == GEN_SampleID || oper == GEN_SampleModes ||
                 oper == GEN_KeyRange || oper == GEN_VelRange) {
@@ -1146,43 +1251,22 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
         if (pbagEnd   > pbagMax) pbagEnd = pbagMax;
 
         int globalPresetBag = -1;
-        if (pbagStart < pbagEnd && pbagStart + 1 < pbagMax) {
-            int gs = presetBags_[pbagStart].wGenNdx;
-            int ge = presetBags_[pbagStart + 1].wGenNdx;
-            bool hasInstrument = false;
-            for (int pg = gs; pg < ge && pg < static_cast<int>(presetGens_.size()); ++pg) {
-                if (presetGens_[pg].sfGenOper == GEN_Instrument) { hasInstrument = true; break; }
+        if (pbagStart < pbagEnd) {
+            bool isGlobal = false;
+            u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+            int instrumentIdx = -1;
+            if (AnalyzePresetBag(pbagStart, isGlobal, keyLo, keyHi, velLo, velHi, instrumentIdx) && isGlobal) {
+                globalPresetBag = pbagStart;
             }
-            if (!hasInstrument) globalPresetBag = pbagStart;
         }
 
         for (int pb = pbagStart; pb < pbagEnd; ++pb) {
-            // プリセットゾーンのキーレンジ・ベロシティレンジを確認
-            int pgenStart = presetBags_[pb].wGenNdx;
-            int pgenEnd   = (pb + 1 < static_cast<int>(presetBags_.size()))
-                            ? presetBags_[pb + 1].wGenNdx : static_cast<int>(presetGens_.size());
-
-            // pgen 境界チェック
-            int pgenMax = static_cast<int>(presetGens_.size());
-            if (pgenStart < 0 || pgenStart > pgenMax) pgenStart = pgenMax;
-            if (pgenEnd   > pgenMax) pgenEnd = pgenMax;
-
+            bool presetIsGlobal = false;
             u8 pkeyLo = 0, pkeyHi = 127, pvelLo = 0, pvelHi = 127;
             int instrumentIdx = -1;
-
-            for (int pg = pgenStart; pg < pgenEnd; ++pg) {
-                u16 oper = presetGens_[pg].sfGenOper;
-                if (oper == GEN_KeyRange) {
-                    pkeyLo = presetGens_[pg].genAmount.ranges.lo;
-                    pkeyHi = presetGens_[pg].genAmount.ranges.hi;
-                }
-                else if (oper == GEN_VelRange) {
-                    pvelLo = presetGens_[pg].genAmount.ranges.lo;
-                    pvelHi = presetGens_[pg].genAmount.ranges.hi;
-                }
-                else if (oper == GEN_Instrument) {
-                    instrumentIdx = presetGens_[pg].genAmount.wAmount;
-                }
+            if (!AnalyzePresetBag(pb, presetIsGlobal, pkeyLo, pkeyHi, pvelLo, pvelHi, instrumentIdx) ||
+                presetIsGlobal) {
+                continue;
             }
 
             if (key < pkeyLo || key > pkeyHi) continue;
@@ -1200,42 +1284,22 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
 
             // グローバルゾーン検出: SampleID を持たない最初のバッグ（SF2 spec 7.7）
             int globalInstBag = -1;
-            if (ibagStart < ibagEnd && ibagStart + 1 < ibagMax) {
-                int gs = instBags_[ibagStart].wInstGenNdx;
-                int ge = instBags_[ibagStart + 1].wInstGenNdx;
-                bool hasSampleId = false;
-                for (int ig = gs; ig < ge && ig < static_cast<int>(instGens_.size()); ++ig) {
-                    if (instGens_[ig].sfGenOper == GEN_SampleID) { hasSampleId = true; break; }
+            if (ibagStart < ibagEnd) {
+                bool isGlobal = false;
+                u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+                int sampleIdx = -1;
+                if (AnalyzeInstrumentBag(ibagStart, isGlobal, keyLo, keyHi, velLo, velHi, sampleIdx) && isGlobal) {
+                    globalInstBag = ibagStart;
                 }
-                if (!hasSampleId) globalInstBag = ibagStart;
             }
 
             for (int ib = ibagStart; ib < ibagEnd; ++ib) {
-                int igenStart = instBags_[ib].wInstGenNdx;
-                int igenEnd   = (ib + 1 < static_cast<int>(instBags_.size()))
-                                ? instBags_[ib + 1].wInstGenNdx : static_cast<int>(instGens_.size());
-
-                // igen 境界チェック
-                int igenMax = static_cast<int>(instGens_.size());
-                if (igenStart < 0 || igenStart > igenMax) igenStart = igenMax;
-                if (igenEnd   > igenMax) igenEnd = igenMax;
-
+                bool instIsGlobal = false;
                 u8  ikeyLo = 0, ikeyHi = 127, ivelLo = 0, ivelHi = 127;
                 int sampleIdx = -1;
-
-                for (int ig = igenStart; ig < igenEnd; ++ig) {
-                    u16 oper = instGens_[ig].sfGenOper;
-                    if (oper == GEN_KeyRange) {
-                        ikeyLo = instGens_[ig].genAmount.ranges.lo;
-                        ikeyHi = instGens_[ig].genAmount.ranges.hi;
-                    }
-                    else if (oper == GEN_VelRange) {
-                        ivelLo = instGens_[ig].genAmount.ranges.lo;
-                        ivelHi = instGens_[ig].genAmount.ranges.hi;
-                    }
-                    else if (oper == GEN_SampleID) {
-                        sampleIdx = instGens_[ig].genAmount.wAmount;
-                    }
+                if (!AnalyzeInstrumentBag(ib, instIsGlobal, ikeyLo, ikeyHi, ivelLo, ivelHi, sampleIdx) ||
+                    instIsGlobal) {
+                    continue;
                 }
 
                 if (key < ikeyLo || key > ikeyHi) continue;
@@ -1277,18 +1341,27 @@ bool Sf2File::GetPresetBagIndices(u16 bank, u8 program, int& outGlobalBagIdx, in
     if (pbagStart < 0 || pbagStart >= pbagMax) return false;
     if (pbagEnd > pbagMax) pbagEnd = pbagMax;
 
-    if (pbagStart < pbagEnd && pbagStart + 1 < pbagMax) {
-        int gs = presetBags_[pbagStart].wGenNdx;
-        int ge = presetBags_[pbagStart + 1].wGenNdx;
-        bool hasInstrument = false;
-        for (int pg = gs; pg < ge && pg < static_cast<int>(presetGens_.size()); ++pg) {
-            if (presetGens_[pg].sfGenOper == GEN_Instrument) { hasInstrument = true; break; }
+    if (pbagStart < pbagEnd) {
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int instrumentIdx = -1;
+        if (AnalyzePresetBag(pbagStart, isGlobal, keyLo, keyHi, velLo, velHi, instrumentIdx) && isGlobal) {
+            outGlobalBagIdx = pbagStart;
         }
-        if (!hasInstrument) outGlobalBagIdx = pbagStart;
     }
 
-    outLocalBagIdx = (outGlobalBagIdx == pbagStart) ? (pbagStart + 1) : pbagStart;
-    return outLocalBagIdx >= pbagStart && outLocalBagIdx < pbagEnd;
+    const int localStart = (outGlobalBagIdx == pbagStart) ? (pbagStart + 1) : pbagStart;
+    for (int pb = localStart; pb < pbagEnd; ++pb) {
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int instrumentIdx = -1;
+        if (!AnalyzePresetBag(pb, isGlobal, keyLo, keyHi, velLo, velHi, instrumentIdx) || isGlobal) {
+            continue;
+        }
+        outLocalBagIdx = pb;
+        return true;
+    }
+    return false;
 }
 
 bool Sf2File::GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& outGlobalBagIdx) const {
@@ -1305,20 +1378,24 @@ bool Sf2File::GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& o
     if (ibagStart < 0 || ibagStart >= ibagMax) return false;
     if (ibagEnd > ibagMax) ibagEnd = ibagMax;
 
-    if (ibagStart < ibagEnd && ibagStart + 1 < ibagMax) {
-        int gs = instBags_[ibagStart].wInstGenNdx;
-        int ge = instBags_[ibagStart + 1].wInstGenNdx;
-        bool hasSampleId = false;
-        for (int ig = gs; ig < ge && ig < static_cast<int>(instGens_.size()); ++ig) {
-            if (instGens_[ig].sfGenOper == GEN_SampleID) { hasSampleId = true; break; }
+    if (ibagStart < ibagEnd) {
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int sampleIdx = -1;
+        if (AnalyzeInstrumentBag(ibagStart, isGlobal, keyLo, keyHi, velLo, velHi, sampleIdx) && isGlobal) {
+            outGlobalBagIdx = ibagStart;
         }
-        if (!hasSampleId) outGlobalBagIdx = ibagStart;
     }
 
     if (localBagIdx < ibagStart || localBagIdx >= ibagEnd) {
         return false;
     }
-    return localBagIdx != outGlobalBagIdx;
+    bool isGlobal = false;
+    u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+    int sampleIdx = -1;
+    return AnalyzeInstrumentBag(localBagIdx, isGlobal, keyLo, keyHi, velLo, velHi, sampleIdx) &&
+           !isGlobal &&
+           localBagIdx != outGlobalBagIdx;
 }
 
 void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]) const {
@@ -1333,7 +1410,9 @@ void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]
 
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = presetGens_[g].sfGenOper;
+        if (oper == GEN_Instrument) break;
         if (oper >= GEN_COUNT) continue;
+        if (IsIllegalPresetSampleGenerator(oper)) continue;
         outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.shAmount));
     }
 }
@@ -1354,7 +1433,9 @@ void Sf2File::GetPresetGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const 
 
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = presetGens_[g].sfGenOper;
+        if (oper == GEN_Instrument) break;
         if (oper >= GEN_COUNT) continue;
+        if (IsIllegalPresetSampleGenerator(oper)) continue;
         if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
             outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.wAmount));
         } else {
@@ -1379,6 +1460,7 @@ void Sf2File::GetInstrumentGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) co
 
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = instGens_[g].sfGenOper;
+        if (oper == GEN_SampleID) break;
         if (oper >= GEN_COUNT) continue;
         if (oper == GEN_SampleID || oper == GEN_SampleModes || oper == GEN_KeyRange || oper == GEN_VelRange) {
             outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(instGens_[g].genAmount.wAmount));
@@ -1408,14 +1490,6 @@ bool Sf2File::GetInstrumentLocalZones(int instrumentIdx, std::vector<ZoneInfo>& 
     if (ibagEnd > ibagMax) ibagEnd = ibagMax;
 
     for (int ib = ibagStart; ib < ibagEnd; ++ib) {
-        int igenStart = instBags_[ib].wInstGenNdx;
-        int igenEnd   = (ib + 1 < ibagMax)
-                        ? instBags_[ib + 1].wInstGenNdx : static_cast<int>(instGens_.size());
-
-        int igenMax = static_cast<int>(instGens_.size());
-        if (igenStart < 0 || igenStart > igenMax) igenStart = igenMax;
-        if (igenEnd   > igenMax) igenEnd = igenMax;
-
         ZoneInfo zi;
         zi.bagIndex = ib;
         zi.keyLo = 0; zi.keyHi = 127;
@@ -1423,20 +1497,34 @@ bool Sf2File::GetInstrumentLocalZones(int instrumentIdx, std::vector<ZoneInfo>& 
         zi.sampleId = -1;
         memset(zi.generators, 0, sizeof(zi.generators));
 
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int sampleIdx = -1;
+        if (!AnalyzeInstrumentBag(ib, isGlobal, keyLo, keyHi, velLo, velHi, sampleIdx) || isGlobal) {
+            continue;
+        }
+        zi.keyLo = keyLo;
+        zi.keyHi = keyHi;
+        zi.velLo = velLo;
+        zi.velHi = velHi;
+        zi.sampleId = sampleIdx;
+
+        int igenStart = instBags_[ib].wInstGenNdx;
+        int igenEnd   = instBags_[ib + 1].wInstGenNdx;
+        int igenMax = static_cast<int>(instGens_.size());
+        if (igenStart < 0 || igenStart > igenMax) igenStart = igenMax;
+        if (igenEnd < igenStart) igenEnd = igenStart;
+        if (igenEnd > igenMax) igenEnd = igenMax;
+
         for (int ig = igenStart; ig < igenEnd; ++ig) {
             u16 oper = instGens_[ig].sfGenOper;
-            if (oper == GEN_KeyRange) {
-                zi.keyLo = instGens_[ig].genAmount.ranges.lo;
-                zi.keyHi = instGens_[ig].genAmount.ranges.hi;
+            if (oper == GEN_SampleID) {
+                break;
             }
-            else if (oper == GEN_VelRange) {
-                zi.velLo = instGens_[ig].genAmount.ranges.lo;
-                zi.velHi = instGens_[ig].genAmount.ranges.hi;
+            if (oper == GEN_KeyRange || oper == GEN_VelRange) {
+                continue;
             }
-            else if (oper == GEN_SampleID) {
-                zi.sampleId = instGens_[ig].genAmount.wAmount;
-            }
-            else if (oper < GEN_COUNT) {
+            if (oper < GEN_COUNT) {
                 zi.generators[oper] = static_cast<i32>(instGens_[ig].genAmount.shAmount);
             }
         }

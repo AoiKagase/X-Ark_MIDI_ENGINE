@@ -23,10 +23,12 @@ namespace {
         std::vector<SFGenList> presetGlobalGens;
         std::vector<SFModList> presetGlobalMods;
         std::vector<SFGenList> presetGens;
+        std::vector<SFGenList> presetTrailingGens;
         std::vector<SFModList> presetMods;
         std::vector<SFGenList> instGlobalGens;
         std::vector<SFModList> instGlobalMods;
         std::vector<SFGenList> instGens;
+        std::vector<SFGenList> instTrailingGens;
         std::vector<SFModList> instMods;
     };
 
@@ -112,7 +114,7 @@ namespace {
             AppendU16LE(pbag, static_cast<u16>(config.presetGlobalMods.size()));
         }
         AppendU16LE(pbag, static_cast<u16>(
-            config.presetGlobalGens.size() + config.presetGens.size() + 1));
+            config.presetGlobalGens.size() + config.presetGens.size() + 1 + config.presetTrailingGens.size()));
         AppendU16LE(pbag, static_cast<u16>(
             config.presetGlobalMods.size() + config.presetMods.size()));
         AppendChunk(pdtaPayload, "pbag", pbag);
@@ -152,6 +154,9 @@ namespace {
         instrumentGen.sfGenOper = GEN_Instrument;
         instrumentGen.genAmount.wAmount = 0;
         appendGen(pgen, instrumentGen);
+        for (const auto& gen : config.presetTrailingGens) {
+            appendGen(pgen, gen);
+        }
         SFGenList terminalPgen{};
         terminalPgen.sfGenOper = 0;
         terminalPgen.genAmount.wAmount = 0;
@@ -177,7 +182,7 @@ namespace {
             AppendU16LE(ibag, static_cast<u16>(config.instGlobalMods.size()));
         }
         AppendU16LE(ibag, static_cast<u16>(
-            config.instGlobalGens.size() + config.instGens.size() + 1));
+            config.instGlobalGens.size() + config.instGens.size() + 1 + config.instTrailingGens.size()));
         AppendU16LE(ibag, static_cast<u16>(
             config.instGlobalMods.size() + config.instMods.size()));
         AppendChunk(pdtaPayload, "ibag", ibag);
@@ -213,6 +218,9 @@ namespace {
         sampleGen.sfGenOper = GEN_SampleID;
         sampleGen.genAmount.wAmount = 0;
         appendGen(igen, sampleGen);
+        for (const auto& gen : config.instTrailingGens) {
+            appendGen(igen, gen);
+        }
         SFGenList terminalIgen{};
         terminalIgen.sfGenOper = 0;
         terminalIgen.genAmount.wAmount = 0;
@@ -385,6 +393,77 @@ namespace {
         Require(sf2.GetInstrumentBagIndices(0, 1, globalInstBag),
             "GetInstrumentBagIndices should accept the local bag index");
         Require(globalInstBag == 0, "Instrument global bag index should be 0");
+    }
+
+    void TestPresetZoneTerminalInstrumentRule() {
+        MinimalSf2Config config;
+        config.presetTrailingGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 72));
+        config.instGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 60));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_OverridingRootKey] == 60,
+            "Generators after preset Instrument should be ignored");
+
+        int globalPresetBag = -1;
+        int localPresetBag = -1;
+        Require(sf2.GetPresetBagIndices(0, 0, globalPresetBag, localPresetBag),
+            "GetPresetBagIndices should still find the valid preset local zone");
+        Require(localPresetBag == 0, "Single preset local bag should stay addressable");
+    }
+
+    void TestInstrumentZoneTerminalSampleRule() {
+        MinimalSf2Config config;
+        config.instTrailingGens.push_back(MakeSignedGen(GEN_ExclusiveClass, 5));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_ExclusiveClass] == 0,
+            "Generators after instrument SampleID should be ignored");
+
+        std::vector<Sf2File::ZoneInfo> localZones;
+        Require(sf2.GetInstrumentLocalZones(0, localZones),
+            "GetInstrumentLocalZones should still return the valid local zone");
+        Require(localZones.size() == 1, "Expected a single instrument local zone");
+        Require(localZones[0].sampleId == 0, "Local zone should keep its SampleID");
+        Require(localZones[0].generators[GEN_ExclusiveClass] == 0,
+            "GetInstrumentLocalZones should ignore generators after SampleID");
+    }
+
+    void TestPresetLevelIllegalSampleGeneratorsIgnored() {
+        MinimalSf2Config config;
+        config.presetGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 72));
+        config.presetGens.push_back(MakeSignedGen(GEN_ExclusiveClass, 9));
+        config.presetGens.push_back(MakeSignedGen(GEN_SampleModes, 3));
+        config.presetGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, 10));
+        config.presetGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -6));
+        config.presetGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, 4));
+        config.presetGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -4));
+        config.instGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 60));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_OverridingRootKey] == 60,
+            "Preset-level OverridingRootKey should be ignored");
+        Require(zone.generators[GEN_ExclusiveClass] == 0,
+            "Preset-level ExclusiveClass should be ignored");
+        Require(zone.generators[GEN_SampleModes] == 0,
+            "Preset-level SampleModes should be ignored");
+        Require(zone.sample != nullptr, "Resolved zone sample should exist");
+        Require(zone.sample->start == 0 && zone.sample->end == 64,
+            "Preset-level sample address offsets should be ignored");
     }
 
     void TestAbsoluteTransformSupport() {
@@ -733,6 +812,12 @@ int main() {
     TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods();
     g_currentTestName = "TestAbsoluteTransformSupport";
     TestAbsoluteTransformSupport();
+    g_currentTestName = "TestPresetZoneTerminalInstrumentRule";
+    TestPresetZoneTerminalInstrumentRule();
+    g_currentTestName = "TestInstrumentZoneTerminalSampleRule";
+    TestInstrumentZoneTerminalSampleRule();
+    g_currentTestName = "TestPresetLevelIllegalSampleGeneratorsIgnored";
+    TestPresetLevelIllegalSampleGeneratorsIgnored();
     g_currentTestName = "TestUnsupportedTransformReporting";
     TestUnsupportedTransformReporting();
     g_currentTestName = "TestEffectsSendMixPolicy";

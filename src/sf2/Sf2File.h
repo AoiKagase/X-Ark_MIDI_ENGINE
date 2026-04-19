@@ -105,6 +105,10 @@ private:
 
     bool ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
                          u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
+    bool AnalyzePresetBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
+                          u8& outVelLo, u8& outVelHi, int& outInstrumentIdx) const;
+    bool AnalyzeInstrumentBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
+                              u8& outVelLo, u8& outVelHi, int& outSampleIdx) const;
     void BuildPresetIndex();
     void ComputeSampleLoudnessGains();
     bool ValidateSampleHeaders();
