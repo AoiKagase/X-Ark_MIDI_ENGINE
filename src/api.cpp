@@ -346,7 +346,7 @@ void XAmeDestroyEngine(XAmeEngine engine) {
 }
 
 const char* XAmeGetVersion(void) {
-    return "2.0.0";
+    return "2.0.1";
 }
 
 const char* XAmeGetLastError(void) {
