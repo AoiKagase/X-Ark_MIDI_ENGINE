@@ -9,12 +9,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
 using namespace XArkMidi;
 
 namespace {
+
+    const char* g_currentTestName = "";
 
     struct MinimalSf2Config {
         std::vector<SFGenList> presetGlobalGens;
@@ -65,6 +68,14 @@ namespace {
         const u16 presetBagCount = static_cast<u16>(hasPresetGlobal ? 2 : 1);
         const u16 instBagCount = static_cast<u16>(hasInstGlobal ? 2 : 1);
         std::vector<u8> infoPayload;
+        std::vector<u8> ifil;
+        AppendU16LE(ifil, 2);
+        AppendU16LE(ifil, 4);
+        AppendChunk(infoPayload, "ifil", ifil);
+        const std::vector<u8> isng = { 'E','M','U','8','0','0','0', 0 };
+        AppendChunk(infoPayload, "isng", isng);
+        const std::vector<u8> inam = { 'T','e','s','t', 0 };
+        AppendChunk(infoPayload, "INAM", inam);
 
         std::vector<u8> sdtaPayload;
         std::vector<u8> smpl;
@@ -121,6 +132,9 @@ namespace {
             AppendU16LE(pmod, mod.sfModAmtSrcOper);
             AppendU16LE(pmod, mod.sfModTransOper);
         }
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(pmod, 0);
+        }
         AppendChunk(pdtaPayload, "pmod", pmod);
 
         std::vector<u8> pgen;
@@ -138,6 +152,10 @@ namespace {
         instrumentGen.sfGenOper = GEN_Instrument;
         instrumentGen.genAmount.wAmount = 0;
         appendGen(pgen, instrumentGen);
+        SFGenList terminalPgen{};
+        terminalPgen.sfGenOper = 0;
+        terminalPgen.genAmount.wAmount = 0;
+        appendGen(pgen, terminalPgen);
         AppendChunk(pdtaPayload, "pgen", pgen);
 
         std::vector<u8> inst;
@@ -179,6 +197,9 @@ namespace {
             AppendU16LE(imod, mod.sfModAmtSrcOper);
             AppendU16LE(imod, mod.sfModTransOper);
         }
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(imod, 0);
+        }
         AppendChunk(pdtaPayload, "imod", imod);
 
         std::vector<u8> igen;
@@ -192,6 +213,10 @@ namespace {
         sampleGen.sfGenOper = GEN_SampleID;
         sampleGen.genAmount.wAmount = 0;
         appendGen(igen, sampleGen);
+        SFGenList terminalIgen{};
+        terminalIgen.sfGenOper = 0;
+        terminalIgen.genAmount.wAmount = 0;
+        appendGen(igen, terminalIgen);
         AppendChunk(pdtaPayload, "igen", igen);
 
         std::vector<u8> shdr;
@@ -261,7 +286,7 @@ namespace {
 
     void Require(bool condition, const char* message) {
         if (!condition) {
-            std::fprintf(stderr, "FAILED: %s\n", message);
+            std::fprintf(stderr, "FAILED [%s]: %s\n", g_currentTestName, message);
             std::exit(1);
         }
     }
@@ -282,7 +307,9 @@ namespace {
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
-        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+        const bool loaded = sf2.LoadFromMemory(bytes.data(), bytes.size());
+        const std::string error = sf2.ErrorMessage();
+        Require(loaded, error.c_str());
 
         std::vector<ResolvedZone> zones;
         if (!sf2.FindZones(0, 0, 60, 50000, zones, nullptr)) {
@@ -384,8 +411,13 @@ namespace {
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
-        Require(sf2.UnsupportedModulatorCount() == 1, "Unsupported modulator count should be reported");
-        Require(sf2.UnsupportedModulatorTransformCount() == 1, "Unsupported transform count should be reported");
+        char message[128];
+        std::snprintf(message, sizeof(message), "Unsupported modulator count should be reported (actual=%u)",
+            sf2.UnsupportedModulatorCount());
+        Require(sf2.UnsupportedModulatorCount() == 1, message);
+        std::snprintf(message, sizeof(message), "Unsupported transform count should be reported (actual=%u)",
+            sf2.UnsupportedModulatorTransformCount());
+        Require(sf2.UnsupportedModulatorTransformCount() == 1, message);
     }
 
     void TestEffectsSendMixPolicy() {
@@ -607,21 +639,122 @@ namespace {
         Require(!sf2.HasIgnoredSm24(), "HasIgnoredSm24 should reset on subsequent loads");
     }
 
+    void TestMissingIfilRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        auto readLE32 = [&](size_t offset) -> u32 {
+            return static_cast<u32>(bytes[offset]) |
+                   (static_cast<u32>(bytes[offset + 1]) << 8) |
+                   (static_cast<u32>(bytes[offset + 2]) << 16) |
+                   (static_cast<u32>(bytes[offset + 3]) << 24);
+        };
+        auto writeLE32 = [&](size_t offset, u32 value) {
+            bytes[offset] = static_cast<u8>(value & 0xFFu);
+            bytes[offset + 1] = static_cast<u8>((value >> 8) & 0xFFu);
+            bytes[offset + 2] = static_cast<u8>((value >> 16) & 0xFFu);
+            bytes[offset + 3] = static_cast<u8>((value >> 24) & 0xFFu);
+        };
+        auto findInfoList = [&]() -> size_t {
+            for (size_t i = 12; i + 12 <= bytes.size();) {
+                if (std::memcmp(bytes.data() + i, "LIST", 4) != 0) {
+                    break;
+                }
+                const u32 chunkSize = readLE32(i + 4);
+                if (std::memcmp(bytes.data() + i + 8, "INFO", 4) == 0) {
+                    return i;
+                }
+                i += 8 + chunkSize + (chunkSize & 1u);
+            }
+            return std::numeric_limits<size_t>::max();
+        };
+
+        const size_t infoPos = findInfoList();
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+        const u32 infoChunkSize = readLE32(infoPos + 4);
+        const size_t infoChunkEnd = infoPos + 8 + infoChunkSize + (infoChunkSize & 1u);
+        bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(infoPos + 12),
+                    bytes.begin() + static_cast<std::ptrdiff_t>(infoChunkEnd));
+        writeLE32(infoPos + 4, 4);
+        writeLE32(4, static_cast<u32>(bytes.size() - 8));
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing ifil should be rejected");
+    }
+
+    void TestNonMonotonicPbagRejected() {
+        MinimalSf2Config config;
+        config.presetGlobalGens.push_back(MakeSignedGen(GEN_CoarseTune, 1));
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+
+        auto readLE32 = [&](size_t offset) -> u32 {
+            return static_cast<u32>(bytes[offset]) |
+                   (static_cast<u32>(bytes[offset + 1]) << 8) |
+                   (static_cast<u32>(bytes[offset + 2]) << 16) |
+                   (static_cast<u32>(bytes[offset + 3]) << 24);
+        };
+        auto findPdtaChunk = [&](const char id[4]) -> size_t {
+            for (size_t i = 12; i + 12 <= bytes.size();) {
+                if (std::memcmp(bytes.data() + i, "LIST", 4) != 0) {
+                    break;
+                }
+                const u32 listSize = readLE32(i + 4);
+                const size_t listData = i + 12;
+                const size_t listEnd = i + 8 + listSize;
+                if (std::memcmp(bytes.data() + i + 8, "pdta", 4) == 0) {
+                    for (size_t p = listData; p + 8 <= listEnd;) {
+                        const u32 chunkSize = readLE32(p + 4);
+                        if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                            return p;
+                        }
+                        p += 8 + chunkSize + (chunkSize & 1u);
+                    }
+                }
+                i += 8 + listSize + (listSize & 1u);
+            }
+            return std::numeric_limits<size_t>::max();
+        };
+        const size_t pbagPos = findPdtaChunk("pbag");
+        Require(pbagPos != std::numeric_limits<size_t>::max(), "pbag chunk should exist");
+        const size_t pbagData = pbagPos + 8;
+        // terminal bag wGenNdx -> 0, making indices non-monotonic (0,1,0)
+        bytes[pbagData + 8] = 0;
+        bytes[pbagData + 9] = 0;
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 with non-monotonic pbag should be rejected");
+    }
+
 } // namespace
 
 int main() {
+    g_currentTestName = "TestForcedVelocityDefaultModulators";
     TestForcedVelocityDefaultModulators();
+    g_currentTestName = "TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods";
     TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods();
+    g_currentTestName = "TestAbsoluteTransformSupport";
     TestAbsoluteTransformSupport();
+    g_currentTestName = "TestUnsupportedTransformReporting";
     TestUnsupportedTransformReporting();
+    g_currentTestName = "TestEffectsSendMixPolicy";
     TestEffectsSendMixPolicy();
+    g_currentTestName = "TestEnvelopePitchAndKeynumScaling";
     TestEnvelopePitchAndKeynumScaling();
+    g_currentTestName = "TestPressureSources";
     TestPressureSources();
+    g_currentTestName = "TestPitchWheelSensitivityAmountSource";
     TestPitchWheelSensitivityAmountSource();
+    g_currentTestName = "TestSourceCurvesSupport";
     TestSourceCurvesSupport();
+    g_currentTestName = "TestVelocityZoneBoundary";
     TestVelocityZoneBoundary();
+    g_currentTestName = "TestSm24Detection";
     TestSm24Detection();
+    g_currentTestName = "TestBagIndexHelpersSkipGlobalZones";
     TestBagIndexHelpersSkipGlobalZones();
+    g_currentTestName = "TestMissingIfilRejected";
+    TestMissingIfilRejected();
+    g_currentTestName = "TestNonMonotonicPbagRejected";
+    TestNonMonotonicPbagRejected();
     std::printf("sf2_compliance: all tests passed\n");
     return 0;
 }

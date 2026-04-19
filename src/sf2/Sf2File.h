@@ -82,6 +82,7 @@ private:
     std::string errorMsg_;
 
     bool ParseRiff(BinaryReader& r);
+    bool ParseInfo(BinaryReader& r, u32 chunkSize);
     bool ParseSdta(BinaryReader& r, u32 chunkSize);
     bool ParsePdta(BinaryReader& r, u32 chunkSize);
 
@@ -107,6 +108,7 @@ private:
     void BuildPresetIndex();
     void ComputeSampleLoudnessGains();
     bool ValidateSampleHeaders();
+    bool ValidatePdtaStructures();
     void ScanUnsupportedModulators();
 
     f32 normCompensation_ = 1.0f;
@@ -115,7 +117,18 @@ private:
     u32 unsupportedModulatorCount_ = 0;
     u32 unsupportedModulatorTransformCount_ = 0;
     bool hasIgnoredSm24_ = false;
+    bool hasIfil_ = false;
+    u16 ifilMajor_ = 0;
+    u16 ifilMinor_ = 0;
+    bool hasPhdr_ = false;
+    bool hasPbag_ = false;
+    bool hasPmod_ = false;
+    bool hasPgen_ = false;
+    bool hasInst_ = false;
+    bool hasIbag_ = false;
+    bool hasImod_ = false;
+    bool hasIgen_ = false;
+    bool hasShdr_ = false;
 };
 
 } // namespace XArkMidi
-

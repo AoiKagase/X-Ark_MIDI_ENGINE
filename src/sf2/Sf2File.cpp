@@ -68,6 +68,14 @@ bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, s
     return true;
 }
 
+bool ValidateChunkSizeMultiple(u32 size, u32 recordSize, const char* chunkName, std::string& outError) {
+    if (recordSize == 0 || (size % recordSize) != 0) {
+        outError = std::string("Invalid SF2 chunk size: ") + chunkName;
+        return false;
+    }
+    return true;
+}
+
 bool IsPlainVelocitySource(u16 oper) {
     return oper == kModSrcVelocity;
 }
@@ -414,10 +422,23 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
     hasIgnoredSm24_ = false;
+    hasIfil_ = false;
+    ifilMajor_ = 0;
+    ifilMinor_ = 0;
+    hasPhdr_ = false;
+    hasPbag_ = false;
+    hasPmod_ = false;
+    hasPgen_ = false;
+    hasInst_ = false;
+    hasIbag_ = false;
+    hasImod_ = false;
+    hasIgen_ = false;
+    hasShdr_ = false;
 
     try {
         BinaryReader r(data, size);
         if (!ParseRiff(r)) return false;
+        if (!ValidatePdtaStructures()) return false;
         if (!ValidateSampleHeaders()) return false;
         BuildPresetIndex();
         ComputeSampleLoudnessGains();
@@ -469,16 +490,44 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
             if (listType == MakeFourCC("sdta")) {
                 if (!ParseSdta(listData, chunkSize - 4)) return false;
             }
+            else if (listType == MakeFourCC("INFO")) {
+                if (!ParseInfo(listData, chunkSize - 4)) return false;
+            }
             else if (listType == MakeFourCC("pdta")) {
                 if (!ParsePdta(listData, chunkSize - 4)) return false;
             }
-            // INFO チャンクは無視
         }
         else {
             r.Skip(chunkSize);
             // 奇数サイズのパディング
             if (chunkSize & 1) r.Skip(1);
         }
+    }
+    if (!hasIfil_) {
+        errorMsg_ = "SF2 missing mandatory ifil chunk";
+        return false;
+    }
+    return true;
+}
+
+bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
+    while (!r.IsEof()) {
+        if (r.Remaining() < 8) break;
+        const u32 subId = r.ReadU32LE();
+        const u32 subSize = r.ReadU32LE();
+        auto sub = r.ReadSlice(subSize);
+        if (subSize & 1 && !r.IsEof()) r.Skip(1);
+
+        if (subId != MakeFourCC("ifil")) {
+            continue;
+        }
+        if (subSize != 4) {
+            errorMsg_ = "SF2 invalid ifil chunk size";
+            return false;
+        }
+        ifilMajor_ = sub.ReadU16LE();
+        ifilMinor_ = sub.ReadU16LE();
+        hasIfil_ = true;
     }
     return true;
 }
@@ -548,9 +597,12 @@ bool Sf2File::ParsePdta(BinaryReader& r, u32 /*chunkSize*/) {
 }
 
 void Sf2File::ParsePhdr(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 38, "phdr", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 38; // sizeof(SFPresetHeader) = 38
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "phdr", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasPhdr_ = true;
     presets_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         auto& p = presets_[i];
@@ -565,9 +617,12 @@ void Sf2File::ParsePhdr(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParsePbag(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 4, "pbag", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 4;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pbag", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasPbag_ = true;
     presetBags_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetBags_[i].wGenNdx = r.ReadU16LE();
@@ -576,9 +631,12 @@ void Sf2File::ParsePbag(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParsePmod(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 10, "pmod", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 10;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pmod", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasPmod_ = true;
     presetMods_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetMods_[i].sfModSrcOper  = r.ReadU16LE();
@@ -590,9 +648,12 @@ void Sf2File::ParsePmod(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParsePgen(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 4, "pgen", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 4;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "pgen", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasPgen_ = true;
     presetGens_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         presetGens_[i].sfGenOper          = r.ReadU16LE();
@@ -601,9 +662,12 @@ void Sf2File::ParsePgen(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParseInst(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 22, "inst", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 22;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "inst", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasInst_ = true;
     instruments_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         for (int c = 0; c < 20; ++c) instruments_[i].achInstName[c] = static_cast<char>(r.ReadU8());
@@ -612,9 +676,12 @@ void Sf2File::ParseInst(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParseIbag(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 4, "ibag", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 4;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "ibag", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasIbag_ = true;
     instBags_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instBags_[i].wInstGenNdx = r.ReadU16LE();
@@ -623,9 +690,12 @@ void Sf2File::ParseIbag(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParseImod(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 10, "imod", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 10;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "imod", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasImod_ = true;
     instMods_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instMods_[i].sfModSrcOper    = r.ReadU16LE();
@@ -637,9 +707,12 @@ void Sf2File::ParseImod(BinaryReader& r, u32 size) {
 }
 
 void Sf2File::ParseIgen(BinaryReader& r, u32 size) {
+    if (!ValidateChunkSizeMultiple(size, 4, "igen", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     u32 count = size / 4;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "igen", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasIgen_ = true;
     instGens_.resize(count);
     for (u32 i = 0; i < count; ++i) {
         instGens_[i].sfGenOper         = r.ReadU16LE();
@@ -649,9 +722,12 @@ void Sf2File::ParseIgen(BinaryReader& r, u32 size) {
 
 void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
     static_assert(sizeof(SFSample) == 46, "SFSample must be 46 bytes");
+    if (!ValidateChunkSizeMultiple(size, 46, "shdr", errorMsg_))
+        throw std::runtime_error(errorMsg_);
     const u32 count = size / 46;
     if (!ValidateChunkElementCount(count, maxPdtaEntries_, "shdr", errorMsg_))
         throw std::runtime_error(errorMsg_);
+    hasShdr_ = true;
     samples_.resize(count);
     sampleHeaders_.resize(count);
     for (u32 i = 0; i < count; ++i) {
@@ -671,6 +747,76 @@ void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
         h.pitchCorrection = s.chPitchCorrection;
         h.sampleType      = s.sfSampleType;
     }
+}
+
+bool Sf2File::ValidatePdtaStructures() {
+    if (!hasPhdr_ || !hasPbag_ || !hasPmod_ || !hasPgen_ ||
+        !hasInst_ || !hasIbag_ || !hasImod_ || !hasIgen_ || !hasShdr_) {
+        errorMsg_ = "SF2 missing mandatory pdta chunk";
+        return false;
+    }
+
+    if (presets_.empty() || presetBags_.empty() || presetMods_.empty() || presetGens_.empty() ||
+        instruments_.empty() || instBags_.empty() || instMods_.empty() || instGens_.empty() || sampleHeaders_.empty()) {
+        errorMsg_ = "SF2 pdta chunk missing terminal record";
+        return false;
+    }
+
+    for (size_t i = 1; i < presets_.size(); ++i) {
+        if (presets_[i - 1].wPresetBagNdx > presets_[i].wPresetBagNdx) {
+            errorMsg_ = "SF2 non-monotonic phdr preset bag index";
+            return false;
+        }
+    }
+    for (size_t i = 1; i < presetBags_.size(); ++i) {
+        if (presetBags_[i - 1].wGenNdx > presetBags_[i].wGenNdx ||
+            presetBags_[i - 1].wModNdx > presetBags_[i].wModNdx) {
+            errorMsg_ = "SF2 non-monotonic pbag index";
+            return false;
+        }
+    }
+    for (size_t i = 1; i < instruments_.size(); ++i) {
+        if (instruments_[i - 1].wInstBagNdx > instruments_[i].wInstBagNdx) {
+            errorMsg_ = "SF2 non-monotonic inst bag index";
+            return false;
+        }
+    }
+    for (size_t i = 1; i < instBags_.size(); ++i) {
+        if (instBags_[i - 1].wInstGenNdx > instBags_[i].wInstGenNdx ||
+            instBags_[i - 1].wInstModNdx > instBags_[i].wInstModNdx) {
+            errorMsg_ = "SF2 non-monotonic ibag index";
+            return false;
+        }
+    }
+
+    if (static_cast<size_t>(presets_.back().wPresetBagNdx) + 1 != presetBags_.size()) {
+        errorMsg_ = "SF2 terminal phdr does not match pbag size";
+        return false;
+    }
+    if (static_cast<size_t>(presetBags_.back().wGenNdx) + 1 != presetGens_.size()) {
+        errorMsg_ = "SF2 terminal pbag does not match pgen size: term=" +
+                    std::to_string(presetBags_.back().wGenNdx) +
+                    " pgen=" + std::to_string(presetGens_.size());
+        return false;
+    }
+    if (static_cast<size_t>(presetBags_.back().wModNdx) + 1 != presetMods_.size()) {
+        errorMsg_ = "SF2 terminal pbag does not match pmod size";
+        return false;
+    }
+    if (static_cast<size_t>(instruments_.back().wInstBagNdx) + 1 != instBags_.size()) {
+        errorMsg_ = "SF2 terminal inst does not match ibag size";
+        return false;
+    }
+    if (static_cast<size_t>(instBags_.back().wInstGenNdx) + 1 != instGens_.size()) {
+        errorMsg_ = "SF2 terminal ibag does not match igen size";
+        return false;
+    }
+    if (static_cast<size_t>(instBags_.back().wInstModNdx) + 1 != instMods_.size()) {
+        errorMsg_ = "SF2 terminal ibag does not match imod size";
+        return false;
+    }
+
+    return true;
 }
 
 bool Sf2File::ValidateSampleHeaders() {
@@ -928,6 +1074,15 @@ void Sf2File::ScanUnsupportedModulators() {
 
     auto scan = [&](const std::vector<SFModList>& mods) {
         for (const auto& mod : mods) {
+            const bool isTerminal =
+                mod.sfModSrcOper == 0 &&
+                mod.sfModDestOper == 0 &&
+                mod.modAmount == 0 &&
+                mod.sfModAmtSrcOper == 0 &&
+                mod.sfModTransOper == 0;
+            if (isTerminal) {
+                continue;
+            }
             const bool unsupportedTransform = !IsSupportedModTransform(mod.sfModTransOper);
             const bool unsupportedSource = !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
             const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
