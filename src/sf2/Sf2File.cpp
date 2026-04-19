@@ -26,6 +26,8 @@ namespace {
 constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcCc1 = 0x0081u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
+constexpr u16 kModTransformLinear = 0u;
+constexpr u16 kModTransformAbsolute = 2u;
 
 inline u8 ResolveForcedKey(u8 key, const ResolvedZone& zone) {
     const i32 forcedKey = zone.generators[GEN_Keynum];
@@ -51,6 +53,10 @@ inline i32 ComputeDefaultVelocityAttenuationCb(u16 velocity) {
     return static_cast<i32>(std::lround(400.0 * std::log10(65535.0 / velocity)));
 }
 
+inline i32 ComputeDefaultVelocityFilterCutoffDelta(u16 velocity) {
+    return static_cast<i32>(std::lround(-2400.0 * (1.0 - static_cast<double>(velocity) / 65535.0)));
+}
+
 bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, std::string& outError) {
     if (count > maxCount) {
         outError = std::string("SF2 chunk too large: ") + chunkName;
@@ -60,10 +66,21 @@ bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, s
 }
 
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
-    if (mod.sfModDestOper != GEN_InitialAttenuation || mod.sfModTransOper != 0) {
+    if (mod.sfModDestOper != GEN_InitialAttenuation || mod.sfModTransOper != kModTransformLinear) {
         return false;
     }
     if ((mod.sfModSrcOper & 0x80u) != 0) { // CC source
+        return false;
+    }
+    const u16 sourceIndex = mod.sfModSrcOper & 0x7Fu;
+    return sourceIndex == kModSrcVelocity;
+}
+
+bool IsVelocityToInitialFilterFcMod(const SFModList& mod) {
+    if (mod.sfModDestOper != GEN_InitialFilterFc || mod.sfModTransOper != kModTransformLinear) {
+        return false;
+    }
+    if ((mod.sfModSrcOper & 0x80u) != 0) {
         return false;
     }
     const u16 sourceIndex = mod.sfModSrcOper & 0x7Fu;
@@ -74,7 +91,7 @@ bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
     return mod.sfModSrcOper == kModSrcCc1 &&
            mod.sfModDestOper == GEN_VibLfoToPitch &&
            mod.sfModAmtSrcOper == 0 &&
-           mod.sfModTransOper == 0;
+           mod.sfModTransOper == kModTransformLinear;
 }
 
 bool HasMatchingModulator(const std::vector<SFModList>& mods, int modStart, int modEnd,
@@ -156,6 +173,50 @@ double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorConte
     return directionNegative ? (1.0 - 2.0 * x) : (2.0 * x - 1.0);
 }
 
+bool IsSupportedModSourceOperDefinition(u16 oper) {
+    if (oper == 0) {
+        return true;
+    }
+
+    const u16 index = oper & 0x7Fu;
+    const bool isCC = (oper & 0x80u) != 0;
+    const u16 type = (oper >> 10) & 0x3Fu;
+    if (type > 3) {
+        return false;
+    }
+    if (isCC) {
+        return index <= 127;
+    }
+    switch (index) {
+    case 2:
+    case 3:
+    case 10:
+    case 13:
+    case 14:
+    case 16:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsSupportedModTransform(u16 oper) {
+    return oper == kModTransformLinear || oper == kModTransformAbsolute;
+}
+
+double ApplyModSourceTransform(double value, u16 oper, bool& supported) {
+    supported = true;
+    switch (oper) {
+    case kModTransformLinear:
+        return value;
+    case kModTransformAbsolute:
+        return std::fabs(value);
+    default:
+        supported = false;
+        return 0.0;
+    }
+}
+
 i32 ClampGeneratorValue(u16 oper, i32 value) {
     switch (oper) {
     case GEN_StartAddrsOffset:
@@ -233,43 +294,96 @@ i32 ClampGeneratorValue(u16 oper, i32 value) {
 
 void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     switch (dest) {
-    case GEN_InitialFilterFc:
-        zone.generators[GEN_InitialFilterFc] =
-            ClampGeneratorValue(GEN_InitialFilterFc, zone.generators[GEN_InitialFilterFc] + delta);
-        break;
-    case GEN_ModEnvToFilterFc:
-        zone.generators[GEN_ModEnvToFilterFc] =
-            ClampGeneratorValue(GEN_ModEnvToFilterFc, zone.generators[GEN_ModEnvToFilterFc] + delta);
-        break;
-    case GEN_InitialAttenuation:
-        zone.generators[GEN_InitialAttenuation] =
-            ClampGeneratorValue(GEN_InitialAttenuation, zone.generators[GEN_InitialAttenuation] + delta);
-        break;
-    case GEN_Pan:
-        zone.generators[GEN_Pan] =
-            ClampGeneratorValue(GEN_Pan, zone.generators[GEN_Pan] + delta);
-        break;
-    case GEN_CoarseTune:
-    case GEN_FineTune:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
-        // Pitch-related destinations are independent generators.
-        // Converting them into FineTune here collapses CC1/aftertouch vibrato depth
-        // into a static detune and effectively disables time-varying modulation.
-        zone.generators[dest] =
-            ClampGeneratorValue(dest, zone.generators[dest] + delta);
-        break;
+    case GEN_InitialFilterFc:
+    case GEN_InitialFilterQ:
+    case GEN_ModLfoToFilterFc:
+    case GEN_ModEnvToFilterFc:
+    case GEN_ModLfoToVolume:
+    case GEN_ChorusEffectsSend:
+    case GEN_ReverbEffectsSend:
+    case GEN_Pan:
+    case GEN_DelayModLFO:
+    case GEN_FreqModLFO:
+    case GEN_DelayVibLFO:
+    case GEN_FreqVibLFO:
+    case GEN_DelayModEnv:
+    case GEN_AttackModEnv:
+    case GEN_HoldModEnv:
+    case GEN_DecayModEnv:
+    case GEN_SustainModEnv:
+    case GEN_ReleaseModEnv:
+    case GEN_KeynumToModEnvHold:
+    case GEN_KeynumToModEnvDecay:
     case GEN_DelayVolEnv:
     case GEN_AttackVolEnv:
     case GEN_HoldVolEnv:
     case GEN_DecayVolEnv:
-    case GEN_ReleaseVolEnv:
     case GEN_SustainVolEnv:
+    case GEN_ReleaseVolEnv:
+    case GEN_KeynumToVolEnvHold:
+    case GEN_KeynumToVolEnvDecay:
+    case GEN_Keynum:
+    case GEN_Velocity:
+    case GEN_InitialAttenuation:
+    case GEN_CoarseTune:
+    case GEN_FineTune:
+    case GEN_ScaleTuning:
+    case GEN_ExclusiveClass:
+    case GEN_OverridingRootKey:
         zone.generators[dest] = ClampGeneratorValue(dest, zone.generators[dest] + delta);
         break;
     default:
         break;
+    }
+}
+
+bool IsSupportedModulatorDestination(u16 dest) {
+    switch (dest) {
+    case GEN_ModLfoToPitch:
+    case GEN_VibLfoToPitch:
+    case GEN_ModEnvToPitch:
+    case GEN_InitialFilterFc:
+    case GEN_InitialFilterQ:
+    case GEN_ModLfoToFilterFc:
+    case GEN_ModEnvToFilterFc:
+    case GEN_ModLfoToVolume:
+    case GEN_ChorusEffectsSend:
+    case GEN_ReverbEffectsSend:
+    case GEN_Pan:
+    case GEN_DelayModLFO:
+    case GEN_FreqModLFO:
+    case GEN_DelayVibLFO:
+    case GEN_FreqVibLFO:
+    case GEN_DelayModEnv:
+    case GEN_AttackModEnv:
+    case GEN_HoldModEnv:
+    case GEN_DecayModEnv:
+    case GEN_SustainModEnv:
+    case GEN_ReleaseModEnv:
+    case GEN_KeynumToModEnvHold:
+    case GEN_KeynumToModEnvDecay:
+    case GEN_DelayVolEnv:
+    case GEN_AttackVolEnv:
+    case GEN_HoldVolEnv:
+    case GEN_DecayVolEnv:
+    case GEN_SustainVolEnv:
+    case GEN_ReleaseVolEnv:
+    case GEN_KeynumToVolEnvHold:
+    case GEN_KeynumToVolEnvDecay:
+    case GEN_Keynum:
+    case GEN_Velocity:
+    case GEN_InitialAttenuation:
+    case GEN_CoarseTune:
+    case GEN_FineTune:
+    case GEN_ScaleTuning:
+    case GEN_ExclusiveClass:
+    case GEN_OverridingRootKey:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -290,6 +404,8 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     sampleHeaders_.clear();
     presetIndexMap_.clear();
     errorMsg_.clear();
+    unsupportedModulatorCount_ = 0;
+    unsupportedModulatorTransformCount_ = 0;
 
     try {
         BinaryReader r(data, size);
@@ -297,6 +413,7 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
         if (!ValidateSampleHeaders()) return false;
         BuildPresetIndex();
         ComputeSampleLoudnessGains();
+        ScanUnsupportedModulators();
     }
     catch (const std::exception& e) {
         errorMsg_ = e.what();
@@ -662,6 +779,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     }
 
     bool hasVelocityToAttenuationMod = false;
+    bool hasVelocityToFilterFcMod = false;
     bool hasCc1ToVibLfoPitchMod = false;
     if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
         const u8 effectiveKey = ResolveForcedKey(key, outZone);
@@ -671,6 +789,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             instBags_[globalInstBagIdx].wInstModNdx,
             instBags_[globalInstBagIdx + 1].wInstModNdx,
             effectiveKey, effectiveVelocity, ctx, outZone);
+        hasVelocityToFilterFcMod |= HasMatchingModulator(
+            instMods_,
+            instBags_[globalInstBagIdx].wInstModNdx,
+            instBags_[globalInstBagIdx + 1].wInstModNdx,
+            IsVelocityToInitialFilterFcMod);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             instMods_,
             instBags_[globalInstBagIdx].wInstModNdx,
@@ -685,6 +808,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             instBags_[instBagIdx].wInstModNdx,
             instBags_[instBagIdx + 1].wInstModNdx,
             effectiveKey, effectiveVelocity, ctx, outZone);
+        hasVelocityToFilterFcMod |= HasMatchingModulator(
+            instMods_,
+            instBags_[instBagIdx].wInstModNdx,
+            instBags_[instBagIdx + 1].wInstModNdx,
+            IsVelocityToInitialFilterFcMod);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             instMods_,
             instBags_[instBagIdx].wInstModNdx,
@@ -699,6 +827,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             presetBags_[globalPresetBagIdx].wModNdx,
             presetBags_[globalPresetBagIdx + 1].wModNdx,
             effectiveKey, effectiveVelocity, ctx, outZone);
+        hasVelocityToFilterFcMod |= HasMatchingModulator(
+            presetMods_,
+            presetBags_[globalPresetBagIdx].wModNdx,
+            presetBags_[globalPresetBagIdx + 1].wModNdx,
+            IsVelocityToInitialFilterFcMod);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             presetMods_,
             presetBags_[globalPresetBagIdx].wModNdx,
@@ -713,6 +846,11 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             presetBags_[presetBagIdx].wModNdx,
             presetBags_[presetBagIdx + 1].wModNdx,
             effectiveKey, effectiveVelocity, ctx, outZone);
+        hasVelocityToFilterFcMod |= HasMatchingModulator(
+            presetMods_,
+            presetBags_[presetBagIdx].wModNdx,
+            presetBags_[presetBagIdx + 1].wModNdx,
+            IsVelocityToInitialFilterFcMod);
         hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
             presetMods_,
             presetBags_[presetBagIdx].wModNdx,
@@ -725,6 +863,9 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         const i32 delta = ComputeDefaultVelocityAttenuationCb(effectiveVelocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
+    }
+    if (!hasVelocityToFilterFcMod) {
+        ApplyModulatorDelta(outZone, GEN_InitialFilterFc, ComputeDefaultVelocityFilterCutoffDelta(effectiveVelocity));
     }
     if (ctx && !hasCc1ToVibLfoPitchMod && ctx->ccValues[1] != 0) {
         const i32 delta = static_cast<i32>(std::lround(
@@ -747,21 +888,48 @@ bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, 
             hasVelocityToAttenuationMod = true;
         }
         if (mod.sfModDestOper >= GEN_COUNT) continue;
-        if (mod.sfModTransOper != 0) continue;
+        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
 
         bool sourceSupported = false;
         const double source = DecodeModSourceValue(mod.sfModSrcOper, key, velocity, ctx, sourceSupported);
         if (!sourceSupported) continue;
+        bool transformSupported = false;
+        const double transformedSource = ApplyModSourceTransform(source, mod.sfModTransOper, transformSupported);
+        if (!transformSupported) continue;
 
         bool amountSupported = false;
         const double amountSource = DecodeModSourceValue(mod.sfModAmtSrcOper, key, velocity, ctx, amountSupported);
         const double amountScale = amountSupported ? amountSource : 1.0;
-        i32 delta = static_cast<i32>(std::lround(static_cast<double>(mod.modAmount) * source * amountScale));
+        i32 delta = static_cast<i32>(std::lround(static_cast<double>(mod.modAmount) * transformedSource * amountScale));
         if (delta == 0) continue;
 
         ApplyModulatorDelta(zone, mod.sfModDestOper, delta);
     }
     return hasVelocityToAttenuationMod;
+}
+
+void Sf2File::ScanUnsupportedModulators() {
+    unsupportedModulatorCount_ = 0;
+    unsupportedModulatorTransformCount_ = 0;
+
+    auto scan = [&](const std::vector<SFModList>& mods) {
+        for (const auto& mod : mods) {
+            const bool unsupportedTransform = !IsSupportedModTransform(mod.sfModTransOper);
+            const bool unsupportedSource = !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
+            const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
+            const bool unsupportedDestination =
+                (mod.sfModDestOper >= GEN_COUNT) || !IsSupportedModulatorDestination(mod.sfModDestOper);
+            if (unsupportedTransform) {
+                ++unsupportedModulatorTransformCount_;
+            }
+            if (unsupportedTransform || unsupportedSource || unsupportedAmountSource || unsupportedDestination) {
+                ++unsupportedModulatorCount_;
+            }
+        }
+    };
+
+    scan(presetMods_);
+    scan(instMods_);
 }
 
 

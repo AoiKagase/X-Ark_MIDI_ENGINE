@@ -122,7 +122,6 @@ public:
     f32      filterZ1 = 0.0f;
     f32      filterZ2 = 0.0f;
     i32      filterBaseFcCents = 13500;
-    i32      filterVelocityFcCents = 0;
     i32      filterQCb = 0;
     i32      filterModEnvToFcCents = 0;
     i32      filterCurrentFcCents = 13500;
@@ -202,6 +201,8 @@ public:
     bool IsFinished() const { return envPhase == EnvPhase::Off; }
 
 private:
+    void ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey);
+    void ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey);
     void ApplyPan(f32 pan);
     void RefreshOutputGains();
 };

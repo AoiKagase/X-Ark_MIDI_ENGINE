@@ -107,6 +107,39 @@ msbuild msvc/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /
 XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 ```
 
+## SF2 準拠メモ
+
+現時点の SF2 実装では、次を優先して追従しています。
+
+- generator の既定値マージ
+- key/velocity 強制
+- default modulator の主要系
+  - velocity -> initial attenuation
+  - velocity -> initial filter cutoff
+  - CC1 -> vibrato LFO pitch
+- runtime 再評価が必要な modulator source
+  - CC
+  - poly pressure
+  - channel pressure
+  - pitch bend
+  - pitch wheel sensitivity
+- 再評価対象 destination
+  - pitch/filter/attenuation/pan
+  - volume/mod envelope
+  - modulation/vibrato LFO
+  - reverb/chorus send
+  - tuning/root/exclusive class
+
+補助確認:
+
+- `tests/dump_sf2_zone.cpp` は、読み込んだ SF2 に未対応 modulator がある場合、その件数と未対応 transform 件数を表示します。
+
+残件:
+
+- 一部の modulator destination は未対応です。
+- `sfModTransOper` は linear と absolute のみ対応しています。
+- SF2 send と MIDI send の最終ミキシング方針は、現状エンジンポリシーです。
+
 ## 想定ユースケース
 
 - MIDI から WAV 相当の PCM データを生成したい

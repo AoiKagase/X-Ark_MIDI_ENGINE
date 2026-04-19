@@ -333,6 +333,96 @@ void AdvanceEnvelope(EnvPhase& phase,
 
 }
 
+void Voice::ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey) {
+    const f64 outputRate = static_cast<f64>(outputSampleRate);
+
+    f64 delayTime   = TimecentsToSeconds(gen[GEN_DelayVolEnv]);
+    f64 attackTime  = TimecentsToSeconds(gen[GEN_AttackVolEnv]);
+    f64 holdTime    = TimecentsToSeconds(gen[GEN_HoldVolEnv]);
+    f64 decayTime   = TimecentsToSeconds(gen[GEN_DecayVolEnv]);
+    f64 releaseTime = TimecentsToSeconds(gen[GEN_ReleaseVolEnv]);
+    const f64 sustainCb = static_cast<f64>(gen[GEN_SustainVolEnv]);
+
+    holdTime *= std::pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvHold]) * (60 - effectiveKey) / 1200.0);
+    decayTime *= std::pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvDecay]) * (60 - effectiveKey) / 1200.0);
+
+    envSustainLevel = static_cast<f32>(CentibelsToGain(static_cast<i32>(sustainCb)));
+    envDelayEnd = static_cast<u32>(std::max(0.0, delayTime * outputRate));
+    envAttackRate = (attackTime > 0.0) ? static_cast<f32>(1.0 / (attackTime * outputRate)) : 1.0f;
+    envHoldEnd = static_cast<u32>(std::max(0.0, holdTime * outputRate));
+    if (decayTime > 0.0) {
+        const f64 sustainForCalc = std::max(static_cast<f64>(envSustainLevel), 1e-9);
+        envDecayRate = static_cast<f32>(std::pow(sustainForCalc, 1.0 / (decayTime * outputRate)));
+    } else {
+        envDecayRate = 0.0f;
+    }
+    envReleaseTimeSeconds = static_cast<f32>(releaseTime);
+    envReleaseRate = ComputeReleaseRate(1.0f, envReleaseTimeSeconds, outputSampleRate);
+
+    f64 modDelayTime   = TimecentsToSeconds(gen[GEN_DelayModEnv]);
+    f64 modAttackTime  = TimecentsToSeconds(gen[GEN_AttackModEnv]);
+    f64 modHoldTime    = TimecentsToSeconds(gen[GEN_HoldModEnv]);
+    f64 modDecayTime   = TimecentsToSeconds(gen[GEN_DecayModEnv]);
+    f64 modReleaseTime = TimecentsToSeconds(gen[GEN_ReleaseModEnv]);
+    const f64 modSustainRaw = static_cast<f64>(gen[GEN_SustainModEnv]);
+
+    modHoldTime *= std::pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvHold]) * (60 - effectiveKey) / 1200.0);
+    modDecayTime *= std::pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvDecay]) * (60 - effectiveKey) / 1200.0);
+
+    modEnvDelayEnd = static_cast<u32>(std::max(0.0, modDelayTime * outputRate));
+    modEnvAttackRate = (modAttackTime > 0.0) ? static_cast<f32>(1.0 / (modAttackTime * outputRate)) : 1.0f;
+    modEnvHoldEnd = static_cast<u32>(std::max(0.0, modHoldTime * outputRate));
+    modEnvSustainLevel = static_cast<f32>(std::clamp(1.0 - (modSustainRaw / 1000.0), 0.0, 1.0));
+    if (modDecayTime > 0.0) {
+        const f64 sustainForCalc = std::max(static_cast<f64>(modEnvSustainLevel), 1e-9);
+        modEnvDecayRate = static_cast<f32>(std::pow(sustainForCalc, 1.0 / (modDecayTime * outputRate)));
+    } else {
+        modEnvDecayRate = 0.0f;
+    }
+    modEnvReleaseTimeSeconds = static_cast<f32>(modReleaseTime);
+    modEnvReleaseRate = ComputeReleaseRate(1.0f, modEnvReleaseTimeSeconds, outputSampleRate);
+
+    modLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayModLFO]) * outputRate));
+    modLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqModLFO]), outputSampleRate);
+    modLfoToPitchCents = static_cast<f32>(gen[GEN_ModLfoToPitch]);
+    modLfoToFilterFcCents = static_cast<f32>(gen[GEN_ModLfoToFilterFc]);
+    modLfoToVolumeCb = static_cast<f32>(gen[GEN_ModLfoToVolume]);
+    modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
+
+    vibLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayVibLFO]) * outputRate));
+    vibLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqVibLFO]), outputSampleRate);
+    vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
+}
+
+void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
+    const i32* gen = zone.generators;
+    const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
+    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
+    if (zone.sample) attenuation *= zone.sample->loudnessGain;
+
+    ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
+
+    filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
+    filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
+    filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
+    filterCurrentFcCents = filterBaseFcCents;
+    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
+    filterEnabled = (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
+    if (filterEnabled) {
+        ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
+    }
+
+    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
+    if (specialRoute.enabled) {
+        pan = specialRoute.pan;
+    }
+    ApplyPan(pan);
+    presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
+    presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
+    exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
+    RefreshOutputGains();
+}
+
 void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
                    u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
                    SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
@@ -385,7 +475,6 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     const SampleHeader* smp = zone.sample;
     sampleHeader = smp;
     const u8 effectiveKeyU8 = ResolveForcedKey(key, gen);
-    const u16 effectiveVelocityU16 = ResolveForcedVelocity(vel, gen);
     i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
 
     // ---- サンプル範囲 ----
@@ -488,94 +577,16 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     const f64 sampleStep = baseSampleStep * pow(2.0, pitchBendSemitones / 12.0);
     sampleStepFixed = static_cast<i64>(std::llround(sampleStep * 4294967296.0));
 
-    // ---- ボリュームエンベロープ（timecents -> 秒 -> サンプル数） ----
-    f64 delayTime   = TimecentsToSeconds(gen[GEN_DelayVolEnv]);
-    f64 attackTime  = TimecentsToSeconds(gen[GEN_AttackVolEnv]);
-    f64 holdTime    = TimecentsToSeconds(gen[GEN_HoldVolEnv]);
-    f64 decayTime   = TimecentsToSeconds(gen[GEN_DecayVolEnv]);
-    f64 releaseTime = TimecentsToSeconds(gen[GEN_ReleaseVolEnv]);
-    f64 sustainCb   = static_cast<f64>(gen[GEN_SustainVolEnv]);
+    ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
 
-    // KeynumToVolEnvHold/Decay: キー番号による補正（SF2 spec 8.1.1）
-    f64 holdMod  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvHold])  * (60 - effectiveKey) / 1200.0);
-    f64 decayMod = pow(2.0, static_cast<f64>(gen[GEN_KeynumToVolEnvDecay]) * (60 - effectiveKey) / 1200.0);
-    holdTime  *= holdMod;
-    decayTime *= decayMod;
-
-    envSustainLevel = static_cast<f32>(CentibelsToGain(static_cast<i32>(sustainCb)));
-
-    // 各フェーズのサンプル数（Delay・Hold）と変化率（Attack・Decay・Release）
-    envDelayEnd   = static_cast<u32>(std::max(0.0, delayTime * sampleRate));
-    envAttackRate = (attackTime > 0.0) ? static_cast<f32>(1.0 / (attackTime * sampleRate)) : 1.0f;
-    envHoldEnd    = static_cast<u32>(std::max(0.0, holdTime * sampleRate)); // Hold フェーズ単独のサンプル数
-
-    // Decay: sustain=0でも急落しないよう計算用に下限を設ける
-    if (decayTime > 0.0) {
-        const f64 sustainForCalc = std::max(static_cast<f64>(envSustainLevel), 1e-9);
-        envDecayRate = static_cast<f32>(pow(sustainForCalc, 1.0 / (decayTime * sampleRate)));
-    } else {
-        envDecayRate = 0.0f; // 即座にSustainへ
-    }
-
-    // Release: releaseTime 秒で -100dB (1e-5) に達するレート
-    // 閾値と一致させることで指定時間ちょうどでボイスが終了する
-    envReleaseTimeSeconds = static_cast<f32>(releaseTime);
-    envReleaseRate = ComputeReleaseRate(1.0f, envReleaseTimeSeconds, sampleRate);
-
-    // Delay が 0 ならスキップしてAttackへ
-    if (delayTime <= 0.0) {
+    if (envDelayEnd == 0) {
         envPhase      = EnvPhase::Attack;
         envSampleCount = 0;
     }
-
-    // ---- モジュレーションエンベロープ ----
-    f64 modDelayTime   = TimecentsToSeconds(gen[GEN_DelayModEnv]);
-    f64 modAttackTime  = TimecentsToSeconds(gen[GEN_AttackModEnv]);
-    f64 modHoldTime    = TimecentsToSeconds(gen[GEN_HoldModEnv]);
-    f64 modDecayTime   = TimecentsToSeconds(gen[GEN_DecayModEnv]);
-    f64 modReleaseTime = TimecentsToSeconds(gen[GEN_ReleaseModEnv]);
-    f64 modSustainRaw  = static_cast<f64>(gen[GEN_SustainModEnv]);
-
-    f64 modHoldScale  = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvHold])  * (60 - effectiveKey) / 1200.0);
-    f64 modDecayScale = pow(2.0, static_cast<f64>(gen[GEN_KeynumToModEnvDecay]) * (60 - effectiveKey) / 1200.0);
-    modHoldTime  *= modHoldScale;
-    modDecayTime *= modDecayScale;
-
-    modEnvDelayEnd   = static_cast<u32>(std::max(0.0, modDelayTime * sampleRate));
-    modEnvAttackRate = (modAttackTime > 0.0) ? static_cast<f32>(1.0 / (modAttackTime * sampleRate)) : 1.0f;
-    modEnvHoldEnd    = static_cast<u32>(std::max(0.0, modHoldTime * sampleRate));
-    modEnvSustainLevel = static_cast<f32>(std::clamp(1.0 - (modSustainRaw / 1000.0), 0.0, 1.0));
-
-    if (modDecayTime > 0.0) {
-        const f64 sustainForCalc = std::max(static_cast<f64>(modEnvSustainLevel), 1e-9);
-        modEnvDecayRate = static_cast<f32>(pow(sustainForCalc, 1.0 / (modDecayTime * sampleRate)));
-    } else {
-        modEnvDecayRate = 0.0f;
-    }
-
-    modEnvReleaseTimeSeconds = static_cast<f32>(modReleaseTime);
-    modEnvReleaseRate = ComputeReleaseRate(1.0f, modEnvReleaseTimeSeconds, sampleRate);
-    if (modDelayTime <= 0.0) {
+    if (modEnvDelayEnd == 0) {
         modEnvPhase = EnvPhase::Attack;
         modEnvSampleCount = 0;
     }
-
-    modLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayModLFO]) * sampleRate));
-    modLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqModLFO]), sampleRate);
-    modLfoToPitchCents = static_cast<f32>(gen[GEN_ModLfoToPitch]);
-    modLfoToFilterFcCents = static_cast<f32>(gen[GEN_ModLfoToFilterFc]);
-    modLfoToVolumeCb = static_cast<f32>(gen[GEN_ModLfoToVolume]);
-    modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
-
-    vibLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayVibLFO]) * sampleRate));
-    vibLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqVibLFO]), sampleRate);
-    vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
-
-    // ---- 音量計算（SF2仕様） ----
-    // GEN_InitialAttenuation には FindZones() 内で velocity 分が加算済み
-    const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
-    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
-    if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
 
     // ---- 初期ローパスフィルター ----
     filterEnabled = false;
@@ -586,40 +597,14 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     filterA2 = 0.0f;
     filterZ1 = 0.0f;
     filterZ2 = 0.0f;
-    filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
-    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(effectiveVelocityU16) / 65535.0f));
-    filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
-    filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
-    filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
-    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
-    if (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f) {
-        ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, sampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
-        filterEnabled = true;
-    }
-
-    // ---- パン ----
-    // GEN_Pan: -500(左)～500(右)
-    // GEN_Pan: SF2 の ±500 をそのまま使用
-    // → L/R ゾーンの音響的分離が自然な厚みを生む (BASSMIDI 互換)
-    // → リバーブで空間的な広がりを補う
-    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
-    if (specialRoute.enabled) {
-        pan = specialRoute.pan;
-    }
-    ApplyPan(pan);
+    ApplyResolvedZoneControllerState(zone, effectiveKey);
     channelGainL = 1.0f;
     channelGainR = 1.0f;
-    presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
-    presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
     channelReverbSend = 0.0f;
     channelChorusSend = 0.0f;
     reverbSend = presetReverbSend;
     chorusSend = presetChorusSend;
     RefreshOutputGains();
-
-    // ---- ExclusiveClass ----
-    exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
 }
 
 void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
@@ -629,32 +614,8 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
 
     const i32* gen = zone.generators;
     const u8 effectiveKeyU8 = ResolveForcedKey(noteKey, gen);
-    const u16 effectiveVelocityU16 = ResolveForcedVelocity(velocity, gen);
     const i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
-    const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
-    attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
-    if (zone.sample) attenuation *= zone.sample->loudnessGain; // PCMレベル正規化
-
-    filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
-    // SF2 default modulator 2: velocity -> filter cutoff (-2400 * (1 - vel/65535) cents)
-    filterVelocityFcCents = static_cast<i32>(-2400.0f * (1.0f - static_cast<f32>(effectiveVelocityU16) / 65535.0f));
-    filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
-    filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
-    filterCurrentFcCents = std::clamp(filterBaseFcCents + filterVelocityFcCents, kFilterFcMin, kFilterFcMax);
-    modLfoToPitchCents = static_cast<f32>(gen[GEN_ModLfoToPitch]);
-    modLfoToFilterFcCents = static_cast<f32>(gen[GEN_ModLfoToFilterFc]);
-    modLfoToVolumeCb = static_cast<f32>(gen[GEN_ModLfoToVolume]);
-    modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
-    vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
-    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
-
-    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
-    if (specialRoute.enabled) {
-        pan = specialRoute.pan;
-    }
-    ApplyPan(pan);
-    presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
-    presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
+    ApplyResolvedZoneControllerState(zone, effectiveKey);
 
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
@@ -751,7 +712,6 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
     const bool localUnitStep = localSampleStepFixed == kSamplePosFracOne;
     const bool localAvx2UnitStep = localUnitStep && Simd::HasAvx2();
     const i32 localFilterBaseFcCents = filterBaseFcCents;
-    const i32 localFilterVelocityFcCents = filterVelocityFcCents;
     const i32 localFilterQCb = filterQCb;
     const i32 localFilterModEnvToFcCents = filterModEnvToFcCents;
     const u32 localOutputSampleRate = outputSampleRate;
@@ -1440,7 +1400,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                     static_cast<f32>(localFilterModEnvToFcCents) * localModEnvLevel +
                     modLfoToFilterFcCents * modLfoValue;
                 const i32 dynamicFc = std::clamp(
-                    localFilterBaseFcCents + localFilterVelocityFcCents +
+                    localFilterBaseFcCents +
                     static_cast<i32>(dynamicOffset >= 0.0f ? dynamicOffset + 0.5f : dynamicOffset - 0.5f),
                     kFilterFcMin, kFilterFcMax);
                 if (dynamicFc != localFilterCurrentFcCents) {

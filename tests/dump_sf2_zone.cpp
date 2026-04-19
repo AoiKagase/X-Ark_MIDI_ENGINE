@@ -117,6 +117,11 @@ int main(int argc, char* argv[]) {
     printf("=== SF2 Analysis: %s ===\n", argv[1]);
     printf("Samples: %zu, Presets: %zu, Instruments: %zu\n\n", 
         sampleCount, sf2.PresetCount(), sf2.InstrumentCount());
+    if (sf2.UnsupportedModulatorCount() != 0) {
+        printf("Unsupported modulators: %u (unsupported transforms: %u)\n\n",
+            sf2.UnsupportedModulatorCount(),
+            sf2.UnsupportedModulatorTransformCount());
+    }
 
     if (argc >= 3 && std::strcmp(argv[2], "--scan-pitch") == 0) {
         size_t nonZeroPitchCorrection = 0;

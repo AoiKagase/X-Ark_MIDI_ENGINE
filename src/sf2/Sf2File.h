@@ -32,6 +32,8 @@ public:
     size_t      SampleDataCount() const override { return sampleData_.size(); }
 
     const std::string& ErrorMessage() const override { return errorMsg_; }
+    u32 UnsupportedModulatorCount() const { return unsupportedModulatorCount_; }
+    u32 UnsupportedModulatorTransformCount() const { return unsupportedModulatorTransformCount_; }
 
     f32 GetLoudnessNormCompensation() const override { return normCompensation_; }
 
@@ -99,10 +101,13 @@ private:
     void BuildPresetIndex();
     void ComputeSampleLoudnessGains();
     bool ValidateSampleHeaders();
+    void ScanUnsupportedModulators();
 
     f32 normCompensation_ = 1.0f;
     size_t maxSampleDataBytes_ = 512ull * 1024ull * 1024ull;
     u32 maxPdtaEntries_ = 1u << 20;
+    u32 unsupportedModulatorCount_ = 0;
+    u32 unsupportedModulatorTransformCount_ = 0;
 };
 
 } // namespace XArkMidi
