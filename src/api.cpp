@@ -62,6 +62,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER) != 0;
         compatOptions.enableSf2SamplePitchCorrection =
             (flags & XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION) != 0;
+        compatOptions.multiplySf2MidiEffectsSends =
+            (flags & XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS) != 0;
     }
     return compatOptions;
 }

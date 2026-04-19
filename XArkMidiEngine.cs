@@ -66,6 +66,8 @@ public static class XArkMidiEngine
         Sf2ZeroLengthLoopRetrigger = 1 << 0,
         /// <summary>Apply pitch correction for SF2 sample playback. SF2 サンプル再生時のピッチ補正を有効にします。</summary>
         EnableSf2SamplePitchCorrection = 1 << 1,
+        /// <summary>Multiply SF2 preset send with MIDI channel send instead of summing them. SF2 の send と MIDI チャンネル send を加算ではなく乗算で合成します。</summary>
+        MultiplySf2MidiEffectsSends = 1 << 2,
     }
 
     [StructLayout(LayoutKind.Sequential)]

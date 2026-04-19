@@ -104,6 +104,30 @@ if(XAME_BUILD_TESTS)
             src/sf2/Sf2File.cpp
         )
     endforeach()
+
+    add_executable(sf2_compliance
+        tests/sf2_compliance.cpp
+        src/common/BinaryReader.cpp
+        src/common/CpuFeatures.cpp
+        src/common/FileUtil.cpp
+        src/sf2/Sf2File.cpp
+        src/synth/SimdKernels.cpp
+        src/synth/SimdKernelsAvx2.cpp
+        src/synth/Voice.cpp
+    )
+    target_include_directories(sf2_compliance PRIVATE src)
+    target_compile_features(sf2_compliance PRIVATE cxx_std_17)
+    if(MSVC)
+        set_source_files_properties(
+            src/synth/SimdKernelsAvx2.cpp
+            PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
+        )
+    else()
+        set_source_files_properties(
+            src/synth/SimdKernelsAvx2.cpp
+            PROPERTIES COMPILE_OPTIONS "-mavx2"
+        )
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

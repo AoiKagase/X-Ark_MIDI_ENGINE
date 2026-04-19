@@ -15,6 +15,7 @@ namespace XArkMidi {
 struct SynthCompatOptions {
     bool sf2ZeroLengthLoopRetrigger = false;
     bool enableSf2SamplePitchCorrection = false;
+    bool multiplySf2MidiEffectsSends = false;
 };
 
 struct SpecialVoiceRoute {

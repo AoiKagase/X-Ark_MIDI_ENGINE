@@ -138,7 +138,12 @@ XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 
 - 一部の modulator destination は未対応です。
 - `sfModTransOper` は linear と absolute のみ対応しています。
-- SF2 send と MIDI send の最終ミキシング方針は、現状エンジンポリシーです。
+- SF2 send と MIDI send の最終ミキシング方針は、既定では加算です。
+- `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` を指定すると、send 合成を乗算へ切り替えられます。
+
+テスト:
+
+- `tests/sf2_compliance.cpp` は synthetic SF2 を使って、forced velocity、default modulator、absolute transform、unsupported transform 集計、send mixing policy を検証します。
 
 ## 想定ユースケース
 

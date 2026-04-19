@@ -39,6 +39,13 @@ f32 NormalizeSf2EffectsSend(i32 value) {
     return std::clamp(static_cast<f32>(value) / 1000.0f, 0.0f, 1.0f);
 }
 
+f32 MixEffectsSend(f32 presetSend, f32 channelSend, const SynthCompatOptions& compatOptions) {
+    if (compatOptions.multiplySf2MidiEffectsSends) {
+        return std::clamp(presetSend * channelSend, 0.0f, 1.0f);
+    }
+    return std::clamp(presetSend + channelSend, 0.0f, 1.0f);
+}
+
 u8 ResolveForcedKey(u8 key, const i32* gen) {
     const i32 forcedKey = gen[GEN_Keynum];
     if (forcedKey >= 0 && forcedKey <= 127) {
@@ -644,8 +651,8 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
     channelGainR = volumeFactor * panGainR;
     channelReverbSend = NormalizeMidiSend(reverbSend32);
     channelChorusSend = NormalizeMidiSend(chorusSend32);
-    reverbSend = std::clamp(presetReverbSend + channelReverbSend, 0.0f, 1.0f);
-    chorusSend = std::clamp(presetChorusSend + channelChorusSend, 0.0f, 1.0f);
+    reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
+    chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
     RefreshOutputGains();
 }
 
