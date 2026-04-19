@@ -1,5 +1,6 @@
 #include "../src/sf2/Sf2File.h"
 #include "../src/sf2/Sf2Types.h"
+#include "../src/synth/Interpolator.h"
 #include "../src/synth/Voice.h"
 #include <algorithm>
 #include <cmath>
@@ -213,11 +214,24 @@ u32 FloatToU32(f32 value) {
     return static_cast<u32>(std::llround(scaled));
 }
 
+bool NearlyEqual(f64 lhs, f64 rhs, f64 epsilon = 1.0e-6) {
+    return std::fabs(lhs - rhs) <= epsilon;
+}
+
 void Require(bool condition, const char* message) {
     if (!condition) {
         std::fprintf(stderr, "FAILED: %s\n", message);
         std::exit(1);
     }
+}
+
+const ResolvedZone& RequireSingleZone(const Sf2File& sf2, u8 key, u16 velocity,
+                                      const ModulatorContext* ctx,
+                                      std::vector<ResolvedZone>& zones) {
+    zones.clear();
+    Require(sf2.FindZones(0, 0, key, velocity, zones, ctx), "Expected SF2 zone resolution to succeed");
+    Require(zones.size() == 1, "Expected exactly one resolved zone");
+    return zones[0];
 }
 
 void TestForcedVelocityDefaultModulators() {
@@ -304,6 +318,86 @@ void TestEffectsSendMixPolicy() {
     Require(std::fabs(multiplied.chorusSend - 0.1f) < 1.0e-4f, "Multiplicative chorus policy should multiply sends");
 }
 
+void TestEnvelopePitchAndKeynumScaling() {
+    MinimalSf2Config config;
+    config.instGens.push_back(MakeSignedGen(GEN_ModEnvToPitch, 600));
+    config.instGens.push_back(MakeSignedGen(GEN_HoldModEnv, -1200));
+    config.instGens.push_back(MakeSignedGen(GEN_DecayModEnv, 0));
+    config.instGens.push_back(MakeSignedGen(GEN_SustainModEnv, 500));
+    config.instGens.push_back(MakeSignedGen(GEN_KeynumToModEnvHold, 100));
+    config.instGens.push_back(MakeSignedGen(GEN_KeynumToModEnvDecay, -100));
+    config.instGens.push_back(MakeSignedGen(GEN_HoldVolEnv, -1200));
+    config.instGens.push_back(MakeSignedGen(GEN_DecayVolEnv, 0));
+    config.instGens.push_back(MakeSignedGen(GEN_SustainVolEnv, 600));
+    config.instGens.push_back(MakeSignedGen(GEN_KeynumToVolEnvHold, 100));
+    config.instGens.push_back(MakeSignedGen(GEN_KeynumToVolEnvDecay, -100));
+
+    const std::vector<u8> bytes = BuildMinimalSf2(config);
+    Sf2File sf2;
+    Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+    std::vector<ResolvedZone> zones;
+    const ResolvedZone& zone = RequireSingleZone(sf2, 72, 65535, nullptr, zones);
+    Require(zone.generators[GEN_ModEnvToPitch] == 600, "Resolved zone should preserve ModEnvToPitch");
+
+    Voice voice;
+    voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 72, 65535, 1, 48000, 0.0,
+                 SoundBankKind::Sf2, SynthCompatOptions{});
+
+    const f64 holdScale = std::pow(2.0, 100.0 * (60.0 - 72.0) / 1200.0);
+    const f64 decayScale = std::pow(2.0, -100.0 * (60.0 - 72.0) / 1200.0);
+    const u32 expectedModHoldEnd = static_cast<u32>(TimecentsToSeconds(-1200) * holdScale * 48000.0);
+    const u32 expectedVolHoldEnd = static_cast<u32>(TimecentsToSeconds(-1200) * holdScale * 48000.0);
+    const f32 expectedModDecayRate = static_cast<f32>(std::pow(0.5, 1.0 / (TimecentsToSeconds(0) * decayScale * 48000.0)));
+    const f32 expectedVolSustainLevel = static_cast<f32>(CentibelsToGain(600));
+    const f32 expectedVolDecayRate = static_cast<f32>(std::pow(
+        std::max(static_cast<f64>(expectedVolSustainLevel), 1.0e-9), 1.0 / (TimecentsToSeconds(0) * decayScale * 48000.0)));
+
+    Require(voice.useModEnv, "Mod env should be enabled when ModEnvToPitch is present");
+    Require(voice.modEnvToPitchCents == 600.0f, "Voice should apply ModEnvToPitch from the resolved zone");
+    Require(voice.modEnvHoldEnd == expectedModHoldEnd, "KeynumToModEnvHold should scale hold duration");
+    Require(voice.envHoldEnd == expectedVolHoldEnd, "KeynumToVolEnvHold should scale hold duration");
+    Require(NearlyEqual(voice.modEnvDecayRate, expectedModDecayRate, 1.0e-6), "KeynumToModEnvDecay should scale decay rate");
+    Require(NearlyEqual(voice.envDecayRate, expectedVolDecayRate, 1.0e-6), "KeynumToVolEnvDecay should scale decay rate");
+}
+
+void TestPressureSources() {
+    MinimalSf2Config config;
+    config.instMods.push_back(MakeMod(10, GEN_Pan, 500, 0, 0));
+    config.instMods.push_back(MakeMod(13, GEN_InitialAttenuation, 200, 0, 0));
+
+    const std::vector<u8> bytes = BuildMinimalSf2(config);
+    Sf2File sf2;
+    Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+    ModulatorContext ctx{};
+    ctx.polyPressure[60] = 127;
+    ctx.channelPressure = 127;
+
+    std::vector<ResolvedZone> zones;
+    const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+    Require(zone.generators[GEN_Pan] == 500, "Poly pressure should be able to drive pan");
+    Require(zone.generators[GEN_InitialAttenuation] == 200, "Channel pressure should be able to drive attenuation");
+}
+
+void TestPitchWheelSensitivityAmountSource() {
+    MinimalSf2Config config;
+    config.instMods.push_back(MakeMod(static_cast<u16>(14 | 0x0200), GEN_ModEnvToPitch, 1200, 16, 0));
+
+    const std::vector<u8> bytes = BuildMinimalSf2(config);
+    Sf2File sf2;
+    Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+    ModulatorContext ctx{};
+    ctx.pitchBend = 8191;
+    ctx.pitchWheelSensitivitySemitones = 12;
+
+    std::vector<ResolvedZone> zones;
+    const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+    Require(zone.generators[GEN_ModEnvToPitch] == 600,
+            "Pitch wheel sensitivity amount source should scale pitch bend modulation");
+}
+
 } // namespace
 
 int main() {
@@ -311,6 +405,9 @@ int main() {
     TestAbsoluteTransformSupport();
     TestUnsupportedTransformReporting();
     TestEffectsSendMixPolicy();
+    TestEnvelopePitchAndKeynumScaling();
+    TestPressureSources();
+    TestPitchWheelSensitivityAmountSource();
     std::printf("sf2_compliance: all tests passed\n");
     return 0;
 }

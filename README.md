@@ -144,6 +144,7 @@ XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 テスト:
 
 - `tests/sf2_compliance.cpp` は synthetic SF2 を使って、forced velocity、default modulator、absolute transform、unsupported transform 集計、send mixing policy を検証します。
+- 追加で、`mod env to pitch`、`keynum-to-hold / keynum-to-decay`、poly pressure、channel pressure、pitch wheel sensitivity amount source も検証します。
 
 ## 想定ユースケース
 
