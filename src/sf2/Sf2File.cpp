@@ -26,8 +26,22 @@ namespace {
 constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcCc1 = 0x0081u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
-constexpr u16 kModTransformLinear = 0u;
+// ---------------------------------------------------------------------------
+// sfModTransOper の対応表（SF2 spec §8.2.4）
+//
+//   0 = Linear   : SF2 2.01 公式定義。出力をそのまま使用する。
+//   1 = Concave  : SF2 拡張。Source curve の concave と同一の sin カーブ変換。
+//   2 = Absolute : SF2 2.01 公式定義。出力の絶対値を取る。
+//   3 = Switch   : SF2 拡張。Source curve の switch と同一の閾値変換。
+//
+// SF2 2.01 仕様書では 0/2 のみが定義されているが、
+// FluidSynth 等の主要実装は 0〜3 をすべて受け付けるため、
+// 実用上の互換性のために 1/3 も対応する。
+// ---------------------------------------------------------------------------
+constexpr u16 kModTransformLinear   = 0u;
+constexpr u16 kModTransformConcave  = 1u;
 constexpr u16 kModTransformAbsolute = 2u;
+constexpr u16 kModTransformSwitch   = 3u;
 
 inline u8 ResolveForcedKey(u8 key, const ResolvedZone& zone) {
     const i32 forcedKey = zone.generators[GEN_Keynum];
@@ -201,16 +215,21 @@ bool IsSupportedModSourceOperDefinition(u16 oper) {
 }
 
 bool IsSupportedModTransform(u16 oper) {
-    return oper == kModTransformLinear || oper == kModTransformAbsolute;
+    // 0(Linear), 1(Concave), 2(Absolute), 3(Switch) をすべて対応とみなす
+    return oper <= 3u;
 }
 
 double ApplyModSourceTransform(double value, u16 oper, bool& supported) {
     supported = true;
     switch (oper) {
-    case kModTransformLinear:
+    case kModTransformLinear:   // 0: そのまま
         return value;
-    case kModTransformAbsolute:
+    case kModTransformConcave:  // 1: sin カーブ（DecodeModSourceValue の type=1 と同一）
+        return std::sin(value * (3.14159265358979323846 / 2.0));
+    case kModTransformAbsolute: // 2: 絶対値（SF2 2.01 公式）
         return std::fabs(value);
+    case kModTransformSwitch:   // 3: 0.5 閾値スイッチ（DecodeModSourceValue の type=3 と同一）
+        return (value >= 0.5) ? 1.0 : 0.0;
     default:
         supported = false;
         return 0.0;
@@ -503,7 +522,13 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
             }
         }
         else {
-            // sm24 等はスキップ（範囲チェック付き）
+            if (subId == MakeFourCC("sm24")) {
+                // SF2 2.04 拡張: 24-bit サンプルの下位 8-bit チャンク。
+                // 本実装は 16-bit (smpl) のみ対応のため読み飛ばす。
+                // HasIgnoredSm24() で呼び出し元への通知が可能。
+                hasIgnoredSm24_ = true;
+            }
+            // sm24 を含むすべての未知サブチャンクをスキップ（範囲チェック付き）
             size_t skipSize = std::min(static_cast<size_t>(subSize), r.Remaining());
             r.Skip(skipSize);
             if ((subSize & 1) && !r.IsEof()) r.Skip(1);
@@ -952,8 +977,11 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                          const ModulatorContext* ctx) const {
     outZones.clear();
 
-    // SF2 ゾーン範囲は 0-127 (u8) — 16-bit velocity を 7-bit に変換して比較
-    const u8 vel7 = static_cast<u8>(velocity >> 9);
+    // SF2 ゾーン範囲は 0-127 (u8) — 16-bit velocity を 7-bit に変換して比較。
+    // velocity >> 9 は端数誤差が生じるため四捨五入スケーリングを使用する。
+    // velocity=0→0, velocity=65535→127 が保証される。
+    const u8 vel7 = static_cast<u8>(
+        (static_cast<u32>(velocity) * 127u + 32767u) / 65535u);
 
     const u32 presetKey = (static_cast<u32>(bank) << 8) | static_cast<u32>(program);
     const auto presetIt = presetIndexMap_.find(presetKey);

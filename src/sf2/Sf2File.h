@@ -35,6 +35,12 @@ public:
     u32 UnsupportedModulatorCount() const { return unsupportedModulatorCount_; }
     u32 UnsupportedModulatorTransformCount() const { return unsupportedModulatorTransformCount_; }
 
+    // SF2 2.04 の sm24 チャンク（24-bit サンプル下位バイト）が存在したが
+    // 本実装では無視されたことを示す。true の場合、音源は 16-bit 精度で読まれている。
+    // 対応するには smpl と sm24 を結合して 24-bit PCM を構築する必要がある。
+    // 参照: SF2 spec §4.4 (SoundFont 2.04)
+    bool HasIgnoredSm24() const { return hasIgnoredSm24_; }
+
     f32 GetLoudnessNormCompensation() const override { return normCompensation_; }
 
     size_t PresetCount() const { return presets_.size(); }
@@ -108,6 +114,7 @@ private:
     u32 maxPdtaEntries_ = 1u << 20;
     u32 unsupportedModulatorCount_ = 0;
     u32 unsupportedModulatorTransformCount_ = 0;
+    bool hasIgnoredSm24_ = false;
 };
 
 } // namespace XArkMidi
