@@ -17,8 +17,12 @@ using namespace XArkMidi;
 namespace {
 
     struct MinimalSf2Config {
+        std::vector<SFGenList> presetGlobalGens;
+        std::vector<SFModList> presetGlobalMods;
         std::vector<SFGenList> presetGens;
         std::vector<SFModList> presetMods;
+        std::vector<SFGenList> instGlobalGens;
+        std::vector<SFModList> instGlobalMods;
         std::vector<SFGenList> instGens;
         std::vector<SFModList> instMods;
     };
@@ -56,6 +60,10 @@ namespace {
     }
 
     std::vector<u8> BuildMinimalSf2(const MinimalSf2Config& config) {
+        const bool hasPresetGlobal = !config.presetGlobalGens.empty() || !config.presetGlobalMods.empty();
+        const bool hasInstGlobal = !config.instGlobalGens.empty() || !config.instGlobalMods.empty();
+        const u16 presetBagCount = static_cast<u16>(hasPresetGlobal ? 2 : 1);
+        const u16 instBagCount = static_cast<u16>(hasInstGlobal ? 2 : 1);
         std::vector<u8> infoPayload;
 
         std::vector<u8> sdtaPayload;
@@ -82,17 +90,30 @@ namespace {
             AppendU32LE(phdr, 0);
             };
         appendPresetHeader("Preset", 0, 0, 0);
-        appendPresetHeader("EOP", 0, 0, 1);
+        appendPresetHeader("EOP", 0, 0, presetBagCount);
         AppendChunk(pdtaPayload, "phdr", phdr);
 
         std::vector<u8> pbag;
         AppendU16LE(pbag, 0);
         AppendU16LE(pbag, 0);
-        AppendU16LE(pbag, static_cast<u16>(config.presetGens.size() + 1));
-        AppendU16LE(pbag, static_cast<u16>(config.presetMods.size()));
+        if (hasPresetGlobal) {
+            AppendU16LE(pbag, static_cast<u16>(config.presetGlobalGens.size()));
+            AppendU16LE(pbag, static_cast<u16>(config.presetGlobalMods.size()));
+        }
+        AppendU16LE(pbag, static_cast<u16>(
+            config.presetGlobalGens.size() + config.presetGens.size() + 1));
+        AppendU16LE(pbag, static_cast<u16>(
+            config.presetGlobalMods.size() + config.presetMods.size()));
         AppendChunk(pdtaPayload, "pbag", pbag);
 
         std::vector<u8> pmod;
+        for (const auto& mod : config.presetGlobalMods) {
+            AppendU16LE(pmod, mod.sfModSrcOper);
+            AppendU16LE(pmod, mod.sfModDestOper);
+            AppendI16LE(pmod, mod.modAmount);
+            AppendU16LE(pmod, mod.sfModAmtSrcOper);
+            AppendU16LE(pmod, mod.sfModTransOper);
+        }
         for (const auto& mod : config.presetMods) {
             AppendU16LE(pmod, mod.sfModSrcOper);
             AppendU16LE(pmod, mod.sfModDestOper);
@@ -107,6 +128,9 @@ namespace {
             AppendU16LE(bytes, gen.sfGenOper);
             AppendU16LE(bytes, gen.genAmount.wAmount);
             };
+        for (const auto& gen : config.presetGlobalGens) {
+            appendGen(pgen, gen);
+        }
         for (const auto& gen : config.presetGens) {
             appendGen(pgen, gen);
         }
@@ -124,17 +148,30 @@ namespace {
             AppendU16LE(inst, bagIndex);
             };
         appendInst("Inst", 0);
-        appendInst("EOI", 1);
+        appendInst("EOI", instBagCount);
         AppendChunk(pdtaPayload, "inst", inst);
 
         std::vector<u8> ibag;
         AppendU16LE(ibag, 0);
         AppendU16LE(ibag, 0);
-        AppendU16LE(ibag, static_cast<u16>(config.instGens.size() + 1));
-        AppendU16LE(ibag, static_cast<u16>(config.instMods.size()));
+        if (hasInstGlobal) {
+            AppendU16LE(ibag, static_cast<u16>(config.instGlobalGens.size()));
+            AppendU16LE(ibag, static_cast<u16>(config.instGlobalMods.size()));
+        }
+        AppendU16LE(ibag, static_cast<u16>(
+            config.instGlobalGens.size() + config.instGens.size() + 1));
+        AppendU16LE(ibag, static_cast<u16>(
+            config.instGlobalMods.size() + config.instMods.size()));
         AppendChunk(pdtaPayload, "ibag", ibag);
 
         std::vector<u8> imod;
+        for (const auto& mod : config.instGlobalMods) {
+            AppendU16LE(imod, mod.sfModSrcOper);
+            AppendU16LE(imod, mod.sfModDestOper);
+            AppendI16LE(imod, mod.modAmount);
+            AppendU16LE(imod, mod.sfModAmtSrcOper);
+            AppendU16LE(imod, mod.sfModTransOper);
+        }
         for (const auto& mod : config.instMods) {
             AppendU16LE(imod, mod.sfModSrcOper);
             AppendU16LE(imod, mod.sfModDestOper);
@@ -145,6 +182,9 @@ namespace {
         AppendChunk(pdtaPayload, "imod", imod);
 
         std::vector<u8> igen;
+        for (const auto& gen : config.instGlobalGens) {
+            appendGen(igen, gen);
+        }
         for (const auto& gen : config.instGens) {
             appendGen(igen, gen);
         }
@@ -271,6 +311,53 @@ namespace {
             "Default velocity->attenuation should use forced velocity");
         Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
             "Default velocity->filter cutoff should use forced velocity");
+    }
+
+    void TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(2, GEN_InitialAttenuation, 100, 16, 0));
+        config.instMods.push_back(MakeMod(2, GEN_InitialFilterFc, 1200, 16, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        ctx.pitchWheelSensitivitySemitones = 24;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, &ctx, zones);
+        const i32 expectedAtten = ExpectedVelocityAttenuationCb(32768u) + 50;
+        const i32 customFilter = std::clamp(13500 + 600, 1500, 13500);
+        const i32 expectedFilter = std::clamp(
+            customFilter + static_cast<i32>(std::lround(-2400.0 * (1.0 - (32768.0 / 65535.0)))),
+            1500, 13500);
+        Require(zone.generators[GEN_InitialAttenuation] == expectedAtten,
+            "Velocity mod with amount source must not suppress default attenuation modulator");
+        Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
+            "Velocity mod with amount source must not suppress default filter modulator");
+    }
+
+    void TestBagIndexHelpersSkipGlobalZones() {
+        MinimalSf2Config config;
+        config.presetGlobalGens.push_back(MakeSignedGen(GEN_CoarseTune, 1));
+        config.instGlobalGens.push_back(MakeSignedGen(GEN_Pan, -100));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        int globalPresetBag = -1;
+        int localPresetBag = -1;
+        Require(sf2.GetPresetBagIndices(0, 0, globalPresetBag, localPresetBag),
+            "GetPresetBagIndices should succeed with explicit global/local bags");
+        Require(globalPresetBag == 0, "Preset global bag index should be 0");
+        Require(localPresetBag == 1, "Preset local bag index should skip the global bag");
+
+        int globalInstBag = -1;
+        Require(sf2.GetInstrumentBagIndices(0, 1, globalInstBag),
+            "GetInstrumentBagIndices should accept the local bag index");
+        Require(globalInstBag == 0, "Instrument global bag index should be 0");
     }
 
     void TestAbsoluteTransformSupport() {
@@ -406,8 +493,8 @@ namespace {
         {
             MinimalSf2Config config;
             config.instMods.push_back(MakeMod(velocityConcave, GEN_Pan, 500, 0, 0));
-            config.instMods.push_back(MakeMod(velocityConvex, GEN_InitialAttenuation, 500, 0, 0));
-            config.instMods.push_back(MakeMod(velocitySwitch, GEN_ModEnvToPitch, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocityConvex, GEN_ModEnvToPitch, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocitySwitch, GEN_InitialFilterQ, 500, 0, 0));
 
             const std::vector<u8> bytes = BuildMinimalSf2(config);
             Sf2File sf2;
@@ -417,9 +504,9 @@ namespace {
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, nullptr, zones);
             Require(zone.generators[GEN_Pan] == 354,
                 "Concave source curve should map mid velocity to sin(pi/4)");
-            Require(zone.generators[GEN_InitialAttenuation] == 146,
+            Require(zone.generators[GEN_ModEnvToPitch] == 146,
                 "Convex source curve should map mid velocity to 1-cos(pi/4)");
-            Require(zone.generators[GEN_ModEnvToPitch] == 500,
+            Require(zone.generators[GEN_InitialFilterQ] == 500,
                 "Switch source curve should step to 1.0 at mid velocity");
         }
     }
@@ -475,14 +562,32 @@ namespace {
 
         const std::array<u8, 8> sm24Chunk = { 's', 'm', '2', '4', 0, 0, 0, 0 };
         auto insertSm24 = [&](std::vector<u8>& file) {
-            const size_t sdtaPos = file.size() - 4;
-            file.insert(file.begin() + static_cast<std::ptrdiff_t>(sdtaPos), sm24Chunk.begin(), sm24Chunk.end());
-            auto addLE32 = [&](size_t offset, u32 delta) {
-                const u32 value =
-                    static_cast<u32>(file[offset]) |
+            auto readLE32 = [&](size_t offset) -> u32 {
+                return static_cast<u32>(file[offset]) |
                     (static_cast<u32>(file[offset + 1]) << 8) |
                     (static_cast<u32>(file[offset + 2]) << 16) |
                     (static_cast<u32>(file[offset + 3]) << 24);
+            };
+            auto findSdtaList = [&]() -> size_t {
+                for (size_t i = 12; i + 12 <= file.size(); ) {
+                    if (file[i] == 'L' && file[i + 1] == 'I' && file[i + 2] == 'S' && file[i + 3] == 'T') {
+                        const u32 chunkSize = readLE32(i + 4);
+                        if (file[i + 8] == 's' && file[i + 9] == 'd' && file[i + 10] == 't' && file[i + 11] == 'a') {
+                            return i;
+                        }
+                        i += 8 + chunkSize + (chunkSize & 1u);
+                        continue;
+                    }
+                    break;
+                }
+                return std::numeric_limits<size_t>::max();
+            };
+            const size_t sdtaListPos = findSdtaList();
+            Require(sdtaListPos != std::numeric_limits<size_t>::max(), "sdta LIST chunk should exist");
+            const size_t sdtaPayloadEnd = sdtaListPos + 8 + readLE32(sdtaListPos + 4);
+            file.insert(file.begin() + static_cast<std::ptrdiff_t>(sdtaPayloadEnd), sm24Chunk.begin(), sm24Chunk.end());
+            auto addLE32 = [&](size_t offset, u32 delta) {
+                const u32 value = readLE32(offset);
                 const u32 updated = value + delta;
                 file[offset] = static_cast<u8>(updated & 0xFFu);
                 file[offset + 1] = static_cast<u8>((updated >> 8) & 0xFFu);
@@ -490,7 +595,7 @@ namespace {
                 file[offset + 3] = static_cast<u8>((updated >> 24) & 0xFFu);
             };
             addLE32(4, static_cast<u32>(sm24Chunk.size()));
-            addLE32(28, static_cast<u32>(sm24Chunk.size()));
+            addLE32(sdtaListPos + 4, static_cast<u32>(sm24Chunk.size()));
         };
         insertSm24(bytes);
 
@@ -506,6 +611,7 @@ namespace {
 
 int main() {
     TestForcedVelocityDefaultModulators();
+    TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods();
     TestAbsoluteTransformSupport();
     TestUnsupportedTransformReporting();
     TestEffectsSendMixPolicy();
@@ -515,6 +621,7 @@ int main() {
     TestSourceCurvesSupport();
     TestVelocityZoneBoundary();
     TestSm24Detection();
+    TestBagIndexHelpersSkipGlobalZones();
     std::printf("sf2_compliance: all tests passed\n");
     return 0;
 }

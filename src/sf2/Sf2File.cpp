@@ -68,26 +68,30 @@ bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, s
     return true;
 }
 
+bool IsPlainVelocitySource(u16 oper) {
+    return oper == kModSrcVelocity;
+}
+
 bool IsVelocityToInitialAttenuationMod(const SFModList& mod) {
     if (mod.sfModDestOper != GEN_InitialAttenuation || mod.sfModTransOper != kModTransformLinear) {
         return false;
     }
-    if ((mod.sfModSrcOper & 0x80u) != 0) { // CC source
+    // 暗黙の default velocity modulator を抑止するのは、
+    // 単純な velocity source を直接使うケースに限定する。
+    if (!IsPlainVelocitySource(mod.sfModSrcOper)) {
         return false;
     }
-    const u16 sourceIndex = mod.sfModSrcOper & 0x7Fu;
-    return sourceIndex == kModSrcVelocity;
+    return mod.sfModAmtSrcOper == 0;
 }
 
 bool IsVelocityToInitialFilterFcMod(const SFModList& mod) {
     if (mod.sfModDestOper != GEN_InitialFilterFc || mod.sfModTransOper != kModTransformLinear) {
         return false;
     }
-    if ((mod.sfModSrcOper & 0x80u) != 0) {
+    if (!IsPlainVelocitySource(mod.sfModSrcOper)) {
         return false;
     }
-    const u16 sourceIndex = mod.sfModSrcOper & 0x7Fu;
-    return sourceIndex == kModSrcVelocity;
+    return mod.sfModAmtSrcOper == 0;
 }
 
 bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
@@ -1128,8 +1132,8 @@ bool Sf2File::GetPresetBagIndices(u16 bank, u8 program, int& outGlobalBagIdx, in
         if (!hasInstrument) outGlobalBagIdx = pbagStart;
     }
 
-    outLocalBagIdx = pbagStart;
-    return true;
+    outLocalBagIdx = (outGlobalBagIdx == pbagStart) ? (pbagStart + 1) : pbagStart;
+    return outLocalBagIdx >= pbagStart && outLocalBagIdx < pbagEnd;
 }
 
 bool Sf2File::GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& outGlobalBagIdx) const {
@@ -1156,7 +1160,10 @@ bool Sf2File::GetInstrumentBagIndices(int instrumentIdx, int localBagIdx, int& o
         if (!hasSampleId) outGlobalBagIdx = ibagStart;
     }
 
-    return true;
+    if (localBagIdx < ibagStart || localBagIdx >= ibagEnd) {
+        return false;
+    }
+    return localBagIdx != outGlobalBagIdx;
 }
 
 void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]) const {
