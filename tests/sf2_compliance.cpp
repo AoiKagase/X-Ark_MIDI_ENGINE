@@ -81,8 +81,14 @@ namespace {
         for (int i = 0; i < 64; ++i) {
             AppendI16LE(smpl, static_cast<i16>(1000 + i * 120));
         }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
+        }
         for (int i = 0; i < 64; ++i) {
             AppendI16LE(smpl, static_cast<i16>(-1000 - i * 120));
+        }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
         }
         AppendChunk(sdtaPayload, "smpl", smpl);
 
@@ -176,7 +182,7 @@ namespace {
             AppendU16LE(shdr, sampleType);
         };
         appendSampleHeader("Left", 0, 64, 8, 56, 1, 4);
-        appendSampleHeader("Right", 64, 128, 72, 120, 0, 2);
+        appendSampleHeader("Right", 110, 174, 118, 166, 0, 2);
         appendSampleHeader("EOS", 0, 0, 0, 0, 0, 1);
         AppendChunk(pdtaPayload, "shdr", shdr);
 
@@ -214,6 +220,9 @@ namespace {
             const double phase = static_cast<double>(i) / 64.0;
             const i16 sample = static_cast<i16>(std::lround(std::sin(phase * 6.283185307179586) * 12000.0));
             AppendI16LE(smpl, sample);
+        }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
         }
         AppendChunk(sdtaPayload, "smpl", smpl);
 
@@ -1424,7 +1433,7 @@ namespace {
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 50000, nullptr, zones);
         Require(zone.sampleDataOverride != nullptr, "ROM-backed zone should use external sample data");
-        Require(zone.sampleDataOverrideCount == 64, "ROM-backed zone should expose external sample count");
+        Require(zone.sampleDataOverrideCount == 110, "ROM-backed zone should expose external sample count");
         Require(zone.sampleDataOverride[0] == 1234, "ROM-backed zone should read from attached ROM sample data");
         Require(zone.sampleData24Override == nullptr, "16-bit ROM bank should not expose 24-bit override");
     }
@@ -1466,6 +1475,36 @@ namespace {
         Sf2File sf2;
         Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
             "smpl chunk that overstates its size should be rejected");
+    }
+
+    void TestSampleGuardPaddingRequired() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t smplPos = sdtaPos + 12;
+        Require(std::memcmp(bytes.data() + smplPos, "smpl", 4) == 0, "smpl chunk should be first in sdta");
+        const size_t smplData = smplPos + 8;
+        const size_t firstGuardSample = smplData + static_cast<size_t>(64 * sizeof(i16));
+        bytes[firstGuardSample] = 1;
+        bytes[firstGuardSample + 1] = 0;
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples without zero-filled trailing guard points should be rejected");
+    }
+
+    void TestSampleLoopGuardPointsRequired() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        WriteLE32(bytes, shdrData + 28, 7);
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples without eight valid points before loop start should be rejected");
     }
 
     void TestMissingIfilRejected() {
@@ -1523,6 +1562,30 @@ namespace {
                             bytes.begin() + static_cast<std::ptrdiff_t>(p + paddedSize));
                 AddChunkSize(bytes, 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
                 AddChunkSize(bytes, infoPos + 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
+                return;
+            }
+            p += paddedSize;
+        }
+        Require(false, "Requested INFO subchunk should exist");
+    }
+
+    void ReplaceInfoSubchunkData(std::vector<u8>& bytes, const char id[4], const std::vector<u8>& data) {
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+        const size_t listData = infoPos + 12;
+        const size_t listEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+        for (size_t p = listData; p + 8 <= listEnd;) {
+            const u32 chunkSize = ReadLE32(bytes, p + 4);
+            const size_t paddedSize = 8 + chunkSize + (chunkSize & 1u);
+            if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                std::vector<u8> replacement;
+                AppendChunk(replacement, id, data);
+                bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(p),
+                            bytes.begin() + static_cast<std::ptrdiff_t>(p + paddedSize));
+                bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(p), replacement.begin(), replacement.end());
+                const i32 delta = static_cast<i32>(replacement.size()) - static_cast<i32>(paddedSize);
+                AddChunkSize(bytes, 4, static_cast<u32>(delta));
+                AddChunkSize(bytes, infoPos + 4, static_cast<u32>(delta));
                 return;
             }
             p += paddedSize;
@@ -1599,6 +1662,142 @@ namespace {
 
             Sf2File sf2;
             Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing INAM should load");
+        }
+    }
+
+    void TestMalformedInfoStringsIgnored() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "isng");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badIsng;
+            AppendChunk(badIsng, "isng", { 'B','A','D' });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badIsng.begin(), badIsng.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badIsng.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badIsng.size()));
+
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Unterminated isng should be ignored rather than rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "INAM");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badInam;
+            AppendChunk(badInam, "INAM", { 'N','a','m','e', 0xFFu, 0 });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badInam.begin(), badInam.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badInam.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badInam.size()));
+
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Non-ASCII INAM should be ignored rather than rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> invalidIver;
+            AppendChunk(invalidIver, "iver", { 2, 0 });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         invalidIver.begin(), invalidIver.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(invalidIver.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(invalidIver.size()));
+
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Invalid iver size without ROM samples should be ignored rather than rejected");
+        }
+    }
+
+    void TestRomSamplesRequireValidRomMetadata() {
+        auto makeRomSampleBank = [&]() -> std::vector<u8> {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+
+            std::vector<u8> romInfo;
+            const std::vector<u8> iromData = { 'R','O','M',0 };
+            AppendChunk(romInfo, "irom", iromData);
+            std::vector<u8> iverData;
+            AppendU16LE(iverData, 2);
+            AppendU16LE(iverData, 0);
+            AppendChunk(romInfo, "iver", iverData);
+
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd), romInfo.begin(), romInfo.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(romInfo.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
+
+            const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+            Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+            const size_t sampleTypeOffset = shdrPos + 8 + 44;
+            bytes[sampleTypeOffset] = 0x01;
+            bytes[sampleTypeOffset + 1] = 0x80;
+            return bytes;
+        };
+
+        MinimalSf2Config config;
+        std::vector<u8> romSourceBytes = BuildMinimalSf2(config);
+
+        {
+            std::vector<u8> bytes = makeRomSampleBank();
+            RemoveInfoSubchunk(bytes, "irom");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badIrom;
+            AppendChunk(badIrom, "irom", { 'R','O','M' });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badIrom.begin(), badIrom.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badIrom.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badIrom.size()));
+
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "Malformed irom metadata should not reject load");
+            Require(sf2.LoadRomSampleSourceFromMemory(romSourceBytes.data(), romSourceBytes.size()),
+                "ROM source should still parse");
+
+            std::vector<ResolvedZone> zones;
+            Require(!sf2.FindZones(0, 0, 60, 50000, zones, nullptr),
+                "ROM-backed zones should not resolve when irom is invalid");
+        }
+
+        {
+            std::vector<u8> bytes = makeRomSampleBank();
+            RemoveInfoSubchunk(bytes, "iver");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badIver;
+            AppendChunk(badIver, "iver", { 2, 0 });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badIver.begin(), badIver.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badIver.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badIver.size()));
+
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "Malformed iver metadata should not reject load");
+            Require(sf2.LoadRomSampleSourceFromMemory(romSourceBytes.data(), romSourceBytes.size()),
+                "ROM source should still parse");
+
+            std::vector<ResolvedZone> zones;
+            Require(!sf2.FindZones(0, 0, 60, 50000, zones, nullptr),
+                "ROM-backed zones should not resolve when iver is invalid");
         }
     }
 
@@ -1884,6 +2083,8 @@ int main() {
     TestMissingIfilRejected();
     g_currentTestName = "TestMissingMandatoryInfoChunksAccepted";
     TestMissingMandatoryInfoChunksAccepted();
+    g_currentTestName = "TestMalformedInfoStringsIgnored";
+    TestMalformedInfoStringsIgnored();
     g_currentTestName = "TestDuplicateMandatoryChunksRejected";
     TestDuplicateMandatoryChunksRejected();
     g_currentTestName = "TestDuplicateTopLevelListsRejected";
@@ -1900,10 +2101,16 @@ int main() {
     TestRomSampleUsesAttachedRomBank();
     g_currentTestName = "TestRomMetadataWithoutRomSampleIgnored";
     TestRomMetadataWithoutRomSampleIgnored();
+    g_currentTestName = "TestRomSamplesRequireValidRomMetadata";
+    TestRomSamplesRequireValidRomMetadata();
     g_currentTestName = "TestIllegalOriginalPitchFallsBackTo60";
     TestIllegalOriginalPitchFallsBackTo60();
     g_currentTestName = "TestTruncatedSmplChunkRejected";
     TestTruncatedSmplChunkRejected();
+    g_currentTestName = "TestSampleGuardPaddingRequired";
+    TestSampleGuardPaddingRequired();
+    g_currentTestName = "TestSampleLoopGuardPointsRequired";
+    TestSampleLoopGuardPointsRequired();
     g_currentTestName = "TestMissingSmplRejected";
     TestMissingSmplRejected();
     g_currentTestName = "TestNonMonotonicPbagRejected";

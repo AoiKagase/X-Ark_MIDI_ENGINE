@@ -71,6 +71,39 @@ constexpr i16 kDefaultCc93ToChorusSend = 200;
 constexpr u16 kModTransformLinear = 0u;
 constexpr u16 kModTransformAbsolute = 2u;
 
+bool IsValidInfoAsciiZstr(BinaryReader& r, u32 subSize, std::string* outValue = nullptr) {
+    if (subSize == 0 || subSize > 256) {
+        return false;
+    }
+
+    std::string value;
+    value.reserve(subSize);
+    bool foundTerminator = false;
+    for (u32 i = 0; i < subSize; ++i) {
+        const u8 ch = r.ReadU8();
+        if (!foundTerminator) {
+            if (ch == 0) {
+                foundTerminator = true;
+            } else {
+                if (ch < 0x20u || ch > 0x7Eu) {
+                    return false;
+                }
+                value.push_back(static_cast<char>(ch));
+            }
+        } else if (ch != 0) {
+            return false;
+        }
+    }
+
+    if (!foundTerminator) {
+        return false;
+    }
+    if (outValue) {
+        *outValue = std::move(value);
+    }
+    return true;
+}
+
 inline u8 ResolveForcedKey(u8 key, const ResolvedZone& zone) {
     const i32 forcedKey = zone.generators[GEN_Keynum];
     if (forcedKey >= 0 && forcedKey <= 127) {
@@ -608,6 +641,10 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     hasInam_ = false;
     hasIrom_ = false;
     hasIver_ = false;
+    hasValidIsng_ = false;
+    hasValidInam_ = false;
+    hasValidIrom_ = false;
+    hasValidIver_ = false;
     hasInfoList_ = false;
     hasSdtaList_ = false;
     hasPdtaList_ = false;
@@ -782,26 +819,33 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
                 return false;
             }
             hasIsng_ = true;
+            std::string engineName;
+            if (IsValidInfoAsciiZstr(sub, subSize, &engineName) && engineName == "EMU8000") {
+                hasValidIsng_ = true;
+            }
         } else if (subId == MakeFourCC("INAM")) {
             if (hasInam_) {
                 errorMsg_ = "SF2 duplicate INAM chunk";
                 return false;
             }
             hasInam_ = true;
+            hasValidInam_ = IsValidInfoAsciiZstr(sub, subSize);
         } else if (subId == MakeFourCC("irom")) {
             if (hasIrom_) {
                 errorMsg_ = "SF2 duplicate irom chunk";
                 return false;
             }
             hasIrom_ = true;
+            hasValidIrom_ = IsValidInfoAsciiZstr(sub, subSize);
         } else if (subId == MakeFourCC("iver")) {
             if (hasIver_) {
                 errorMsg_ = "SF2 duplicate iver chunk";
                 return false;
             }
-            if (subSize != 4) {
-                errorMsg_ = "SF2 invalid iver chunk size";
-                return false;
+            if (subSize == 4) {
+                sub.ReadU16LE();
+                sub.ReadU16LE();
+                hasValidIver_ = true;
             }
             hasIver_ = true;
         }
@@ -1239,16 +1283,50 @@ bool Sf2File::ValidateSampleHeaders() {
     const u32 sampleDataCount = static_cast<u32>(sampleData_.size());
     for (size_t i = 0; i < sampleHeaders_.size(); ++i) {
         auto& h = sampleHeaders_[i];
+        const bool isTerminalSample = (i + 1 == sampleHeaders_.size());
         const bool isRomSample = (h.sampleType & 0x8000u) != 0;
         if (h.start > h.end || (!isRomSample && h.end > sampleDataCount)) {
             errorMsg_ = "SF2 sample header points outside sample data";
             return false;
+        }
+        if (isTerminalSample) {
+            if (h.sampleRate == 0) {
+                h.sampleRate = 44100;
+            }
+            if (h.originalPitch == 255 || (h.originalPitch >= 128 && h.originalPitch <= 254)) {
+                h.originalPitch = 60;
+            }
+            continue;
         }
         if (h.loopStart < h.start || h.loopStart > h.end) {
             h.loopStart = h.start;
         }
         if (h.loopEnd < h.loopStart || h.loopEnd > h.end) {
             h.loopEnd = h.end;
+        }
+        if (!isRomSample) {
+            if (h.end + 46u > sampleDataCount) {
+                errorMsg_ = "SF2 sample header is missing trailing guard samples";
+                return false;
+            }
+            for (u32 sampleIndex = h.end; sampleIndex < h.end + 46u; ++sampleIndex) {
+                if (sampleData_[sampleIndex] != 0) {
+                    errorMsg_ = "SF2 sample guard region must be zero-filled";
+                    return false;
+                }
+            }
+        }
+        if (h.end - h.start < 48u) {
+            errorMsg_ = "SF2 sample is shorter than the minimum portable length";
+            return false;
+        }
+        if (h.loopStart < h.start + 8u || h.loopEnd + 8u > h.end) {
+            errorMsg_ = "SF2 sample loop lacks the required guard points";
+            return false;
+        }
+        if (h.loopEnd - h.loopStart < 32u) {
+            errorMsg_ = "SF2 sample loop is shorter than the minimum portable length";
+            return false;
         }
         if (h.sampleRate == 0) {
             // Some banks leave the terminal EOS record or even sparse/unused sample
@@ -1784,7 +1862,7 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                 ResolvedZone zone;
                 ResolveZone(globalPresetBag, globalInstBag, ib, pb, &sampleHeaders_[sampleIdx], key, velocity, ctx, zone);
                 if ((smp->sfSampleType & 0x8000u) != 0u) {
-                    if (!romBank_ || romBank_->SampleDataCount() == 0) {
+                    if (!hasValidIrom_ || !hasValidIver_ || !romBank_ || romBank_->SampleDataCount() == 0) {
                         continue;
                     }
                     zone.sampleDataOverride = romBank_->SampleData();
