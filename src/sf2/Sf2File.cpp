@@ -585,6 +585,9 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     hasInam_ = false;
     hasIrom_ = false;
     hasIver_ = false;
+    hasInfoList_ = false;
+    hasSdtaList_ = false;
+    hasPdtaList_ = false;
     hasPhdr_ = false;
     hasPbag_ = false;
     hasPmod_ = false;
@@ -649,12 +652,27 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
             auto listData = r.ReadSlice(chunkSize - 4);
 
             if (listType == MakeFourCC("sdta")) {
+                if (hasSdtaList_) {
+                    errorMsg_ = "SF2 duplicate sdta LIST chunk";
+                    return false;
+                }
+                hasSdtaList_ = true;
                 if (!ParseSdta(listData, chunkSize - 4)) return false;
             }
             else if (listType == MakeFourCC("INFO")) {
+                if (hasInfoList_) {
+                    errorMsg_ = "SF2 duplicate INFO LIST chunk";
+                    return false;
+                }
+                hasInfoList_ = true;
                 if (!ParseInfo(listData, chunkSize - 4)) return false;
             }
             else if (listType == MakeFourCC("pdta")) {
+                if (hasPdtaList_) {
+                    errorMsg_ = "SF2 duplicate pdta LIST chunk";
+                    return false;
+                }
+                hasPdtaList_ = true;
                 if (!ParsePdta(listData, chunkSize - 4)) return false;
             }
         }

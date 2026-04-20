@@ -1430,6 +1430,17 @@ namespace {
         Require(false, "Requested subchunk should exist for duplication");
     }
 
+    void DuplicateTopLevelList(std::vector<u8>& bytes, const char listType[4]) {
+        const size_t listPos = FindListChunk(bytes, listType);
+        Require(listPos != std::numeric_limits<size_t>::max(), "Top-level LIST chunk should exist");
+        const u32 listSize = ReadLE32(bytes, listPos + 4);
+        const size_t paddedSize = 8 + listSize + (listSize & 1u);
+        const std::vector<u8> duplicate(bytes.begin() + static_cast<std::ptrdiff_t>(listPos),
+                                        bytes.begin() + static_cast<std::ptrdiff_t>(listPos + paddedSize));
+        bytes.insert(bytes.end(), duplicate.begin(), duplicate.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(duplicate.size()));
+    }
+
     void TestMissingMandatoryInfoChunksRejected() {
         {
             MinimalSf2Config config;
@@ -1476,6 +1487,26 @@ namespace {
 
             Sf2File sf2;
             Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate smpl should be rejected");
+        }
+    }
+
+    void TestDuplicateTopLevelListsRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            DuplicateTopLevelList(bytes, "INFO");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate INFO LIST should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            DuplicateTopLevelList(bytes, "sdta");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate sdta LIST should be rejected");
         }
     }
 
@@ -1579,6 +1610,8 @@ int main() {
     TestMissingMandatoryInfoChunksRejected();
     g_currentTestName = "TestDuplicateMandatoryChunksRejected";
     TestDuplicateMandatoryChunksRejected();
+    g_currentTestName = "TestDuplicateTopLevelListsRejected";
+    TestDuplicateTopLevelListsRejected();
     g_currentTestName = "TestInvalidTerminalReferencesRejected";
     TestInvalidTerminalReferencesRejected();
     g_currentTestName = "TestRomSampleRejected";

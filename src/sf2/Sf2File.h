@@ -148,6 +148,9 @@ private:
     bool hasInam_ = false;
     bool hasIrom_ = false;
     bool hasIver_ = false;
+    bool hasInfoList_ = false;
+    bool hasSdtaList_ = false;
+    bool hasPdtaList_ = false;
     bool hasPhdr_ = false;
     bool hasPbag_ = false;
     bool hasPmod_ = false;
