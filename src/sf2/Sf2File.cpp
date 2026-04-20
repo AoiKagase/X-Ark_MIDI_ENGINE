@@ -26,6 +26,26 @@ static u32 MakeFourCC(const char* s) {
 
 namespace {
 
+enum class TopLevelListOrder : u8 {
+    ExpectInfo = 0,
+    ExpectSdta = 1,
+    ExpectPdta = 2,
+    Done = 3,
+};
+
+enum class PdtaSubchunkOrder : u8 {
+    ExpectPhdr = 0,
+    ExpectPbag = 1,
+    ExpectPmod = 2,
+    ExpectPgen = 3,
+    ExpectInst = 4,
+    ExpectIbag = 5,
+    ExpectImod = 6,
+    ExpectIgen = 7,
+    ExpectShdr = 8,
+    Done = 9,
+};
+
 constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcChannelPressure = 13u;
 constexpr u16 kModSrcPitchWheel = 0x020Eu;
@@ -639,6 +659,7 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
 
     // sfbk 内のサブチャンクを走査
     size_t end = r.Tell() + (riffSize - 4); // -4 for riffType
+    TopLevelListOrder expectedOrder = TopLevelListOrder::ExpectInfo;
     while (r.Tell() < end && !r.IsEof()) {
         u32 chunkId   = r.ReadU32LE();
         u32 chunkSize = r.ReadU32LE();
@@ -651,15 +672,12 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
             }
             auto listData = r.ReadSlice(chunkSize - 4);
 
-            if (listType == MakeFourCC("sdta")) {
-                if (hasSdtaList_) {
-                    errorMsg_ = "SF2 duplicate sdta LIST chunk";
+            if (listType == MakeFourCC("INFO")) {
+                if (expectedOrder != TopLevelListOrder::ExpectInfo) {
+                    errorMsg_ = "SF2 top-level LIST chunks out of order";
                     return false;
                 }
-                hasSdtaList_ = true;
-                if (!ParseSdta(listData, chunkSize - 4)) return false;
-            }
-            else if (listType == MakeFourCC("INFO")) {
+                expectedOrder = TopLevelListOrder::ExpectSdta;
                 if (hasInfoList_) {
                     errorMsg_ = "SF2 duplicate INFO LIST chunk";
                     return false;
@@ -667,31 +685,47 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
                 hasInfoList_ = true;
                 if (!ParseInfo(listData, chunkSize - 4)) return false;
             }
+            else if (listType == MakeFourCC("sdta")) {
+                if (expectedOrder != TopLevelListOrder::ExpectSdta) {
+                    errorMsg_ = "SF2 top-level LIST chunks out of order";
+                    return false;
+                }
+                expectedOrder = TopLevelListOrder::ExpectPdta;
+                if (hasSdtaList_) {
+                    errorMsg_ = "SF2 duplicate sdta LIST chunk";
+                    return false;
+                }
+                hasSdtaList_ = true;
+                if (!ParseSdta(listData, chunkSize - 4)) return false;
+            }
             else if (listType == MakeFourCC("pdta")) {
+                if (expectedOrder != TopLevelListOrder::ExpectPdta) {
+                    errorMsg_ = "SF2 top-level LIST chunks out of order";
+                    return false;
+                }
+                expectedOrder = TopLevelListOrder::Done;
                 if (hasPdtaList_) {
                     errorMsg_ = "SF2 duplicate pdta LIST chunk";
                     return false;
                 }
                 hasPdtaList_ = true;
                 if (!ParsePdta(listData, chunkSize - 4)) return false;
+            } else {
+                errorMsg_ = "SF2 contains unknown top-level LIST chunk";
+                return false;
             }
         }
         else {
-            r.Skip(chunkSize);
-            // 奇数サイズのパディング
-            if (chunkSize & 1) r.Skip(1);
+            errorMsg_ = "SF2 contains unknown top-level chunk";
+            return false;
         }
     }
     if (!hasIfil_) {
         errorMsg_ = "SF2 missing mandatory ifil chunk";
         return false;
     }
-    if (!hasIsng_) {
-        errorMsg_ = "SF2 missing mandatory isng chunk";
-        return false;
-    }
-    if (!hasInam_) {
-        errorMsg_ = "SF2 missing mandatory INAM chunk";
+    if (!hasInfoList_ || !hasSdtaList_ || !hasPdtaList_) {
+        errorMsg_ = "SF2 missing mandatory top-level LIST chunk";
         return false;
     }
     return true;
@@ -788,45 +822,114 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
                 r.Skip(subSize);
             }
         }
-        else {
-            if (subId == MakeFourCC("sm24")) {
-                if (hasSm24Chunk_) {
-                    errorMsg_ = "SF2 duplicate sm24 chunk";
-                    return false;
-                }
-                // SF2 2.04 拡張: 24-bit サンプルの下位 8-bit チャンク。
-                // 本実装は 16-bit (smpl) のみ対応のため読み飛ばす。
-                // HasIgnoredSm24() で呼び出し元への通知が可能。
-                hasIgnoredSm24_ = true;
-                hasSm24Chunk_ = true;
-                sm24ChunkSize_ = subSize;
+        else if (subId == MakeFourCC("sm24")) {
+            if (hasSm24Chunk_) {
+                errorMsg_ = "SF2 duplicate sm24 chunk";
+                return false;
             }
-            // sm24 を含むすべての未知サブチャンクをスキップ（範囲チェック付き）
-            size_t skipSize = std::min(static_cast<size_t>(subSize), r.Remaining());
-            r.Skip(skipSize);
+            hasIgnoredSm24_ = true;
+            hasSm24Chunk_ = true;
+            sm24ChunkSize_ = subSize;
+            r.Skip(subSize);
             if ((subSize & 1) && !r.IsEof()) r.Skip(1);
+        }
+        else {
+            errorMsg_ = "SF2 contains unknown sdta subchunk";
+            return false;
         }
     }
     return true;
 }
 
 bool Sf2File::ParsePdta(BinaryReader& r, u32 /*chunkSize*/) {
+    PdtaSubchunkOrder expectedOrder = PdtaSubchunkOrder::ExpectPhdr;
     while (!r.IsEof()) {
         if (r.Remaining() < 8) break;
         u32 subId   = r.ReadU32LE();
         u32 subSize = r.ReadU32LE();
+        if (static_cast<size_t>(subSize) > r.Remaining()) {
+            errorMsg_ = "SF2 pdta subchunk size exceeds containing chunk";
+            return false;
+        }
         auto sub = r.ReadSlice(subSize);
         if (subSize & 1 && !r.IsEof()) r.Skip(1);
 
-        if      (subId == MakeFourCC("phdr")) ParsePhdr(sub, subSize);
-        else if (subId == MakeFourCC("pbag")) ParsePbag(sub, subSize);
-        else if (subId == MakeFourCC("pmod")) ParsePmod(sub, subSize);
-        else if (subId == MakeFourCC("pgen")) ParsePgen(sub, subSize);
-        else if (subId == MakeFourCC("inst")) ParseInst(sub, subSize);
-        else if (subId == MakeFourCC("ibag")) ParseIbag(sub, subSize);
-        else if (subId == MakeFourCC("imod")) ParseImod(sub, subSize);
-        else if (subId == MakeFourCC("igen")) ParseIgen(sub, subSize);
-        else if (subId == MakeFourCC("shdr")) ParseShdr(sub, subSize);
+        if (subId == MakeFourCC("phdr")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectPhdr) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectPbag;
+            ParsePhdr(sub, subSize);
+        }
+        else if (subId == MakeFourCC("pbag")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectPbag) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectPmod;
+            ParsePbag(sub, subSize);
+        }
+        else if (subId == MakeFourCC("pmod")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectPmod) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectPgen;
+            ParsePmod(sub, subSize);
+        }
+        else if (subId == MakeFourCC("pgen")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectPgen) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectInst;
+            ParsePgen(sub, subSize);
+        }
+        else if (subId == MakeFourCC("inst")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectInst) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectIbag;
+            ParseInst(sub, subSize);
+        }
+        else if (subId == MakeFourCC("ibag")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectIbag) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectImod;
+            ParseIbag(sub, subSize);
+        }
+        else if (subId == MakeFourCC("imod")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectImod) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectIgen;
+            ParseImod(sub, subSize);
+        }
+        else if (subId == MakeFourCC("igen")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectIgen) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::ExpectShdr;
+            ParseIgen(sub, subSize);
+        }
+        else if (subId == MakeFourCC("shdr")) {
+            if (expectedOrder != PdtaSubchunkOrder::ExpectShdr) {
+                errorMsg_ = "SF2 pdta subchunks out of order";
+                return false;
+            }
+            expectedOrder = PdtaSubchunkOrder::Done;
+            ParseShdr(sub, subSize);
+        }
+        else {
+            errorMsg_ = "SF2 contains unknown pdta subchunk";
+            return false;
+        }
     }
     return true;
 }
@@ -1089,43 +1192,12 @@ bool Sf2File::ValidateInfoAndSdtaConsistency() {
     }
     if (hasSm24Chunk_) {
         const bool is204OrLater = (ifilMajor_ > 2) || (ifilMajor_ == 2 && ifilMinor_ >= 4);
-        if (!is204OrLater) {
-            errorMsg_ = "SF2 sm24 chunk requires ifil version 2.04 or later";
-            return false;
-        }
-        if (sampleData_.empty()) {
-            errorMsg_ = "SF2 sm24 chunk requires smpl sample data";
-            return false;
-        }
-        if (sm24ChunkSize_ != static_cast<u32>(sampleData_.size())) {
-            errorMsg_ = "SF2 sm24 chunk size does not match smpl sample count";
-            return false;
+        const u32 expectedSm24Size = static_cast<u32>((sampleData_.size() + 1u) / 2u);
+        if (!is204OrLater || sampleData_.empty() || sm24ChunkSize_ != expectedSm24Size) {
+            hasSm24Chunk_ = false;
         }
     }
 
-    bool hasRomSample = false;
-    for (const auto& sample : samples_) {
-        if ((sample.sfSampleType & 0x8000u) != 0) {
-            hasRomSample = true;
-            break;
-        }
-    }
-    if (hasRomSample) {
-        if (!hasIrom_ || !hasIver_) {
-            errorMsg_ = "SF2 ROM sample requires both irom and iver INFO chunks";
-            return false;
-        }
-        errorMsg_ = "SF2 ROM samples are not supported";
-        return false;
-    }
-    if (hasIrom_ != hasIver_) {
-        errorMsg_ = "SF2 irom and iver INFO chunks must appear together";
-        return false;
-    }
-    if (hasIrom_ && hasIver_) {
-        errorMsg_ = "SF2 irom and iver INFO chunks require ROM-backed sample headers";
-        return false;
-    }
     return true;
 }
 
@@ -1133,7 +1205,8 @@ bool Sf2File::ValidateSampleHeaders() {
     const u32 sampleDataCount = static_cast<u32>(sampleData_.size());
     for (size_t i = 0; i < sampleHeaders_.size(); ++i) {
         auto& h = sampleHeaders_[i];
-        if (h.start > h.end || h.end > sampleDataCount) {
+        const bool isRomSample = (h.sampleType & 0x8000u) != 0;
+        if (h.start > h.end || (!isRomSample && h.end > sampleDataCount)) {
             errorMsg_ = "SF2 sample header points outside sample data";
             return false;
         }
@@ -1148,6 +1221,9 @@ bool Sf2File::ValidateSampleHeaders() {
             // headers at 0 Hz. Keep parsing and fall back to a sane rate so we don't
             // reject otherwise playable banks.
             h.sampleRate = 44100;
+        }
+        if (h.originalPitch == 255 || (h.originalPitch >= 128 && h.originalPitch <= 254)) {
+            h.originalPitch = 60;
         }
     }
     return true;

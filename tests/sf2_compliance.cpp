@@ -1288,10 +1288,11 @@ namespace {
         AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(sm24Chunk.size()));
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 should be rejected before ifil 2.04");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 before ifil 2.04 should be ignored");
+        Require(sf2.HasIgnoredSm24(), "sm24 should still be reported as ignored");
     }
 
-    void TestSm24SizeRejected() {
+    void TestSm24SizeIgnored() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
@@ -1305,7 +1306,8 @@ namespace {
         AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(sm24Chunk.size()));
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 size mismatch should be rejected");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 size mismatch should be ignored");
+        Require(sf2.HasIgnoredSm24(), "invalid sm24 should still be reported as ignored");
     }
 
     void TestInvalidTerminalReferencesRejected() {
@@ -1338,7 +1340,7 @@ namespace {
         }
     }
 
-    void TestRomSampleRejected() {
+    void TestRomSampleIgnoredAtPlayback() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const size_t infoPos = FindListChunk(bytes, "INFO");
@@ -1365,10 +1367,14 @@ namespace {
         bytes[sampleTypeOffset + 1] = 0x80;
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "ROM samples should be rejected");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "ROM samples should load");
+
+        std::vector<ResolvedZone> zones;
+        Require(!sf2.FindZones(0, 0, 60, 50000, zones, nullptr),
+            "ROM-backed instrument zones should be skipped at playback");
     }
 
-    void TestRomMetadataWithoutRomSampleRejected() {
+    void TestRomMetadataWithoutRomSampleIgnored() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const size_t infoPos = FindListChunk(bytes, "INFO");
@@ -1388,8 +1394,8 @@ namespace {
         AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
-            "ROM INFO metadata without ROM-backed sample headers should be rejected");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "ROM INFO metadata without ROM-backed sample headers should be ignored");
     }
 
     void TestTruncatedSmplChunkRejected() {
@@ -1521,14 +1527,14 @@ namespace {
         AddChunkSize(bytes, 4, static_cast<u32>(duplicate.size()));
     }
 
-    void TestMissingMandatoryInfoChunksRejected() {
+    void TestMissingMandatoryInfoChunksAccepted() {
         {
             MinimalSf2Config config;
             std::vector<u8> bytes = BuildMinimalSf2(config);
             RemoveInfoSubchunk(bytes, "isng");
 
             Sf2File sf2;
-            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing isng should be rejected");
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing isng should load");
         }
 
         {
@@ -1537,8 +1543,130 @@ namespace {
             RemoveInfoSubchunk(bytes, "INAM");
 
             Sf2File sf2;
-            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing INAM should be rejected");
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing INAM should load");
         }
+    }
+
+    void InsertUnknownTopLevelChunk(std::vector<u8>& bytes) {
+        std::vector<u8> chunk = { 'J','U','N','K' };
+        AppendU32LE(chunk, 4);
+        chunk.insert(chunk.end(), { 0, 0, 0, 0 });
+        bytes.insert(bytes.end(), chunk.begin(), chunk.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(chunk.size()));
+    }
+
+    void InsertUnknownSdtaSubchunk(std::vector<u8>& bytes) {
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t sdtaPayloadEnd = sdtaPos + 8 + ReadLE32(bytes, sdtaPos + 4);
+        std::vector<u8> chunk = { 'b','a','d','!' };
+        AppendU32LE(chunk, 2);
+        chunk.push_back(0);
+        chunk.push_back(0);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(sdtaPayloadEnd), chunk.begin(), chunk.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(chunk.size()));
+        AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(chunk.size()));
+    }
+
+    void ReplacePdtaSubchunkId(std::vector<u8>& bytes, const char oldId[4], const char newId[4]) {
+        const size_t pos = FindPdtaChunk(bytes, oldId);
+        Require(pos != std::numeric_limits<size_t>::max(), "pdta subchunk should exist");
+        std::memcpy(bytes.data() + pos, newId, 4);
+    }
+
+    void SwapTopLevelLists(std::vector<u8>& bytes, const char firstType[4], const char secondType[4]) {
+        struct ChunkSlice {
+            size_t pos = 0;
+            size_t size = 0;
+        };
+        auto getChunkSlice = [&](const char listType[4]) -> ChunkSlice {
+            const size_t pos = FindListChunk(bytes, listType);
+            Require(pos != std::numeric_limits<size_t>::max(), "Top-level LIST chunk should exist");
+            const u32 listSize = ReadLE32(bytes, pos + 4);
+            return { pos, static_cast<size_t>(8 + listSize + (listSize & 1u)) };
+        };
+
+        const ChunkSlice a = getChunkSlice(firstType);
+        const ChunkSlice b = getChunkSlice(secondType);
+        Require(a.pos < b.pos, "Expected chunk order for swap helper");
+
+        const std::vector<u8> bytesA(bytes.begin() + static_cast<std::ptrdiff_t>(a.pos),
+                                     bytes.begin() + static_cast<std::ptrdiff_t>(a.pos + a.size));
+        const std::vector<u8> bytesB(bytes.begin() + static_cast<std::ptrdiff_t>(b.pos),
+                                     bytes.begin() + static_cast<std::ptrdiff_t>(b.pos + b.size));
+
+        bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(a.pos),
+                    bytes.begin() + static_cast<std::ptrdiff_t>(b.pos + b.size));
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(a.pos), bytesB.begin(), bytesB.end());
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(a.pos + bytesB.size()), bytesA.begin(), bytesA.end());
+    }
+
+    void TestUnknownChunksRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            InsertUnknownTopLevelChunk(bytes);
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Unknown top-level chunk should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            InsertUnknownSdtaSubchunk(bytes);
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Unknown sdta subchunk should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            ReplacePdtaSubchunkId(bytes, "pmod", "bad!");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Unknown pdta subchunk should be rejected");
+        }
+    }
+
+    void TestChunkOrderingRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            SwapTopLevelLists(bytes, "INFO", "sdta");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Top-level LIST chunks out of order should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            ReplacePdtaSubchunkId(bytes, "pbag", "inst");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "pdta subchunks out of order should be rejected");
+        }
+    }
+
+    void TestIllegalOriginalPitchFallsBackTo60() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        const size_t originalPitchOffset = shdrData + 36;
+        bytes[originalPitchOffset] = 255;
+
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 should load with illegal originalPitch");
+        Require(sf2.SampleHeaders(0)->originalPitch == 60, "Illegal originalPitch should fall back to 60");
     }
 
     void TestMissingSmplRejected() {
@@ -1693,24 +1821,30 @@ int main() {
     TestSm24Detection();
     g_currentTestName = "TestSm24RequiresIfil204";
     TestSm24RequiresIfil204();
-    g_currentTestName = "TestSm24SizeRejected";
-    TestSm24SizeRejected();
+    g_currentTestName = "TestSm24SizeIgnored";
+    TestSm24SizeIgnored();
     g_currentTestName = "TestBagIndexHelpersSkipGlobalZones";
     TestBagIndexHelpersSkipGlobalZones();
     g_currentTestName = "TestMissingIfilRejected";
     TestMissingIfilRejected();
-    g_currentTestName = "TestMissingMandatoryInfoChunksRejected";
-    TestMissingMandatoryInfoChunksRejected();
+    g_currentTestName = "TestMissingMandatoryInfoChunksAccepted";
+    TestMissingMandatoryInfoChunksAccepted();
     g_currentTestName = "TestDuplicateMandatoryChunksRejected";
     TestDuplicateMandatoryChunksRejected();
     g_currentTestName = "TestDuplicateTopLevelListsRejected";
     TestDuplicateTopLevelListsRejected();
+    g_currentTestName = "TestUnknownChunksRejected";
+    TestUnknownChunksRejected();
+    g_currentTestName = "TestChunkOrderingRejected";
+    TestChunkOrderingRejected();
     g_currentTestName = "TestInvalidTerminalReferencesRejected";
     TestInvalidTerminalReferencesRejected();
-    g_currentTestName = "TestRomSampleRejected";
-    TestRomSampleRejected();
-    g_currentTestName = "TestRomMetadataWithoutRomSampleRejected";
-    TestRomMetadataWithoutRomSampleRejected();
+    g_currentTestName = "TestRomSampleIgnoredAtPlayback";
+    TestRomSampleIgnoredAtPlayback();
+    g_currentTestName = "TestRomMetadataWithoutRomSampleIgnored";
+    TestRomMetadataWithoutRomSampleIgnored();
+    g_currentTestName = "TestIllegalOriginalPitchFallsBackTo60";
+    TestIllegalOriginalPitchFallsBackTo60();
     g_currentTestName = "TestTruncatedSmplChunkRejected";
     TestTruncatedSmplChunkRejected();
     g_currentTestName = "TestMissingSmplRejected";
