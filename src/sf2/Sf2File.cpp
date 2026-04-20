@@ -314,6 +314,16 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
     return entries;
 }
 
+double ConcaveCurve(double x) {
+    x = std::clamp(x, 0.0, 1.0);
+    return std::sqrt(x);
+}
+
+double ConvexCurve(double x) {
+    x = std::clamp(x, 0.0, 1.0);
+    return 1.0 - std::sqrt(1.0 - x);
+}
+
 double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorContext* ctx, bool& supported) {
     supported = false;
     if (oper == 0) {
@@ -361,10 +371,10 @@ double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorConte
     case 0:
         break;
     case 1: // concave
-        x = std::sin(x * (3.14159265358979323846 / 2.0));
+        x = ConcaveCurve(x);
         break;
     case 2: // convex
-        x = 1.0 - std::cos(x * (3.14159265358979323846 / 2.0));
+        x = ConvexCurve(x);
         break;
     case 3: // switch
         x = (x >= 0.5) ? 1.0 : 0.0;
@@ -1614,6 +1624,15 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                               presetBags_[presetBagIdx].wModNdx,
                               presetBags_[presetBagIdx + 1].wModNdx,
                               effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+    }
+    if (ctx && ctx->nrpnOffsets) {
+        for (int g = 0; g < GEN_COUNT; ++g) {
+            if (ctx->nrpnOffsets[g] == 0) {
+                continue;
+            }
+            outZone.generators[g] = ClampGeneratorValue(
+                static_cast<u16>(g), outZone.generators[g] + ctx->nrpnOffsets[g]);
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 #include "../src/sf2/Sf2File.h"
 #include "../src/sf2/Sf2Types.h"
+#include "../src/synth/Channel.h"
 #include "../src/synth/Interpolator.h"
 #include "../src/synth/Voice.h"
 #include "../src/synth/VoicePool.h"
@@ -1087,7 +1088,7 @@ namespace {
         Require(sf2.SampleHeaderCount() >= 2, "Stereo SF2 should expose sample headers");
         Require(sf2.SampleDataCount() >= 128, "Stereo SF2 should expose sample PCM");
         Require(sf2.SampleData()[0] == 1000, "Left stereo sample PCM should be preserved");
-        Require(sf2.SampleData()[64] == -1000, "Right stereo sample PCM should be preserved");
+        Require(sf2.SampleData()[110] == -1000, "Right stereo sample PCM should be preserved");
         Require(sf2.SampleHeaders(0)->sampleLink == 1, "Left sample should preserve wSampleLink");
         Require(sf2.SampleHeaders(1)->sampleLink == 0, "Right sample should preserve wSampleLink");
 
@@ -1205,6 +1206,89 @@ namespace {
         }
     }
 
+    void TestSourceCurvesQuarterPoints() {
+        const u16 velocityConcave = static_cast<u16>(2u | (1u << 10));
+        const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
+
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(velocityConcave, GEN_Pan, 500, 0, 0));
+        config.instMods.push_back(MakeMod(velocityConvex, GEN_ModEnvToPitch, 500, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const u16 quarterVelocity = 16384;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, quarterVelocity, nullptr, zones);
+        const double x = static_cast<double>(quarterVelocity) / 65535.0;
+        const i32 expectedConcave = static_cast<i32>(std::lround(500.0 * std::sqrt(x)));
+        const i32 expectedConvex = static_cast<i32>(std::lround(500.0 * (1.0 - std::sqrt(1.0 - x))));
+        Require(zone.generators[GEN_Pan] == expectedConcave,
+            "Concave source curve should follow the SF2 amplitude-squared characteristic");
+        Require(zone.generators[GEN_ModEnvToPitch] == expectedConvex,
+            "Convex source curve should mirror the SF2 concave curve");
+    }
+
+    void TestSf2NrpnGeneratorOffsets() {
+        ChannelState state{};
+        state.HandleSf2NrpnControl(99, 120);
+        state.HandleSf2NrpnControl(98, static_cast<u8>(GEN_InitialAttenuation));
+        state.HandleSf2NrpnControl(38, 72);
+        state.HandleSf2NrpnControl(6, 65);
+
+        Require(state.sf2Nrpn.sf2Mode, "CC99=120 should enter SF2 NRPN mode");
+        Require(state.sf2Nrpn.generatorIndex == GEN_InitialAttenuation,
+            "CC98 should select the target SF2 generator");
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 200,
+            "Data Entry should map to a centered SF2 generator offset");
+
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        Require(zone.generators[GEN_InitialAttenuation] == 200,
+            "SF2 NRPN offsets should be added during zone resolution");
+
+        state.HandleSf2NrpnControl(121, 0);
+        Require(!state.sf2Nrpn.sf2Mode, "Reset All Controllers should leave SF2 NRPN mode");
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 0,
+            "Reset All Controllers should clear SF2 NRPN offsets");
+    }
+
+    void TestSoftPedalAffectsNewNoteOnOnly() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice normalVoice;
+        normalVoice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+                           SoundBankKind::Sf2, SynthCompatOptions{});
+
+        Voice softVoice;
+        softVoice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+                         SoundBankKind::Sf2, SynthCompatOptions{}, {}, -1, 0, true);
+
+        Require(softVoice.filterBaseFcCents == normalVoice.filterBaseFcCents - 200,
+            "Soft pedal should lower the initial filter cutoff for new voices");
+        Require(softVoice.attenuation < normalVoice.attenuation,
+            "Soft pedal should increase attenuation for new voices");
+
+        softVoice.RefreshResolvedZoneControllers(zone);
+        Require(softVoice.filterBaseFcCents == normalVoice.filterBaseFcCents,
+            "Controller refresh without a new NoteOn should not keep reapplying soft pedal");
+    }
+
     // ---------------------------------------------------------------------------
     // velocity 7-bit 変換の境界値確認
     // ---------------------------------------------------------------------------
@@ -1253,10 +1337,11 @@ namespace {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const std::vector<u8> original = bytes;
+        const u32 expectedSm24Size = 110;
 
         std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
-        AppendU32LE(sm24Chunk, 64);
-        sm24Chunk.resize(sm24Chunk.size() + 64, 0x7F);
+        AppendU32LE(sm24Chunk, expectedSm24Size);
+        sm24Chunk.resize(sm24Chunk.size() + expectedSm24Size, 0x7F);
         auto insertSm24 = [&](std::vector<u8>& file) {
             const size_t sdtaListPos = FindListChunk(file, "sdta");
             Require(sdtaListPos != std::numeric_limits<size_t>::max(), "sdta LIST chunk should exist");
@@ -1282,6 +1367,7 @@ namespace {
     void TestSm24RequiresIfil204() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
+        const u32 expectedSm24Size = 110;
         const size_t infoPos = FindListChunk(bytes, "INFO");
         Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
         const size_t ifilPos = infoPos + 12;
@@ -1292,8 +1378,8 @@ namespace {
         bytes[ifilPos + 11] = 0;
 
         std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
-        AppendU32LE(sm24Chunk, 64);
-        sm24Chunk.resize(sm24Chunk.size() + 64, 0);
+        AppendU32LE(sm24Chunk, expectedSm24Size);
+        sm24Chunk.resize(sm24Chunk.size() + expectedSm24Size, 0);
         const size_t sdtaPos = FindListChunk(bytes, "sdta");
         Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
         const size_t sdtaPayloadEnd = sdtaPos + 8 + ReadLE32(bytes, sdtaPos + 4);
@@ -1324,6 +1410,28 @@ namespace {
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 size mismatch should be ignored");
         Require(sf2.HasIgnoredSm24(), "invalid sm24 should still be reported as ignored");
         Require(sf2.SampleData24() == nullptr, "Invalid sm24 should not produce a 24-bit sample pool");
+    }
+
+    void TestSm24BeforeSmplAccepted() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
+        AppendU32LE(sm24Chunk, 110);
+        sm24Chunk.resize(sm24Chunk.size() + 110, 0x55);
+
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t sdtaFirstSubchunk = sdtaPos + 12;
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(sdtaFirstSubchunk), sm24Chunk.begin(), sm24Chunk.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(sm24Chunk.size()));
+        AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(sm24Chunk.size()));
+
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 chunk before smpl should still be accepted");
+        Require(!sf2.HasIgnoredSm24(), "valid sm24 should be accepted regardless of sdta subchunk order");
+        Require(sf2.SampleData24() != nullptr, "valid sm24 should still produce a 24-bit sample pool");
+        Require(sf2.SampleData24()[0] == ((static_cast<i32>(sf2.SampleData()[0]) << 8) | 0x55),
+            "sm24 data should still be combined when the chunk appears before smpl");
     }
 
     void TestInvalidTerminalReferencesRejected() {
@@ -2026,95 +2134,62 @@ namespace {
 
 } // namespace
 
-int main() {
-    g_currentTestName = "TestForcedVelocityDefaultModulators";
-    TestForcedVelocityDefaultModulators();
-    g_currentTestName = "TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods";
-    TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods();
-    g_currentTestName = "TestAbsoluteTransformSupport";
-    TestAbsoluteTransformSupport();
-    g_currentTestName = "TestPresetZoneTerminalInstrumentRule";
-    TestPresetZoneTerminalInstrumentRule();
-    g_currentTestName = "TestInstrumentZoneTerminalSampleRule";
-    TestInstrumentZoneTerminalSampleRule();
-    g_currentTestName = "TestPresetLevelIllegalSampleGeneratorsIgnored";
-    TestPresetLevelIllegalSampleGeneratorsIgnored();
-    g_currentTestName = "TestDuplicateModulatorsUseLastDefinition";
-    TestDuplicateModulatorsUseLastDefinition();
-    g_currentTestName = "TestLinkedModulatorsFeedTargetSource";
-    TestLinkedModulatorsFeedTargetSource();
-    g_currentTestName = "TestUnsupportedTransformReporting";
-    TestUnsupportedTransformReporting();
-    g_currentTestName = "TestUnsupportedAmountSourceIgnored";
-    TestUnsupportedAmountSourceIgnored();
-    g_currentTestName = "TestEffectsSendMixPolicy";
-    TestEffectsSendMixPolicy();
-    g_currentTestName = "TestSf2PitchPrecedence";
-    TestSf2PitchPrecedence();
-    g_currentTestName = "TestEnvelopePitchAndKeynumScaling";
-    TestEnvelopePitchAndKeynumScaling();
-    g_currentTestName = "TestEnvelopeReleaseRecalculation";
-    TestEnvelopeReleaseRecalculation();
-    g_currentTestName = "TestFilterAndLfoInitialization";
-    TestFilterAndLfoInitialization();
-    g_currentTestName = "TestPressureSources";
-    TestPressureSources();
-    g_currentTestName = "TestPitchWheelSensitivityAmountSource";
-    TestPitchWheelSensitivityAmountSource();
-    g_currentTestName = "TestRemainingDefaultModulators";
-    TestRemainingDefaultModulators();
-    g_currentTestName = "TestDefaultModulatorSupersedeSemantics";
-    TestDefaultModulatorSupersedeSemantics();
-    g_currentTestName = "TestStereoSampleLinks";
-    TestStereoSampleLinks();
-    g_currentTestName = "TestSourceCurvesSupport";
-    TestSourceCurvesSupport();
-    g_currentTestName = "TestVelocityZoneBoundary";
-    TestVelocityZoneBoundary();
-    g_currentTestName = "TestSm24Detection";
-    TestSm24Detection();
-    g_currentTestName = "TestSm24RequiresIfil204";
-    TestSm24RequiresIfil204();
-    g_currentTestName = "TestSm24SizeIgnored";
-    TestSm24SizeIgnored();
-    g_currentTestName = "TestBagIndexHelpersSkipGlobalZones";
-    TestBagIndexHelpersSkipGlobalZones();
-    g_currentTestName = "TestMissingIfilRejected";
-    TestMissingIfilRejected();
-    g_currentTestName = "TestMissingMandatoryInfoChunksAccepted";
-    TestMissingMandatoryInfoChunksAccepted();
-    g_currentTestName = "TestMalformedInfoStringsIgnored";
-    TestMalformedInfoStringsIgnored();
-    g_currentTestName = "TestDuplicateMandatoryChunksRejected";
-    TestDuplicateMandatoryChunksRejected();
-    g_currentTestName = "TestDuplicateTopLevelListsRejected";
-    TestDuplicateTopLevelListsRejected();
-    g_currentTestName = "TestUnknownChunksRejected";
-    TestUnknownChunksRejected();
-    g_currentTestName = "TestChunkOrderingRejected";
-    TestChunkOrderingRejected();
-    g_currentTestName = "TestInvalidTerminalReferencesRejected";
-    TestInvalidTerminalReferencesRejected();
-    g_currentTestName = "TestRomSampleSkippedWithoutAttachedRomBank";
-    TestRomSampleSkippedWithoutAttachedRomBank();
-    g_currentTestName = "TestRomSampleUsesAttachedRomBank";
-    TestRomSampleUsesAttachedRomBank();
-    g_currentTestName = "TestRomMetadataWithoutRomSampleIgnored";
-    TestRomMetadataWithoutRomSampleIgnored();
-    g_currentTestName = "TestRomSamplesRequireValidRomMetadata";
-    TestRomSamplesRequireValidRomMetadata();
-    g_currentTestName = "TestIllegalOriginalPitchFallsBackTo60";
-    TestIllegalOriginalPitchFallsBackTo60();
-    g_currentTestName = "TestTruncatedSmplChunkRejected";
-    TestTruncatedSmplChunkRejected();
-    g_currentTestName = "TestSampleGuardPaddingRequired";
-    TestSampleGuardPaddingRequired();
-    g_currentTestName = "TestSampleLoopGuardPointsRequired";
-    TestSampleLoopGuardPointsRequired();
-    g_currentTestName = "TestMissingSmplRejected";
-    TestMissingSmplRejected();
-    g_currentTestName = "TestNonMonotonicPbagRejected";
-    TestNonMonotonicPbagRejected();
+int main(int argc, char** argv) {
+    const char* filter = (argc > 1) ? argv[1] : nullptr;
+    auto shouldRun = [&](const char* name) {
+        return !filter || std::strcmp(filter, name) == 0;
+    };
+
+#define RUN_TEST(name) do { if (shouldRun(#name)) { g_currentTestName = #name; name(); } } while (0)
+    RUN_TEST(TestForcedVelocityDefaultModulators);
+    RUN_TEST(TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods);
+    RUN_TEST(TestAbsoluteTransformSupport);
+    RUN_TEST(TestPresetZoneTerminalInstrumentRule);
+    RUN_TEST(TestInstrumentZoneTerminalSampleRule);
+    RUN_TEST(TestPresetLevelIllegalSampleGeneratorsIgnored);
+    RUN_TEST(TestDuplicateModulatorsUseLastDefinition);
+    RUN_TEST(TestLinkedModulatorsFeedTargetSource);
+    RUN_TEST(TestUnsupportedTransformReporting);
+    RUN_TEST(TestUnsupportedAmountSourceIgnored);
+    RUN_TEST(TestEffectsSendMixPolicy);
+    RUN_TEST(TestSf2PitchPrecedence);
+    RUN_TEST(TestEnvelopePitchAndKeynumScaling);
+    RUN_TEST(TestEnvelopeReleaseRecalculation);
+    RUN_TEST(TestFilterAndLfoInitialization);
+    RUN_TEST(TestPressureSources);
+    RUN_TEST(TestPitchWheelSensitivityAmountSource);
+    RUN_TEST(TestRemainingDefaultModulators);
+    RUN_TEST(TestDefaultModulatorSupersedeSemantics);
+    RUN_TEST(TestStereoSampleLinks);
+    RUN_TEST(TestSourceCurvesSupport);
+    RUN_TEST(TestSourceCurvesQuarterPoints);
+    RUN_TEST(TestSf2NrpnGeneratorOffsets);
+    RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
+    RUN_TEST(TestVelocityZoneBoundary);
+    RUN_TEST(TestSm24Detection);
+    RUN_TEST(TestSm24RequiresIfil204);
+    RUN_TEST(TestSm24SizeIgnored);
+    RUN_TEST(TestSm24BeforeSmplAccepted);
+    RUN_TEST(TestBagIndexHelpersSkipGlobalZones);
+    RUN_TEST(TestMissingIfilRejected);
+    RUN_TEST(TestMissingMandatoryInfoChunksAccepted);
+    RUN_TEST(TestMalformedInfoStringsIgnored);
+    RUN_TEST(TestDuplicateMandatoryChunksRejected);
+    RUN_TEST(TestDuplicateTopLevelListsRejected);
+    RUN_TEST(TestUnknownChunksRejected);
+    RUN_TEST(TestChunkOrderingRejected);
+    RUN_TEST(TestInvalidTerminalReferencesRejected);
+    RUN_TEST(TestRomSampleSkippedWithoutAttachedRomBank);
+    RUN_TEST(TestRomSampleUsesAttachedRomBank);
+    RUN_TEST(TestRomMetadataWithoutRomSampleIgnored);
+    RUN_TEST(TestRomSamplesRequireValidRomMetadata);
+    RUN_TEST(TestIllegalOriginalPitchFallsBackTo60);
+    RUN_TEST(TestTruncatedSmplChunkRejected);
+    RUN_TEST(TestSampleGuardPaddingRequired);
+    RUN_TEST(TestSampleLoopGuardPointsRequired);
+    RUN_TEST(TestMissingSmplRejected);
+    RUN_TEST(TestNonMonotonicPbagRejected);
+#undef RUN_TEST
     std::printf("sf2_compliance: all tests passed\n");
     return 0;
 }

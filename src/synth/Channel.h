@@ -6,8 +6,24 @@
 
 #pragma once
 #include "../common/Types.h"
+#include "../sf2/Sf2Types.h"
+#include <algorithm>
 #include <cmath>
 namespace XArkMidi {
+
+struct Sf2NrpnState {
+    bool sf2Mode = false;
+    i32 generatorIndex = -1;
+    i32 generatorSelectBase = 0;
+    i32 generatorOffsets[GEN_COUNT] = {};
+
+    void Reset() {
+        sf2Mode = false;
+        generatorIndex = -1;
+        generatorSelectBase = 0;
+        std::fill(std::begin(generatorOffsets), std::end(generatorOffsets), 0);
+    }
+};
 
 struct ChannelState {
     u8   program    = 0;    // 0-127
@@ -56,6 +72,109 @@ struct ChannelState {
     i16  fineTuningCents = 0;       // RPN 0,1
     u8   modulationDepthRangeSemitones = 0; // RPN 0,5
     u8   modulationDepthRangeCents = 0;
+    Sf2NrpnState sf2Nrpn{};
+
+    void ResetSf2NrpnSelection() {
+        sf2Nrpn.sf2Mode = false;
+        sf2Nrpn.generatorIndex = -1;
+        sf2Nrpn.generatorSelectBase = 0;
+    }
+
+    void ApplySf2NrpnDataEntry() {
+        if (!sf2Nrpn.sf2Mode) {
+            return;
+        }
+        if (sf2Nrpn.generatorIndex < 0 || sf2Nrpn.generatorIndex >= GEN_COUNT) {
+            return;
+        }
+        const i32 raw14 = (static_cast<i32>(dataEntryMSB) << 7) | dataEntryLSB;
+        sf2Nrpn.generatorOffsets[sf2Nrpn.generatorIndex] = std::clamp(raw14 - 8192, -8192, 8191);
+    }
+
+    void IncrementNrpnDataEntry() {
+        u16 value = static_cast<u16>((static_cast<u16>(dataEntryMSB) << 7) | dataEntryLSB);
+        value = std::min<u16>(16383, static_cast<u16>(value + 1));
+        dataEntryMSB = static_cast<u8>((value >> 7) & 0x7F);
+        dataEntryLSB = static_cast<u8>(value & 0x7F);
+    }
+
+    void DecrementNrpnDataEntry() {
+        u16 value = static_cast<u16>((static_cast<u16>(dataEntryMSB) << 7) | dataEntryLSB);
+        value = (value > 0) ? static_cast<u16>(value - 1) : 0;
+        dataEntryMSB = static_cast<u8>((value >> 7) & 0x7F);
+        dataEntryLSB = static_cast<u8>(value & 0x7F);
+    }
+
+    void HandleSf2NrpnControl(u8 cc, u8 val) {
+        switch (cc) {
+        case 6:
+            dataEntryMSB = val;
+            ApplySf2NrpnDataEntry();
+            break;
+        case 38:
+            dataEntryLSB = val;
+            ApplySf2NrpnDataEntry();
+            break;
+        case 98:
+            nrpnLSB = val;
+            rpnMSB = 0x7F;
+            rpnLSB = 0x7F;
+            if (sf2Nrpn.sf2Mode) {
+                if (val < 100) {
+                    sf2Nrpn.generatorIndex = sf2Nrpn.generatorSelectBase + val;
+                    sf2Nrpn.generatorSelectBase = 0;
+                } else if (val == 100) {
+                    sf2Nrpn.generatorSelectBase = 100;
+                } else if (val == 101) {
+                    sf2Nrpn.generatorSelectBase = 1000;
+                } else if (val == 102) {
+                    sf2Nrpn.generatorSelectBase = 10000;
+                }
+            }
+            break;
+        case 99:
+            nrpnMSB = val;
+            rpnMSB = 0x7F;
+            rpnLSB = 0x7F;
+            if (val == 120) {
+                sf2Nrpn.sf2Mode = true;
+                sf2Nrpn.generatorIndex = -1;
+                sf2Nrpn.generatorSelectBase = 0;
+            } else {
+                ResetSf2NrpnSelection();
+            }
+            break;
+        case 100:
+            rpnLSB = val;
+            nrpnMSB = 0x7F;
+            nrpnLSB = 0x7F;
+            ResetSf2NrpnSelection();
+            break;
+        case 101:
+            rpnMSB = val;
+            nrpnMSB = 0x7F;
+            nrpnLSB = 0x7F;
+            ResetSf2NrpnSelection();
+            break;
+        case 96:
+            if (nrpnMSB != 0x7F || nrpnLSB != 0x7F) {
+                IncrementNrpnDataEntry();
+                ApplySf2NrpnDataEntry();
+            }
+            break;
+        case 97:
+            if (nrpnMSB != 0x7F || nrpnLSB != 0x7F) {
+                DecrementNrpnDataEntry();
+                ApplySf2NrpnDataEntry();
+            }
+            break;
+        case 121:
+            sf2Nrpn.Reset();
+            break;
+        default:
+            break;
+        }
+    }
 
     // ピッチベンド量をセミトーン単位で返す
     // pitchBend32: center=0x80000000, range [0, 0xFFFFFFFF]
@@ -131,6 +250,7 @@ struct ChannelState {
         fineTuningCents = 0;
         modulationDepthRangeSemitones = 0;
         modulationDepthRangeCents = 0;
+        sf2Nrpn.Reset();
         for (int i = 0; i < 128; ++i) ccValues[i] = 0;
         for (int i = 0; i < 128; ++i) polyPressure[i] = 0;
         for (int i = 0; i < 128; ++i) noteTuningCents[i] = 0;
@@ -164,4 +284,3 @@ struct ChannelState {
 };
 
 } // namespace XArkMidi
-

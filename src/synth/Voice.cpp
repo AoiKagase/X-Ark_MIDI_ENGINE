@@ -9,6 +9,7 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <limits>
 
 namespace XArkMidi {
@@ -471,7 +472,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
                    u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
                    SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
                    const SpecialVoiceRoute& newSpecialRoute,
-                   i32 portamentoSourceKey, u8 portamentoTime) {
+                   i32 portamentoSourceKey, u8 portamentoTime, bool softPedalActive) {
     active         = true;
     bank           = bankNumber;
     channel        = ch;
@@ -517,7 +518,17 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     vibLfoPhaseStep = 0.0f;
     vibLfoToPitchCents = 0.0f;
 
-    const i32* gen = zone.generators;
+    std::array<i32, GEN_COUNT> effectiveGenerators{};
+    std::memcpy(effectiveGenerators.data(), zone.generators, sizeof(zone.generators));
+    if (compatOptions.enableSoftPedal && softPedalActive) {
+        effectiveGenerators[GEN_InitialAttenuation] =
+            std::clamp(effectiveGenerators[GEN_InitialAttenuation] + 80, 0, 1440);
+        effectiveGenerators[GEN_InitialFilterFc] =
+            std::clamp(effectiveGenerators[GEN_InitialFilterFc] - 200, kFilterFcMin, kFilterFcMax);
+    }
+    ResolvedZone effectiveZone = zone;
+    std::memcpy(effectiveZone.generators, effectiveGenerators.data(), sizeof(effectiveZone.generators));
+    const i32* gen = effectiveGenerators.data();
     const SampleHeader* smp = zone.sample;
     sampleHeader = smp;
     const u8 effectiveKeyU8 = ResolveForcedKey(key, gen);
@@ -643,7 +654,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     filterA2 = 0.0f;
     filterZ1 = 0.0f;
     filterZ2 = 0.0f;
-    ApplyResolvedZoneControllerState(zone, effectiveKey);
+    ApplyResolvedZoneControllerState(effectiveZone, effectiveKey);
     channelGainL = 1.0f;
     channelGainR = 1.0f;
     channelReverbSend = 0.0f;

@@ -16,6 +16,7 @@ struct SynthCompatOptions {
     bool sf2ZeroLengthLoopRetrigger = false;
     bool enableSf2SamplePitchCorrection = false;
     bool multiplySf2MidiEffectsSends = false;
+    bool enableSoftPedal = true;
 };
 
 struct SpecialVoiceRoute {
@@ -164,7 +165,7 @@ public:
                 u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
                 SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
                 const SpecialVoiceRoute& specialRoute = {},
-                i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
+                i32 portamentoSourceKey = -1, u8 portamentoTime = 0, bool softPedalActive = false);
     bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
     bool HasLinkedVoice() const { return linkedVoiceIndex != kInvalidLinkedVoice; }
     void LinkVoice(u16 index) { linkedVoiceIndex = index; }

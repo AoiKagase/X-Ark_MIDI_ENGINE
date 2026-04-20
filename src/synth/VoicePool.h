@@ -30,7 +30,7 @@ public:
                 f64 pitchBendSemitones, u8 exclusiveClass,
                 f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,
                 const SynthCompatOptions& compatOptions,
-                i32 portamentoSourceKey = -1, u8 portamentoTime = 0);
+                i32 portamentoSourceKey = -1, u8 portamentoTime = 0, bool softPedalActive = false);
 
     // NoteOff: 該当チャンネル・ノートのボイスを Release フェーズへ
     // sustain が true の場合は NoteOff を保留する

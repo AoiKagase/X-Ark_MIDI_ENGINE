@@ -715,6 +715,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.pitchBend = state.PitchBend14();
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
+    ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
 
     auto tryResolveZones = [&](u16 bankToTry) -> bool {
         zoneScratch_.clear();
@@ -798,7 +799,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
                       resolvedBank, ch, resolvedProgram, key, vel, sampleRate_,
                       pitchBend, excClass, state.VolumeFactor(), state.pan32,
                       state.reverbSend32, state.chorusSend32, soundBank_->Kind(), compatOptions_,
-                      portamentoSourceKey, state.portamentoTime);
+                      portamentoSourceKey, state.portamentoTime, state.softPedal);
     state.lastNoteKey = key;
     state.portamentoControlKey = 0xFF;
 }
@@ -828,16 +829,20 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         state.bankMSB = val;
         state.bank = static_cast<u16>(state.bankMSB) * 128 + state.bankLSB;
         break;
-    case 6:  // Data Entry MSB (RPN)
+    case 6:  // Data Entry MSB (RPN / SF2 NRPN)
         state.dataEntryMSB = val;
         if (IsRpnSelected(state)) {
             ApplyRpnValue(state);
+        } else if (state.sf2Nrpn.sf2Mode) {
+            state.ApplySf2NrpnDataEntry();
         }
         break;
-    case 38: // Data Entry LSB (RPN)
+    case 38: // Data Entry LSB (RPN / SF2 NRPN)
         state.dataEntryLSB = val;
         if (IsRpnSelected(state)) {
             ApplyRpnValue(state);
+        } else if (state.sf2Nrpn.sf2Mode) {
+            state.ApplySf2NrpnDataEntry();
         }
         break;
     case 5:  // Portamento Time
@@ -870,7 +875,6 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         break;
     case 67: // Soft Pedal
         state.softPedal = (val >= 64);
-        ApplyChannelMix(voicePool_, ch, state);
         break;
     case 65: // Portamento On/Off
         state.portamento = (val >= 64);
@@ -887,24 +891,16 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         ApplyChannelMix(voicePool_, ch, state);
         break;
     case 98: // NRPN LSB
-        state.nrpnLSB = val;
-        state.rpnMSB = 0x7F;
-        state.rpnLSB = 0x7F;
+        state.HandleSf2NrpnControl(98, val);
         break;
     case 99: // NRPN MSB
-        state.nrpnMSB = val;
-        state.rpnMSB = 0x7F;
-        state.rpnLSB = 0x7F;
+        state.HandleSf2NrpnControl(99, val);
         break;
     case 100: // RPN LSB
-        state.rpnLSB = val;
-        state.nrpnMSB = 0x7F;
-        state.nrpnLSB = 0x7F;
+        state.HandleSf2NrpnControl(100, val);
         break;
     case 101: // RPN MSB
-        state.rpnMSB = val;
-        state.nrpnMSB = 0x7F;
-        state.nrpnLSB = 0x7F;
+        state.HandleSf2NrpnControl(101, val);
         break;
     case 96: // Data Increment
         if (IsRpnSelected(state)) {
@@ -937,6 +933,7 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
             ApplyRpnValue(state);
         } else if (IsNrpnSelected(state)) {
             Increment14Bit(state.dataEntryMSB, state.dataEntryLSB, 16383);
+            state.ApplySf2NrpnDataEntry();
         }
         break;
     case 97: // Data Decrement
@@ -970,6 +967,7 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
             ApplyRpnValue(state);
         } else if (IsNrpnSelected(state)) {
             Decrement14Bit(state.dataEntryMSB, state.dataEntryLSB);
+            state.ApplySf2NrpnDataEntry();
         }
         break;
     case 120: // All Sound Off
@@ -1253,6 +1251,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.pitchBend = state.PitchBend14();
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
+    ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
