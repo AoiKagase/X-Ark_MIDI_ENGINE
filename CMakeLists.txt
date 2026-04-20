@@ -114,6 +114,7 @@ if(XAME_BUILD_TESTS)
         src/synth/SimdKernels.cpp
         src/synth/SimdKernelsAvx2.cpp
         src/synth/Voice.cpp
+        src/synth/VoicePool.cpp
     )
     target_include_directories(sf2_compliance PRIVATE src)
     target_compile_features(sf2_compliance PRIVATE cxx_std_17)
