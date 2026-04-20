@@ -1369,6 +1369,75 @@ namespace {
         Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing ifil should be rejected");
     }
 
+    void RemoveInfoSubchunk(std::vector<u8>& bytes, const char id[4]) {
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+        const size_t listData = infoPos + 12;
+        const size_t listEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+        for (size_t p = listData; p + 8 <= listEnd;) {
+            const u32 chunkSize = ReadLE32(bytes, p + 4);
+            const size_t paddedSize = 8 + chunkSize + (chunkSize & 1u);
+            if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(p),
+                            bytes.begin() + static_cast<std::ptrdiff_t>(p + paddedSize));
+                AddChunkSize(bytes, 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
+                AddChunkSize(bytes, infoPos + 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
+                return;
+            }
+            p += paddedSize;
+        }
+        Require(false, "Requested INFO subchunk should exist");
+    }
+
+    void RemoveSdtaSubchunk(std::vector<u8>& bytes, const char id[4]) {
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t listData = sdtaPos + 12;
+        const size_t listEnd = sdtaPos + 8 + ReadLE32(bytes, sdtaPos + 4);
+        for (size_t p = listData; p + 8 <= listEnd;) {
+            const u32 chunkSize = ReadLE32(bytes, p + 4);
+            const size_t paddedSize = 8 + chunkSize + (chunkSize & 1u);
+            if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(p),
+                            bytes.begin() + static_cast<std::ptrdiff_t>(p + paddedSize));
+                AddChunkSize(bytes, 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
+                AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(-static_cast<i32>(paddedSize)));
+                return;
+            }
+            p += paddedSize;
+        }
+        Require(false, "Requested sdta subchunk should exist");
+    }
+
+    void TestMissingMandatoryInfoChunksRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "isng");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing isng should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "INAM");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing INAM should be rejected");
+        }
+    }
+
+    void TestMissingSmplRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        RemoveSdtaSubchunk(bytes, "smpl");
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing smpl should be rejected");
+    }
+
     void TestNonMonotonicPbagRejected() {
         MinimalSf2Config config;
         config.presetGlobalGens.push_back(MakeSignedGen(GEN_CoarseTune, 1));
@@ -1465,6 +1534,8 @@ int main() {
     TestBagIndexHelpersSkipGlobalZones();
     g_currentTestName = "TestMissingIfilRejected";
     TestMissingIfilRejected();
+    g_currentTestName = "TestMissingMandatoryInfoChunksRejected";
+    TestMissingMandatoryInfoChunksRejected();
     g_currentTestName = "TestInvalidTerminalReferencesRejected";
     TestInvalidTerminalReferencesRejected();
     g_currentTestName = "TestRomSampleRejected";
@@ -1473,6 +1544,8 @@ int main() {
     TestRomMetadataWithoutRomSampleRejected();
     g_currentTestName = "TestTruncatedSmplChunkRejected";
     TestTruncatedSmplChunkRejected();
+    g_currentTestName = "TestMissingSmplRejected";
+    TestMissingSmplRejected();
     g_currentTestName = "TestNonMonotonicPbagRejected";
     TestNonMonotonicPbagRejected();
     std::printf("sf2_compliance: all tests passed\n");

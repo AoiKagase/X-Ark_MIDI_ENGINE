@@ -575,11 +575,14 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
     hasIgnoredSm24_ = false;
+    hasSmpl_ = false;
     hasSm24Chunk_ = false;
     sm24ChunkSize_ = 0;
     hasIfil_ = false;
     ifilMajor_ = 0;
     ifilMinor_ = 0;
+    hasIsng_ = false;
+    hasInam_ = false;
     hasIrom_ = false;
     hasIver_ = false;
     hasPhdr_ = false;
@@ -665,6 +668,14 @@ bool Sf2File::ParseRiff(BinaryReader& r) {
         errorMsg_ = "SF2 missing mandatory ifil chunk";
         return false;
     }
+    if (!hasIsng_) {
+        errorMsg_ = "SF2 missing mandatory isng chunk";
+        return false;
+    }
+    if (!hasInam_) {
+        errorMsg_ = "SF2 missing mandatory INAM chunk";
+        return false;
+    }
     return true;
 }
 
@@ -688,6 +699,10 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
             ifilMajor_ = sub.ReadU16LE();
             ifilMinor_ = sub.ReadU16LE();
             hasIfil_ = true;
+        } else if (subId == MakeFourCC("isng")) {
+            hasIsng_ = true;
+        } else if (subId == MakeFourCC("INAM")) {
+            hasInam_ = true;
         } else if (subId == MakeFourCC("irom")) {
             hasIrom_ = true;
         } else if (subId == MakeFourCC("iver")) {
@@ -716,6 +731,7 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
                 errorMsg_ = "SF2 smpl chunk size must be even";
                 return false;
             }
+            hasSmpl_ = true;
             size_t count = subSize / 2;
             const size_t maxSampleCount = maxSampleDataBytes_ / sizeof(i16);
             if (count > maxSampleCount) {
@@ -1021,6 +1037,10 @@ bool Sf2File::ValidatePdtaStructures() {
 }
 
 bool Sf2File::ValidateInfoAndSdtaConsistency() {
+    if (!hasSmpl_) {
+        errorMsg_ = "SF2 missing mandatory smpl chunk";
+        return false;
+    }
     if (hasSm24Chunk_) {
         const bool is204OrLater = (ifilMajor_ > 2) || (ifilMajor_ == 2 && ifilMinor_ >= 4);
         if (!is204OrLater) {

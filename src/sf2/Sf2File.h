@@ -138,11 +138,14 @@ private:
     u32 unsupportedModulatorCount_ = 0;
     u32 unsupportedModulatorTransformCount_ = 0;
     bool hasIgnoredSm24_ = false;
+    bool hasSmpl_ = false;
     bool hasSm24Chunk_ = false;
     u32 sm24ChunkSize_ = 0;
     bool hasIfil_ = false;
     u16 ifilMajor_ = 0;
     u16 ifilMinor_ = 0;
+    bool hasIsng_ = false;
+    bool hasInam_ = false;
     bool hasIrom_ = false;
     bool hasIver_ = false;
     bool hasPhdr_ = false;
