@@ -157,6 +157,13 @@ inline f32 CubicInterpFixed24Bit(const i32* data, i64 posFixed, size_t dataSize)
     return CubicHermite(y0, y1, y2, y3, frac);
 }
 
+inline size_t ClampNonLoopSampleLimit(size_t sampleDataSize, u32 sampleEnd) {
+    if (sampleDataSize == 0) return 0;
+    const size_t requestedLimit = static_cast<size_t>(sampleEnd);
+    if (requestedLimit == 0) return std::min<size_t>(1, sampleDataSize);
+    return std::min(sampleDataSize, requestedLimit);
+}
+
 inline f32 CubicInterpFixedLooped24Bit(const i32* data,
                                        i64 posFixed,
                                        size_t dataSize,
@@ -786,6 +793,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
     const bool localUseModEnv = useModEnv;
     const bool hasReverb = (reverbGainL != 0.0f || reverbGainR != 0.0f);
     const bool hasChorus = (chorusGainL != 0.0f || chorusGainR != 0.0f);
+    const size_t nonLoopSampleDataLimit = ClampNonLoopSampleLimit(sampleDataSize, sampleEnd);
 
     EnvPhase localEnvPhase = envPhase;
     f32 localEnvLevel = envLevel;
@@ -880,7 +888,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                         ? CubicInterpFixedLooped24Bit(sampleData24, localSamplePosFixed, sampleDataSize,
                                                       static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
                                                       static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
-                        : CubicInterpFixed24Bit(sampleData24, localSamplePosFixed, sampleDataSize));
+                        : CubicInterpFixed24Bit(sampleData24, localSamplePosFixed, nonLoopSampleDataLimit));
                 const f32 modLfoValue = ComputeLfoValue(modLfoDelayEnd, localModLfoSampleCount, localModLfoPhase, modLfoPhaseStep);
                 const f32 vibLfoValue = ComputeLfoValue(vibLfoDelayEnd, localVibLfoSampleCount, localVibLfoPhase, vibLfoPhaseStep);
                 const f64 portamentoSemitones = localPortamentoOffsetSemitones;
@@ -984,7 +992,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 if (localIntegralStep) {
                         MixConstantChunkScalar<false, false, true>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -992,7 +1000,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                         MixConstantChunkScalar<false, false, false>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1012,7 +1020,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 if (localIntegralStep) {
                         MixConstantChunkScalar<true, true, true>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1020,7 +1028,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                         MixConstantChunkScalar<true, true, false>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1040,7 +1048,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 if (localIntegralStep) {
                         MixConstantChunkScalar<true, false, true>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1048,7 +1056,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                         MixConstantChunkScalar<true, false, false>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1068,7 +1076,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 if (localIntegralStep) {
                         MixConstantChunkScalar<false, true, true>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1076,7 +1084,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                 } else {
                         MixConstantChunkScalar<false, true, false>(
                             outL, outR, reverbL, reverbR, chorusL, chorusR,
-                            sampleData, sampleDataSize, localSamplePosFixed, localSampleStepFixed,
+                            sampleData, localLooping ? sampleDataSize : nonLoopSampleDataLimit, localSamplePosFixed, localSampleStepFixed,
                             localLooping, localLoopStartFixed, localLoopEndFixed, offset, chunkFrames,
                             localDryGainL, localDryGainR,
                             localReverbGainL, localReverbGainR,
@@ -1298,7 +1306,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                             ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
                                                      static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
                                                      static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
-                            : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
+                            : CubicInterpFixed(sampleData, localSamplePosFixed, nonLoopSampleDataLimit);
                         localSamplePosFixed += localSampleStepFixed;
 
                         const f32 scaled = sample * localEnvLevel;
@@ -1345,7 +1353,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                             ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
                                                      static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
                                                      static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
-                            : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
+                            : CubicInterpFixed(sampleData, localSamplePosFixed, nonLoopSampleDataLimit);
                         localSamplePosFixed += localSampleStepFixed;
 
                         const f32 scaled = sample * localEnvLevel;
@@ -1476,7 +1484,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                         ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
                                                  static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
                                                  static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
-                        : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize);
+                        : CubicInterpFixed(sampleData, localSamplePosFixed, nonLoopSampleDataLimit);
                     localSamplePosFixed += localSampleStepFixed;
 
                     const f32 normalized = sample * kInvPcmScale;
@@ -1545,7 +1553,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                     ? CubicInterpFixedLooped(sampleData, localSamplePosFixed, sampleDataSize,
                                              static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
                                              static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
-                    : CubicInterpFixed(sampleData, localSamplePosFixed, sampleDataSize));
+                    : CubicInterpFixed(sampleData, localSamplePosFixed, nonLoopSampleDataLimit));
             const f32 modLfoValue = ComputeLfoValue(modLfoDelayEnd, localModLfoSampleCount, localModLfoPhase, modLfoPhaseStep);
             const f32 vibLfoValue = ComputeLfoValue(vibLfoDelayEnd, localVibLfoSampleCount, localVibLfoPhase, vibLfoPhaseStep);
             const f64 portamentoSemitones = localPortamentoOffsetSemitones;

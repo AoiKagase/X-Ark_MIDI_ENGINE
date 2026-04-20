@@ -1585,7 +1585,7 @@ namespace {
             "smpl chunk that overstates its size should be rejected");
     }
 
-    void TestSampleGuardPaddingRequired() {
+    void TestSampleGuardPaddingIsAccepted() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const size_t sdtaPos = FindListChunk(bytes, "sdta");
@@ -1598,11 +1598,11 @@ namespace {
         bytes[firstGuardSample + 1] = 0;
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
-            "Samples without zero-filled trailing guard points should be rejected");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples without zero-filled trailing guard points should still load");
     }
 
-    void TestSampleLoopGuardPointsRequired() {
+    void TestSampleLoopGuardPointsAreAccepted() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
@@ -1611,8 +1611,45 @@ namespace {
         WriteLE32(bytes, shdrData + 28, 7);
 
         Sf2File sf2;
-        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
-            "Samples without eight valid points before loop start should be rejected");
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples without eight valid points before loop start should still load");
+    }
+
+    void TestShortSampleIsAccepted() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t smplPos = sdtaPos + 12;
+        Require(std::memcmp(bytes.data() + smplPos, "smpl", 4) == 0, "smpl chunk should be first in sdta");
+        const size_t smplData = smplPos + 8;
+        for (size_t i = 40; i < 86; ++i) {
+            bytes[smplData + i * sizeof(i16)] = 0;
+            bytes[smplData + i * sizeof(i16) + 1] = 0;
+        }
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        WriteLE32(bytes, shdrData + 24, 40);
+        WriteLE32(bytes, shdrData + 32, 40);
+
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples shorter than the portable minimum should still load");
+    }
+
+    void TestShortLoopIsAccepted() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        WriteLE32(bytes, shdrData + 28, 16);
+        WriteLE32(bytes, shdrData + 32, 40);
+
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "Samples with short loops should still load");
     }
 
     void TestMissingIfilRejected() {
@@ -2185,8 +2222,10 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRomSamplesRequireValidRomMetadata);
     RUN_TEST(TestIllegalOriginalPitchFallsBackTo60);
     RUN_TEST(TestTruncatedSmplChunkRejected);
-    RUN_TEST(TestSampleGuardPaddingRequired);
-    RUN_TEST(TestSampleLoopGuardPointsRequired);
+    RUN_TEST(TestSampleGuardPaddingIsAccepted);
+    RUN_TEST(TestSampleLoopGuardPointsAreAccepted);
+    RUN_TEST(TestShortSampleIsAccepted);
+    RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST

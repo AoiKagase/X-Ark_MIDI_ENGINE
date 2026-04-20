@@ -1315,29 +1315,16 @@ bool Sf2File::ValidateSampleHeaders() {
             h.loopEnd = h.end;
         }
         if (!isRomSample) {
-            if (h.end + 46u > sampleDataCount) {
-                errorMsg_ = "SF2 sample header is missing trailing guard samples";
-                return false;
-            }
-            for (u32 sampleIndex = h.end; sampleIndex < h.end + 46u; ++sampleIndex) {
-                if (sampleData_[sampleIndex] != 0) {
-                    errorMsg_ = "SF2 sample guard region must be zero-filled";
-                    return false;
-                }
-            }
         }
-        if (h.end - h.start < 48u) {
-            errorMsg_ = "SF2 sample is shorter than the minimum portable length";
-            return false;
-        }
-        if (h.loopStart < h.start + 8u || h.loopEnd + 8u > h.end) {
-            errorMsg_ = "SF2 sample loop lacks the required guard points";
-            return false;
-        }
-        if (h.loopEnd - h.loopStart < 32u) {
-            errorMsg_ = "SF2 sample loop is shorter than the minimum portable length";
-            return false;
-        }
+        // The minimum sample/loop lengths in SF2 2.01 are portability guidance
+        // for simpler hardware. Real banks frequently violate them, and the
+        // engine can still render those samples, so keep loading instead of
+        // treating them as structurally invalid.
+        // SF2 2.01 describes the 8-point loop guard region as a portability
+        // constraint for artifact-free playback on simpler hardware, not as a
+        // structural validity requirement. Our looped interpolation wraps
+        // around the loop boundaries directly, so rejecting these banks would
+        // be unnecessarily strict and breaks many real-world SF2 files.
         if (h.sampleRate == 0) {
             // Some banks leave the terminal EOS record or even sparse/unused sample
             // headers at 0 Hz. Keep parsing and fall back to a sane rate so we don't
