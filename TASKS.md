@@ -16,11 +16,11 @@
 - [x] Loader now enforces mandatory `isng` / `INAM` / `smpl` chunk presence in addition to `ifil`, with compliance coverage for missing-chunk rejection.
 - [x] Loader now rejects duplicate singleton `INFO` / `sdta` subchunks such as repeated `ifil`, `irom`, `iver`, `smpl`, or `sm24` instead of silently accepting later duplicates.
 - [x] Loader now rejects duplicate top-level `INFO` / `sdta` / `pdta` LIST chunks instead of concatenating multiple sections from malformed banks.
+- [x] Public API docs now pin `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` as an explicit non-spec legacy mode, while SF2 pan stays on the spec path with no separate compat toggle.
 
 ### Recommended Next Start Point
 
-- [ ] Decide and document which non-spec SF2 compatibility behaviors remain exposed, especially legacy mixer-side send handling via `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`.
-- [ ] Re-check any remaining SF2 loader edge cases beyond current structural checks after the mandatory, duplicate-subchunk, and duplicate-LIST rules, especially less-common spec-defined combinations not yet covered by compliance tests.
+- [ ] Deferred fidelity audit only: envelope timing/shape and broader LFO/filter interaction against `sfspec24`.
 
 ### Notes For Next Session
 
@@ -86,13 +86,13 @@
 - [x] Add compliance tests proving unsupported modulator amount sources are reported and ignored.
 - [x] Add compliance tests for missing mandatory `isng`, `INAM`, and `smpl` chunk rejection.
 - [x] Add compliance tests for duplicate mandatory `ifil` and `smpl` chunk rejection.
-- [x] Add compliance tests for duplicate top-level `INFO` and `sdta` LIST rejection.
+- [x] Add compliance tests for duplicate top-level `INFO`, `sdta`, and `pdta` LIST rejection.
 
 ## Acceptable As Compat Option Only
 
 - [x] Unsupported modulator source / amount-source / transform definitions are counted for diagnostics and ignored during resolution instead of being coerced into active modulation.
-- [ ] Decide whether the current `multiplySf2MidiEffectsSends` behavior should remain only as an explicit non-spec compatibility mode, and document that distinction.
-- [ ] Decide whether any non-spec mixer-side pan behavior should remain as an explicit compatibility mode, or whether the current SF2-spec path should remain the only behavior.
+- [x] `multiplySf2MidiEffectsSends` remains exposed only as an explicit non-spec legacy compatibility mode and is documented as such in the public API.
+- [x] No non-spec SF2 mixer-side pan compatibility mode remains exposed; the SF2 path keeps spec-driven pan semantics only.
 
 ## Can Be Deferred
 

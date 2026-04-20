@@ -1508,6 +1508,15 @@ namespace {
             Sf2File sf2;
             Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate sdta LIST should be rejected");
         }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            DuplicateTopLevelList(bytes, "pdta");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate pdta LIST should be rejected");
+        }
     }
 
     void TestNonMonotonicPbagRejected() {

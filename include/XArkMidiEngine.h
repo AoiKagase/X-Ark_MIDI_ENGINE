@@ -57,7 +57,7 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER = 1u << 0,
     /* Apply pitch correction for SF2 sample playback. SF2 サンプル再生時のピッチ補正を有効にします。 */
     XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION = 1u << 1,
-    /* Multiply SF2 preset send with MIDI channel send instead of summing them. SF2 の send と MIDI チャンネル send を加算ではなく乗算で合成します。 */
+    /* Non-spec legacy compatibility mode: multiply SF2 preset send with MIDI channel send instead of using the default modulator-driven SF2 behavior. 非仕様の旧互換モードとして、既定の SF2 modulator 駆動動作の代わりに SF2 send と MIDI チャンネル send を乗算合成します。 */
     XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS = 1u << 2,
 } XAmeCompatibilityFlags;
 
