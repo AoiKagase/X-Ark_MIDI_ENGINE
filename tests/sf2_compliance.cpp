@@ -1409,6 +1409,27 @@ namespace {
         Require(false, "Requested sdta subchunk should exist");
     }
 
+    void DuplicateListSubchunk(std::vector<u8>& bytes, const char listType[4], const char id[4]) {
+        const size_t listPos = FindListChunk(bytes, listType);
+        Require(listPos != std::numeric_limits<size_t>::max(), "LIST chunk should exist");
+        const size_t listData = listPos + 12;
+        const size_t listEnd = listPos + 8 + ReadLE32(bytes, listPos + 4);
+        for (size_t p = listData; p + 8 <= listEnd;) {
+            const u32 chunkSize = ReadLE32(bytes, p + 4);
+            const size_t paddedSize = 8 + chunkSize + (chunkSize & 1u);
+            if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                const std::vector<u8> duplicate(bytes.begin() + static_cast<std::ptrdiff_t>(p),
+                                                bytes.begin() + static_cast<std::ptrdiff_t>(p + paddedSize));
+                bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(listEnd), duplicate.begin(), duplicate.end());
+                AddChunkSize(bytes, 4, static_cast<u32>(duplicate.size()));
+                AddChunkSize(bytes, listPos + 4, static_cast<u32>(duplicate.size()));
+                return;
+            }
+            p += paddedSize;
+        }
+        Require(false, "Requested subchunk should exist for duplication");
+    }
+
     void TestMissingMandatoryInfoChunksRejected() {
         {
             MinimalSf2Config config;
@@ -1436,6 +1457,26 @@ namespace {
 
         Sf2File sf2;
         Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 missing smpl should be rejected");
+    }
+
+    void TestDuplicateMandatoryChunksRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            DuplicateListSubchunk(bytes, "INFO", "ifil");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate ifil should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            DuplicateListSubchunk(bytes, "sdta", "smpl");
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 duplicate smpl should be rejected");
+        }
     }
 
     void TestNonMonotonicPbagRejected() {
@@ -1536,6 +1577,8 @@ int main() {
     TestMissingIfilRejected();
     g_currentTestName = "TestMissingMandatoryInfoChunksRejected";
     TestMissingMandatoryInfoChunksRejected();
+    g_currentTestName = "TestDuplicateMandatoryChunksRejected";
+    TestDuplicateMandatoryChunksRejected();
     g_currentTestName = "TestInvalidTerminalReferencesRejected";
     TestInvalidTerminalReferencesRejected();
     g_currentTestName = "TestRomSampleRejected";

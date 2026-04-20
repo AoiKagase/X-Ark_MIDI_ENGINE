@@ -692,6 +692,10 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
         if (subSize & 1 && !r.IsEof()) r.Skip(1);
 
         if (subId == MakeFourCC("ifil")) {
+            if (hasIfil_) {
+                errorMsg_ = "SF2 duplicate ifil chunk";
+                return false;
+            }
             if (subSize != 4) {
                 errorMsg_ = "SF2 invalid ifil chunk size";
                 return false;
@@ -700,12 +704,28 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
             ifilMinor_ = sub.ReadU16LE();
             hasIfil_ = true;
         } else if (subId == MakeFourCC("isng")) {
+            if (hasIsng_) {
+                errorMsg_ = "SF2 duplicate isng chunk";
+                return false;
+            }
             hasIsng_ = true;
         } else if (subId == MakeFourCC("INAM")) {
+            if (hasInam_) {
+                errorMsg_ = "SF2 duplicate INAM chunk";
+                return false;
+            }
             hasInam_ = true;
         } else if (subId == MakeFourCC("irom")) {
+            if (hasIrom_) {
+                errorMsg_ = "SF2 duplicate irom chunk";
+                return false;
+            }
             hasIrom_ = true;
         } else if (subId == MakeFourCC("iver")) {
+            if (hasIver_) {
+                errorMsg_ = "SF2 duplicate iver chunk";
+                return false;
+            }
             if (subSize != 4) {
                 errorMsg_ = "SF2 invalid iver chunk size";
                 return false;
@@ -727,6 +747,10 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
         }
 
         if (subId == MakeFourCC("smpl")) {
+            if (hasSmpl_) {
+                errorMsg_ = "SF2 duplicate smpl chunk";
+                return false;
+            }
             if ((subSize & 1u) != 0u) {
                 errorMsg_ = "SF2 smpl chunk size must be even";
                 return false;
@@ -748,6 +772,10 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
         }
         else {
             if (subId == MakeFourCC("sm24")) {
+                if (hasSm24Chunk_) {
+                    errorMsg_ = "SF2 duplicate sm24 chunk";
+                    return false;
+                }
                 // SF2 2.04 拡張: 24-bit サンプルの下位 8-bit チャンク。
                 // 本実装は 16-bit (smpl) のみ対応のため読み飛ばす。
                 // HasIgnoredSm24() で呼び出し元への通知が可能。

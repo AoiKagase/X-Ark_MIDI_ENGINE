@@ -14,11 +14,12 @@
 - [x] Loader now rejects inert ROM metadata (`irom` / `iver` without ROM-backed sample headers) and malformed truncated `INFO` / `sdta` subchunks, with compliance coverage.
 - [x] Unsupported SF2 modulator amount sources are now counted and ignored during zone resolution instead of falling back to full-scale application.
 - [x] Loader now enforces mandatory `isng` / `INAM` / `smpl` chunk presence in addition to `ifil`, with compliance coverage for missing-chunk rejection.
+- [x] Loader now rejects duplicate singleton `INFO` / `sdta` subchunks such as repeated `ifil`, `irom`, `iver`, `smpl`, or `sm24` instead of silently accepting later duplicates.
 
 ### Recommended Next Start Point
 
 - [ ] Decide and document which non-spec SF2 compatibility behaviors remain exposed, especially legacy mixer-side send handling via `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`.
-- [ ] Re-check any remaining SF2 loader edge cases beyond current structural checks after the mandatory `INFO` / `sdta` presence rules, especially less-common spec-defined combinations not yet covered by compliance tests.
+- [ ] Re-check any remaining SF2 loader edge cases beyond current structural checks after the mandatory and duplicate `INFO` / `sdta` rules, especially less-common spec-defined combinations not yet covered by compliance tests.
 
 ### Notes For Next Session
 
@@ -35,6 +36,7 @@
 
 - [x] Enforce mandatory `INFO` validation for SF2 loads. Reject banks missing or corrupt mandatory `ifil` instead of ignoring the entire `INFO` list.
 - [x] Enforce presence of the remaining mandatory `INFO` / `sdta` chunks (`isng`, `INAM`, `smpl`) instead of accepting partial metadata lists.
+- [x] Reject duplicate singleton `INFO` / `sdta` subchunks instead of silently overwriting earlier `ifil` / `isng` / `INAM` / `irom` / `iver` / `smpl` / `sm24` data.
 - [x] Add strict Hydra structural validation. Reject non-monotonic or size-mismatched `phdr/pbag/pmod/pgen/inst/ibag/imod/igen/shdr` indices instead of clamping malformed data through.
 - [x] Enforce terminal record consistency for preset, instrument, bag, generator, modulator, and sample tables per `sfspec24`.
 - [x] Reject structurally unsound `Instrument` / `sampleID` references that point at or beyond terminal records.
@@ -81,6 +83,7 @@
 - [x] Add compliance tests for inert ROM metadata rejection and truncated `smpl` chunk rejection.
 - [x] Add compliance tests proving unsupported modulator amount sources are reported and ignored.
 - [x] Add compliance tests for missing mandatory `isng`, `INAM`, and `smpl` chunk rejection.
+- [x] Add compliance tests for duplicate mandatory `ifil` and `smpl` chunk rejection.
 
 ## Acceptable As Compat Option Only
 
