@@ -389,6 +389,55 @@ namespace {
         return file;
     }
 
+    u32 ReadLE32(const std::vector<u8>& bytes, size_t offset) {
+        return static_cast<u32>(bytes[offset]) |
+               (static_cast<u32>(bytes[offset + 1]) << 8) |
+               (static_cast<u32>(bytes[offset + 2]) << 16) |
+               (static_cast<u32>(bytes[offset + 3]) << 24);
+    }
+
+    void WriteLE32(std::vector<u8>& bytes, size_t offset, u32 value) {
+        bytes[offset] = static_cast<u8>(value & 0xFFu);
+        bytes[offset + 1] = static_cast<u8>((value >> 8) & 0xFFu);
+        bytes[offset + 2] = static_cast<u8>((value >> 16) & 0xFFu);
+        bytes[offset + 3] = static_cast<u8>((value >> 24) & 0xFFu);
+    }
+
+    size_t FindListChunk(const std::vector<u8>& bytes, const char type[4]) {
+        for (size_t i = 12; i + 12 <= bytes.size();) {
+            if (std::memcmp(bytes.data() + i, "LIST", 4) != 0) {
+                break;
+            }
+            const u32 chunkSize = ReadLE32(bytes, i + 4);
+            if (std::memcmp(bytes.data() + i + 8, type, 4) == 0) {
+                return i;
+            }
+            i += 8 + chunkSize + (chunkSize & 1u);
+        }
+        return std::numeric_limits<size_t>::max();
+    }
+
+    size_t FindPdtaChunk(const std::vector<u8>& bytes, const char id[4]) {
+        const size_t pdtaPos = FindListChunk(bytes, "pdta");
+        if (pdtaPos == std::numeric_limits<size_t>::max()) {
+            return pdtaPos;
+        }
+        const size_t listData = pdtaPos + 12;
+        const size_t listEnd = pdtaPos + 8 + ReadLE32(bytes, pdtaPos + 4);
+        for (size_t p = listData; p + 8 <= listEnd;) {
+            const u32 chunkSize = ReadLE32(bytes, p + 4);
+            if (std::memcmp(bytes.data() + p, id, 4) == 0) {
+                return p;
+            }
+            p += 8 + chunkSize + (chunkSize & 1u);
+        }
+        return std::numeric_limits<size_t>::max();
+    }
+
+    void AddChunkSize(std::vector<u8>& bytes, size_t offset, u32 delta) {
+        WriteLE32(bytes, offset, ReadLE32(bytes, offset) + delta);
+    }
+
     SFGenList MakeSignedGen(u16 oper, i16 value) {
         SFGenList gen{};
         gen.sfGenOper = oper;
@@ -1094,42 +1143,16 @@ namespace {
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const std::vector<u8> original = bytes;
 
-        const std::array<u8, 8> sm24Chunk = { 's', 'm', '2', '4', 0, 0, 0, 0 };
+        std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
+        AppendU32LE(sm24Chunk, 64);
+        sm24Chunk.resize(sm24Chunk.size() + 64, 0);
         auto insertSm24 = [&](std::vector<u8>& file) {
-            auto readLE32 = [&](size_t offset) -> u32 {
-                return static_cast<u32>(file[offset]) |
-                    (static_cast<u32>(file[offset + 1]) << 8) |
-                    (static_cast<u32>(file[offset + 2]) << 16) |
-                    (static_cast<u32>(file[offset + 3]) << 24);
-            };
-            auto findSdtaList = [&]() -> size_t {
-                for (size_t i = 12; i + 12 <= file.size(); ) {
-                    if (file[i] == 'L' && file[i + 1] == 'I' && file[i + 2] == 'S' && file[i + 3] == 'T') {
-                        const u32 chunkSize = readLE32(i + 4);
-                        if (file[i + 8] == 's' && file[i + 9] == 'd' && file[i + 10] == 't' && file[i + 11] == 'a') {
-                            return i;
-                        }
-                        i += 8 + chunkSize + (chunkSize & 1u);
-                        continue;
-                    }
-                    break;
-                }
-                return std::numeric_limits<size_t>::max();
-            };
-            const size_t sdtaListPos = findSdtaList();
+            const size_t sdtaListPos = FindListChunk(file, "sdta");
             Require(sdtaListPos != std::numeric_limits<size_t>::max(), "sdta LIST chunk should exist");
-            const size_t sdtaPayloadEnd = sdtaListPos + 8 + readLE32(sdtaListPos + 4);
+            const size_t sdtaPayloadEnd = sdtaListPos + 8 + ReadLE32(file, sdtaListPos + 4);
             file.insert(file.begin() + static_cast<std::ptrdiff_t>(sdtaPayloadEnd), sm24Chunk.begin(), sm24Chunk.end());
-            auto addLE32 = [&](size_t offset, u32 delta) {
-                const u32 value = readLE32(offset);
-                const u32 updated = value + delta;
-                file[offset] = static_cast<u8>(updated & 0xFFu);
-                file[offset + 1] = static_cast<u8>((updated >> 8) & 0xFFu);
-                file[offset + 2] = static_cast<u8>((updated >> 16) & 0xFFu);
-                file[offset + 3] = static_cast<u8>((updated >> 24) & 0xFFu);
-            };
-            addLE32(4, static_cast<u32>(sm24Chunk.size()));
-            addLE32(sdtaListPos + 4, static_cast<u32>(sm24Chunk.size()));
+            AddChunkSize(file, 4, static_cast<u32>(sm24Chunk.size()));
+            AddChunkSize(file, sdtaListPos + 4, static_cast<u32>(sm24Chunk.size()));
         };
         insertSm24(bytes);
 
@@ -1139,6 +1162,109 @@ namespace {
 
         Require(sf2.LoadFromMemory(original.data(), original.size()), "Base SF2 reload failed");
         Require(!sf2.HasIgnoredSm24(), "HasIgnoredSm24 should reset on subsequent loads");
+    }
+
+    void TestSm24RequiresIfil204() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+        const size_t ifilPos = infoPos + 12;
+        Require(std::memcmp(bytes.data() + ifilPos, "ifil", 4) == 0, "ifil chunk should be first in INFO");
+        bytes[ifilPos + 8] = 2;
+        bytes[ifilPos + 9] = 0;
+        bytes[ifilPos + 10] = 1;
+        bytes[ifilPos + 11] = 0;
+
+        std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
+        AppendU32LE(sm24Chunk, 64);
+        sm24Chunk.resize(sm24Chunk.size() + 64, 0);
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t sdtaPayloadEnd = sdtaPos + 8 + ReadLE32(bytes, sdtaPos + 4);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(sdtaPayloadEnd), sm24Chunk.begin(), sm24Chunk.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(sm24Chunk.size()));
+        AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(sm24Chunk.size()));
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 should be rejected before ifil 2.04");
+    }
+
+    void TestSm24SizeRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
+        AppendU32LE(sm24Chunk, 8);
+        sm24Chunk.resize(sm24Chunk.size() + 8, 0);
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t sdtaPayloadEnd = sdtaPos + 8 + ReadLE32(bytes, sdtaPos + 4);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(sdtaPayloadEnd), sm24Chunk.begin(), sm24Chunk.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(sm24Chunk.size()));
+        AddChunkSize(bytes, sdtaPos + 4, static_cast<u32>(sm24Chunk.size()));
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 size mismatch should be rejected");
+    }
+
+    void TestInvalidTerminalReferencesRejected() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            const size_t pgenPos = FindPdtaChunk(bytes, "pgen");
+            Require(pgenPos != std::numeric_limits<size_t>::max(), "pgen chunk should exist");
+            const size_t pgenData = pgenPos + 8;
+            bytes[pgenData + 2] = 1;
+            bytes[pgenData + 3] = 0;
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Preset Instrument terminal reference should be rejected");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            const size_t igenPos = FindPdtaChunk(bytes, "igen");
+            Require(igenPos != std::numeric_limits<size_t>::max(), "igen chunk should exist");
+            const size_t igenData = igenPos + 8;
+            bytes[igenData + 2] = 1;
+            bytes[igenData + 3] = 0;
+
+            Sf2File sf2;
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Instrument SampleID terminal reference should be rejected");
+        }
+    }
+
+    void TestRomSampleRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+
+        std::vector<u8> romInfo;
+        const std::vector<u8> iromData = { 'R','O','M',0 };
+        AppendChunk(romInfo, "irom", iromData);
+        std::vector<u8> iverData;
+        AppendU16LE(iverData, 2);
+        AppendU16LE(iverData, 0);
+        AppendChunk(romInfo, "iver", iverData);
+
+        const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd), romInfo.begin(), romInfo.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(romInfo.size()));
+        AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
+
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        const size_t sampleTypeOffset = shdrData + 44;
+        bytes[sampleTypeOffset] = 0x01;
+        bytes[sampleTypeOffset + 1] = 0x80;
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "ROM samples should be rejected");
     }
 
     void TestMissingIfilRejected() {
@@ -1269,10 +1395,18 @@ int main() {
     TestVelocityZoneBoundary();
     g_currentTestName = "TestSm24Detection";
     TestSm24Detection();
+    g_currentTestName = "TestSm24RequiresIfil204";
+    TestSm24RequiresIfil204();
+    g_currentTestName = "TestSm24SizeRejected";
+    TestSm24SizeRejected();
     g_currentTestName = "TestBagIndexHelpersSkipGlobalZones";
     TestBagIndexHelpersSkipGlobalZones();
     g_currentTestName = "TestMissingIfilRejected";
     TestMissingIfilRejected();
+    g_currentTestName = "TestInvalidTerminalReferencesRejected";
+    TestInvalidTerminalReferencesRejected();
+    g_currentTestName = "TestRomSampleRejected";
+    TestRomSampleRejected();
     g_currentTestName = "TestNonMonotonicPbagRejected";
     TestNonMonotonicPbagRejected();
     std::printf("sf2_compliance: all tests passed\n");

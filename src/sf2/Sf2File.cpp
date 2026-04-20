@@ -575,9 +575,13 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
     hasIgnoredSm24_ = false;
+    hasSm24Chunk_ = false;
+    sm24ChunkSize_ = 0;
     hasIfil_ = false;
     ifilMajor_ = 0;
     ifilMinor_ = 0;
+    hasIrom_ = false;
+    hasIver_ = false;
     hasPhdr_ = false;
     hasPbag_ = false;
     hasPmod_ = false;
@@ -591,6 +595,7 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     try {
         BinaryReader r(data, size);
         if (!ParseRiff(r)) return false;
+        if (!ValidateInfoAndSdtaConsistency()) return false;
         if (!ValidatePdtaStructures()) return false;
         if (!ValidateSampleHeaders()) return false;
         BuildPresetIndex();
@@ -671,16 +676,23 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
         auto sub = r.ReadSlice(subSize);
         if (subSize & 1 && !r.IsEof()) r.Skip(1);
 
-        if (subId != MakeFourCC("ifil")) {
-            continue;
+        if (subId == MakeFourCC("ifil")) {
+            if (subSize != 4) {
+                errorMsg_ = "SF2 invalid ifil chunk size";
+                return false;
+            }
+            ifilMajor_ = sub.ReadU16LE();
+            ifilMinor_ = sub.ReadU16LE();
+            hasIfil_ = true;
+        } else if (subId == MakeFourCC("irom")) {
+            hasIrom_ = true;
+        } else if (subId == MakeFourCC("iver")) {
+            if (subSize != 4) {
+                errorMsg_ = "SF2 invalid iver chunk size";
+                return false;
+            }
+            hasIver_ = true;
         }
-        if (subSize != 4) {
-            errorMsg_ = "SF2 invalid ifil chunk size";
-            return false;
-        }
-        ifilMajor_ = sub.ReadU16LE();
-        ifilMinor_ = sub.ReadU16LE();
-        hasIfil_ = true;
     }
     return true;
 }
@@ -718,6 +730,8 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
                 // 本実装は 16-bit (smpl) のみ対応のため読み飛ばす。
                 // HasIgnoredSm24() で呼び出し元への通知が可能。
                 hasIgnoredSm24_ = true;
+                hasSm24Chunk_ = true;
+                sm24ChunkSize_ = subSize;
             }
             // sm24 を含むすべての未知サブチャンクをスキップ（範囲チェック付き）
             size_t skipSize = std::min(static_cast<size_t>(subSize), r.Remaining());
@@ -970,6 +984,72 @@ bool Sf2File::ValidatePdtaStructures() {
         return false;
     }
 
+    const size_t terminalInstrumentIndex = instruments_.size() - 1;
+    const size_t terminalSampleIndex = sampleHeaders_.size() - 1;
+    for (size_t bagIdx = 0; bagIdx + 1 < presetBags_.size(); ++bagIdx) {
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int instrumentIdx = -1;
+        if (!AnalyzePresetBag(static_cast<int>(bagIdx), isGlobal, keyLo, keyHi, velLo, velHi, instrumentIdx) || isGlobal) {
+            continue;
+        }
+        if (instrumentIdx < 0 || static_cast<size_t>(instrumentIdx) >= terminalInstrumentIndex) {
+            errorMsg_ = "SF2 preset bag references invalid instrument terminal record";
+            return false;
+        }
+    }
+    for (size_t bagIdx = 0; bagIdx + 1 < instBags_.size(); ++bagIdx) {
+        bool isGlobal = false;
+        u8 keyLo = 0, keyHi = 127, velLo = 0, velHi = 127;
+        int sampleIdx = -1;
+        if (!AnalyzeInstrumentBag(static_cast<int>(bagIdx), isGlobal, keyLo, keyHi, velLo, velHi, sampleIdx) || isGlobal) {
+            continue;
+        }
+        if (sampleIdx < 0 || static_cast<size_t>(sampleIdx) >= terminalSampleIndex) {
+            errorMsg_ = "SF2 instrument bag references invalid sample terminal record";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Sf2File::ValidateInfoAndSdtaConsistency() {
+    if (hasSm24Chunk_) {
+        const bool is204OrLater = (ifilMajor_ > 2) || (ifilMajor_ == 2 && ifilMinor_ >= 4);
+        if (!is204OrLater) {
+            errorMsg_ = "SF2 sm24 chunk requires ifil version 2.04 or later";
+            return false;
+        }
+        if (sampleData_.empty()) {
+            errorMsg_ = "SF2 sm24 chunk requires smpl sample data";
+            return false;
+        }
+        if (sm24ChunkSize_ != static_cast<u32>(sampleData_.size())) {
+            errorMsg_ = "SF2 sm24 chunk size does not match smpl sample count";
+            return false;
+        }
+    }
+
+    bool hasRomSample = false;
+    for (const auto& sample : samples_) {
+        if ((sample.sfSampleType & 0x8000u) != 0) {
+            hasRomSample = true;
+            break;
+        }
+    }
+    if (hasRomSample) {
+        if (!hasIrom_ || !hasIver_) {
+            errorMsg_ = "SF2 ROM sample requires both irom and iver INFO chunks";
+            return false;
+        }
+        errorMsg_ = "SF2 ROM samples are not supported";
+        return false;
+    }
+    if (hasIrom_ != hasIver_) {
+        errorMsg_ = "SF2 irom and iver INFO chunks must appear together";
+        return false;
+    }
     return true;
 }
 

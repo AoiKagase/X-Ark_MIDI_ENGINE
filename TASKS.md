@@ -10,15 +10,17 @@
 - [x] Remaining SF2 default modulators and supersede/add compliance tests landed in `86bb4c8` (`Implement remaining SF2 default modulators`).
 - [x] SF2 stereo sample link parsing/playback and compliance coverage landed in `7bc22d5` (`Implement SF2 stereo sample link playback`).
 - [x] SF2 synth-side pan/send/pitch precedence is now aligned in the working tree, with updated compliance coverage for channel-mix and pitch ownership.
+- [x] Loader-side validation for terminal `Instrument` / `sampleID` references, ROM sample rejection, and `sm24` version/size checks is now aligned in the working tree.
 
 ### Recommended Next Start Point
 
-- [ ] Finish the remaining loader compliance gaps: reject invalid `Instrument` / `sampleID` references, revisit ROM sample handling, and tighten `sm24` version/chunk validation.
 - [ ] Decide and document which non-spec SF2 compatibility behaviors remain exposed, especially legacy mixer-side send handling via `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`.
+- [ ] Decide whether ROM sample metadata (`irom` / `iver` without ROM-backed sample headers) should remain accepted as inert metadata or be rejected more aggressively for stricter spec conformance.
+- [ ] Re-check broader SF2 loader edge cases beyond current structural checks, especially any remaining spec-defined INFO/sdta combinations not yet covered by compliance tests.
 
 ### Notes For Next Session
 
-- `Sf2Compliance` currently passes after the uncommitted pan/send/pitch precedence follow-up.
+- `Sf2Compliance` currently passes after the uncommitted loader validation follow-up.
 - Keep untracked spec/task artifacts out of commits unless explicitly requested:
 - `TASKS.md`
 - `sfspec24.pdf`
@@ -32,9 +34,9 @@
 - [x] Enforce mandatory `INFO` validation for SF2 loads. Reject banks missing or corrupt mandatory `ifil` instead of ignoring the entire `INFO` list.
 - [x] Add strict Hydra structural validation. Reject non-monotonic or size-mismatched `phdr/pbag/pmod/pgen/inst/ibag/imod/igen/shdr` indices instead of clamping malformed data through.
 - [x] Enforce terminal record consistency for preset, instrument, bag, generator, modulator, and sample tables per `sfspec24`.
-- [ ] Reject structurally unsound `Instrument` / `sampleID` references that point at or beyond terminal records.
-- [ ] Revisit ROM sample handling against `irom` / `iver` requirements and reject/terminate ROM-backed playback as required by the spec.
-- [ ] Validate `sm24` handling against `ifil` version and chunk-size rules, not just presence detection.
+- [x] Reject structurally unsound `Instrument` / `sampleID` references that point at or beyond terminal records.
+- [x] Revisit ROM sample handling against `irom` / `iver` requirements and reject/terminate ROM-backed playback as required by the spec.
+- [x] Validate `sm24` handling against `ifil` version and chunk-size rules, not just presence detection.
 
 ### Zone And Generator Resolution
 
@@ -70,6 +72,7 @@
 - [x] Add compliance tests for stereo sample links.
 - [x] Add compliance tests for SF2 channel-mix and pitch precedence against resolved modulator output.
 - [x] Add compliance tests for linked modulators, illegal preset sample generators, and terminal-generator rules.
+- [x] Add compliance tests for invalid terminal references, ROM sample rejection, and `sm24` version/size validation.
 
 ## Acceptable As Compat Option Only
 
