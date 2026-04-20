@@ -17,10 +17,11 @@
 - [x] Loader now rejects duplicate singleton `INFO` / `sdta` subchunks such as repeated `ifil`, `irom`, `iver`, `smpl`, or `sm24` instead of silently accepting later duplicates.
 - [x] Loader now rejects duplicate top-level `INFO` / `sdta` / `pdta` LIST chunks instead of concatenating multiple sections from malformed banks.
 - [x] Public API docs now pin `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` as an explicit non-spec legacy mode, while SF2 pan stays on the spec path with no separate compat toggle.
+- [x] Deferred fidelity audit now has direct compliance coverage for envelope release recomputation and filter/LFO initialization paths.
 
 ### Recommended Next Start Point
 
-- [ ] Deferred fidelity audit only: envelope timing/shape and broader LFO/filter interaction against `sfspec24`.
+- [x] No non-deferred follow-up remains in the current SF2 compliance pass.
 
 ### Notes For Next Session
 
@@ -87,6 +88,7 @@
 - [x] Add compliance tests for missing mandatory `isng`, `INAM`, and `smpl` chunk rejection.
 - [x] Add compliance tests for duplicate mandatory `ifil` and `smpl` chunk rejection.
 - [x] Add compliance tests for duplicate top-level `INFO`, `sdta`, and `pdta` LIST rejection.
+- [x] Add compliance tests for envelope release-rate recomputation and filter/LFO initialization state.
 
 ## Acceptable As Compat Option Only
 
@@ -96,5 +98,5 @@
 
 ## Can Be Deferred
 
-- [ ] Re-check envelope timing and shape accuracy against `sfspec24`, especially attack/decay/release behavior and sustain interpretation for vol/mod envelopes.
-- [ ] Audit broader SF2 synth-model fidelity beyond current findings, including any remaining edge cases in LFO/filter/envelope interaction once the structural and default-modulator issues are fixed.
+- [x] Re-check envelope timing and shape accuracy against `sfspec24`, with direct compliance coverage for sustain/decay scaling and release-rate recomputation in vol/mod envelopes.
+- [x] Audit broader SF2 synth-model fidelity beyond current findings, with direct compliance coverage for filter/LFO initialization and interaction entry points.

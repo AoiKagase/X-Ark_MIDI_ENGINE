@@ -850,6 +850,86 @@ namespace {
         Require(NearlyEqual(voice.envDecayRate, expectedVolDecayRate, 1.0e-6), "KeynumToVolEnvDecay should scale decay rate");
     }
 
+    void TestEnvelopeReleaseRecalculation() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_SampleModes, 3));
+        config.instGens.push_back(MakeSignedGen(GEN_ModEnvToPitch, 600));
+        config.instGens.push_back(MakeSignedGen(GEN_ReleaseVolEnv, -12000));
+        config.instGens.push_back(MakeSignedGen(GEN_ReleaseModEnv, -12000));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+            SoundBankKind::Sf2, SynthCompatOptions{});
+
+        voice.envPhase = EnvPhase::Sustain;
+        voice.envLevel = 0.25f;
+        voice.modEnvPhase = EnvPhase::Sustain;
+        voice.modEnvLevel = 0.5f;
+
+        voice.NoteOff();
+
+        const f32 expectedReleaseTime = 0.005f;
+        const f32 expectedEnvReleaseRate = static_cast<f32>(std::pow(1.0e-5 / 0.25, 1.0 / (expectedReleaseTime * 48000.0)));
+        const f32 expectedModReleaseRate = static_cast<f32>(std::pow(1.0e-5 / 0.5, 1.0 / (expectedReleaseTime * 48000.0)));
+
+        Require(!voice.looping, "Loop-until-release voice should stop looping when note-off enters release");
+        Require(voice.envPhase == EnvPhase::Release, "NoteOff should switch the volume envelope into release");
+        Require(voice.modEnvPhase == EnvPhase::Release, "NoteOff should switch the modulation envelope into release");
+        Require(NearlyEqual(voice.envReleaseRate, expectedEnvReleaseRate, 1.0e-6),
+            "Volume release should be recomputed from the current envelope level with loop minimum release time");
+        Require(NearlyEqual(voice.modEnvReleaseRate, expectedModReleaseRate, 1.0e-6),
+            "Mod release should be recomputed from the current modulation level with loop minimum release time");
+    }
+
+    void TestFilterAndLfoInitialization() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterFc, 9000));
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterQ, 300));
+        config.instGens.push_back(MakeSignedGen(GEN_ModEnvToFilterFc, 1200));
+        config.instGens.push_back(MakeSignedGen(GEN_ModLfoToFilterFc, 600));
+        config.instGens.push_back(MakeSignedGen(GEN_DelayModLFO, -600));
+        config.instGens.push_back(MakeSignedGen(GEN_FreqModLFO, 1200));
+        config.instGens.push_back(MakeSignedGen(GEN_DelayVibLFO, -1200));
+        config.instGens.push_back(MakeSignedGen(GEN_FreqVibLFO, 0));
+        config.instGens.push_back(MakeSignedGen(GEN_VibLfoToPitch, 75));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+            SoundBankKind::Sf2, SynthCompatOptions{});
+
+        const u32 expectedModLfoDelayEnd = static_cast<u32>(TimecentsToSeconds(-600) * 48000.0);
+        const u32 expectedVibLfoDelayEnd = static_cast<u32>(TimecentsToSeconds(-1200) * 48000.0);
+        const f32 expectedModLfoPhaseStep = static_cast<f32>((8.176 * std::pow(2.0, 1200.0 / 1200.0)) / 48000.0);
+        const f32 expectedVibLfoPhaseStep = static_cast<f32>(8.176 / 48000.0);
+
+        Require(voice.filterEnabled, "InitialFilterFc and filter modulators should enable the filter path");
+        Require(voice.useModEnv, "ModEnvToFilterFc should enable modulation envelope processing");
+        Require(voice.filterBaseFcCents == 9000, "InitialFilterFc should initialize filter cutoff");
+        Require(voice.filterCurrentFcCents == 9000, "Current filter cutoff should start from the base cutoff");
+        Require(voice.filterQCb == 300, "InitialFilterQ should initialize filter resonance");
+        Require(voice.filterModEnvToFcCents == 1200, "ModEnvToFilterFc should initialize filter modulation depth");
+        Require(voice.modLfoDelayEnd == expectedModLfoDelayEnd, "DelayModLFO should initialize modulation LFO delay");
+        Require(NearlyEqual(voice.modLfoPhaseStep, expectedModLfoPhaseStep, 1.0e-7), "FreqModLFO should initialize modulation LFO rate");
+        Require(voice.modLfoToFilterFcCents == 600.0f, "ModLfoToFilterFc should initialize filter LFO depth");
+        Require(voice.vibLfoDelayEnd == expectedVibLfoDelayEnd, "DelayVibLFO should initialize vibrato LFO delay");
+        Require(NearlyEqual(voice.vibLfoPhaseStep, expectedVibLfoPhaseStep, 1.0e-7), "FreqVibLFO should initialize vibrato LFO rate");
+        Require(voice.vibLfoToPitchCents == 75.0f, "VibLfoToPitch should initialize vibrato pitch depth");
+    }
+
     void TestPressureSources() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(10, GEN_Pan, 500, 0, 0));
@@ -1591,6 +1671,10 @@ int main() {
     TestSf2PitchPrecedence();
     g_currentTestName = "TestEnvelopePitchAndKeynumScaling";
     TestEnvelopePitchAndKeynumScaling();
+    g_currentTestName = "TestEnvelopeReleaseRecalculation";
+    TestEnvelopeReleaseRecalculation();
+    g_currentTestName = "TestFilterAndLfoInitialization";
+    TestFilterAndLfoInitialization();
     g_currentTestName = "TestPressureSources";
     TestPressureSources();
     g_currentTestName = "TestPitchWheelSensitivityAmountSource";
