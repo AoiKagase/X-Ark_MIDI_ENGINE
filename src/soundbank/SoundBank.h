@@ -26,6 +26,7 @@ struct ModulatorContext {
     u8 pitchWheelSensitivitySemitones = 2;
     u8 pitchWheelSensitivityCents = 0;
     const i32* nrpnOffsets = nullptr;
+    bool applySf2ChannelDefaults = false;
 };
 
 class SoundBank {

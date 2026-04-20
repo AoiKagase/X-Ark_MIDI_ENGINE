@@ -716,6 +716,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
+    ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
 
     auto tryResolveZones = [&](u16 bankToTry) -> bool {
         zoneScratch_.clear();
@@ -1252,6 +1253,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
+    ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }

@@ -1562,19 +1562,19 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             (static_cast<double>(ctx->ccValues[1]) / 127.0)));
         ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
     }
-    if (ctx && !defaultState.hasCc7ToInitialAttenuationMod) {
+    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc7ToInitialAttenuationMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc7ToInitialAttenuationCb) *
             std::sin((1.0 - static_cast<double>(ctx->ccValues[7]) / 127.0) * (3.14159265358979323846 / 2.0))));
         ApplyModulatorDelta(outZone, GEN_InitialAttenuation, delta);
     }
-    if (ctx && !defaultState.hasCc10ToPanMod) {
+    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc10ToPanMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc10ToPan) *
             (2.0 * (static_cast<double>(ctx->ccValues[10]) / 127.0) - 1.0)));
         ApplyModulatorDelta(outZone, GEN_Pan, delta);
     }
-    if (ctx && !defaultState.hasCc11ToInitialAttenuationMod) {
+    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc11ToInitialAttenuationMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc11ToInitialAttenuationCb) *
             std::sin((1.0 - static_cast<double>(ctx->ccValues[11]) / 127.0) * (3.14159265358979323846 / 2.0))));

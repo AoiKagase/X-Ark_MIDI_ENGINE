@@ -78,6 +78,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION) != 0;
         compatOptions.multiplySf2MidiEffectsSends =
             (flags & XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS) != 0;
+        compatOptions.applySf2ChannelDefaults =
+            (flags & XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS) != 0;
     }
     return compatOptions;
 }

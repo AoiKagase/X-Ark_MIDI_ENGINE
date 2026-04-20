@@ -59,6 +59,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION = 1u << 1,
     /* Non-spec legacy compatibility mode: multiply SF2 preset send with MIDI channel send instead of using the default modulator-driven SF2 behavior. 非仕様の旧互換モードとして、既定の SF2 modulator 駆動動作の代わりに SF2 send と MIDI チャンネル send を乗算合成します。 */
     XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS = 1u << 2,
+    /* Apply the SF2 implicit CC7/CC10/CC11 default modulators instead of treating them as global channel controls. SF2 の暗黙 CC7/CC10/CC11 default modulator を有効化し、グローバルなチャンネル音量・パン処理の代わりに使用します。 */
+    XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS = 1u << 3,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */

@@ -68,6 +68,8 @@ public static class XArkMidiEngine
         EnableSf2SamplePitchCorrection = 1 << 1,
         /// <summary>Non-spec legacy compatibility mode: multiply SF2 preset send with MIDI channel send instead of the default modulator-driven SF2 behavior. 非仕様の旧互換モードとして、既定の SF2 modulator 駆動動作の代わりに SF2 send と MIDI チャンネル send を乗算合成します。</summary>
         MultiplySf2MidiEffectsSends = 1 << 2,
+        /// <summary>Apply the SF2 implicit CC7/CC10/CC11 default modulators instead of treating them as global channel controls. SF2 の暗黙 CC7/CC10/CC11 default modulator を有効化し、グローバルなチャンネル音量・パン処理の代わりに使用します。</summary>
+        ApplySf2ChannelDefaultModulators = 1 << 3,
     }
 
     [StructLayout(LayoutKind.Sequential)]

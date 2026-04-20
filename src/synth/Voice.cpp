@@ -701,8 +701,20 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
     channelChorusSend = NormalizeMidiSend(chorusSend32);
 
     if (soundBankKind == SoundBankKind::Sf2) {
-        channelGainL = volumeFactor;
-        channelGainR = volumeFactor;
+        if (compatOptions.applySf2ChannelDefaults) {
+            // SF2 channel volume/expression/pan are resolved through the
+            // implicit default modulators when strict channel defaults are enabled.
+            channelGainL = 1.0f;
+            channelGainR = 1.0f;
+        } else {
+            f32 channelPan = static_cast<f32>(pan32) / 4294967295.0f * 2.0f - 1.0f;
+            channelPan = std::max(-1.0f, std::min(1.0f, channelPan));
+
+            f32 panGainL = std::sqrt(0.5f * (1.0f - channelPan));
+            f32 panGainR = std::sqrt(0.5f * (1.0f + channelPan));
+            channelGainL = volumeFactor * panGainL;
+            channelGainR = volumeFactor * panGainR;
+        }
         reverbSend = compatOptions.multiplySf2MidiEffectsSends
             ? std::clamp(presetReverbSend * channelReverbSend, 0.0f, 1.0f)
             : presetReverbSend;
