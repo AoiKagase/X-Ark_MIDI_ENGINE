@@ -11,18 +11,18 @@
 - [x] SF2 stereo sample link parsing/playback and compliance coverage landed in `7bc22d5` (`Implement SF2 stereo sample link playback`).
 - [x] SF2 synth-side pan/send/pitch precedence is now aligned in the working tree, with updated compliance coverage for channel-mix and pitch ownership.
 - [x] Loader-side validation for terminal `Instrument` / `sampleID` references, ROM sample rejection, and `sm24` version/size checks is now aligned in the working tree.
+- [x] Loader now rejects inert ROM metadata (`irom` / `iver` without ROM-backed sample headers) and malformed truncated `INFO` / `sdta` subchunks, with compliance coverage.
 
 ### Recommended Next Start Point
 
 - [ ] Decide and document which non-spec SF2 compatibility behaviors remain exposed, especially legacy mixer-side send handling via `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`.
-- [ ] Decide whether ROM sample metadata (`irom` / `iver` without ROM-backed sample headers) should remain accepted as inert metadata or be rejected more aggressively for stricter spec conformance.
 - [ ] Re-check broader SF2 loader edge cases beyond current structural checks, especially any remaining spec-defined INFO/sdta combinations not yet covered by compliance tests.
 
 ### Notes For Next Session
 
 - `Sf2Compliance` currently passes after the uncommitted loader validation follow-up.
+- Loader now rejects paired `irom` / `iver` when no ROM-backed sample headers exist, so SF2 ROM metadata is treated as spec-significant rather than inert.
 - Keep untracked spec/task artifacts out of commits unless explicitly requested:
-- `TASKS.md`
 - `sfspec24.pdf`
 - `sfspec24.txt`
 - `tools/XArkMidiGuiPlayer/XArkMidiGuiPlayer.sln`
@@ -36,7 +36,9 @@
 - [x] Enforce terminal record consistency for preset, instrument, bag, generator, modulator, and sample tables per `sfspec24`.
 - [x] Reject structurally unsound `Instrument` / `sampleID` references that point at or beyond terminal records.
 - [x] Revisit ROM sample handling against `irom` / `iver` requirements and reject/terminate ROM-backed playback as required by the spec.
+- [x] Reject inert ROM metadata (`irom` / `iver`) when no ROM-backed sample headers are present.
 - [x] Validate `sm24` handling against `ifil` version and chunk-size rules, not just presence detection.
+- [x] Reject truncated or size-inconsistent `INFO` / `sdta` subchunks instead of clamping malformed sizes through parsing.
 
 ### Zone And Generator Resolution
 
@@ -73,6 +75,7 @@
 - [x] Add compliance tests for SF2 channel-mix and pitch precedence against resolved modulator output.
 - [x] Add compliance tests for linked modulators, illegal preset sample generators, and terminal-generator rules.
 - [x] Add compliance tests for invalid terminal references, ROM sample rejection, and `sm24` version/size validation.
+- [x] Add compliance tests for inert ROM metadata rejection and truncated `smpl` chunk rejection.
 
 ## Acceptable As Compat Option Only
 

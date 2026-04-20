@@ -1267,6 +1267,45 @@ namespace {
         Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()), "ROM samples should be rejected");
     }
 
+    void TestRomMetadataWithoutRomSampleRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+
+        std::vector<u8> romInfo;
+        const std::vector<u8> iromData = { 'R','O','M',0 };
+        AppendChunk(romInfo, "irom", iromData);
+        std::vector<u8> iverData;
+        AppendU16LE(iverData, 2);
+        AppendU16LE(iverData, 0);
+        AppendChunk(romInfo, "iver", iverData);
+
+        const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd), romInfo.begin(), romInfo.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(romInfo.size()));
+        AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "ROM INFO metadata without ROM-backed sample headers should be rejected");
+    }
+
+    void TestTruncatedSmplChunkRejected() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t sdtaPos = FindListChunk(bytes, "sdta");
+        Require(sdtaPos != std::numeric_limits<size_t>::max(), "sdta list should exist");
+        const size_t smplPos = sdtaPos + 12;
+        Require(std::memcmp(bytes.data() + smplPos, "smpl", 4) == 0, "smpl chunk should be first in sdta");
+
+        WriteLE32(bytes, smplPos + 4, ReadLE32(bytes, smplPos + 4) + 2);
+
+        Sf2File sf2;
+        Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+            "smpl chunk that overstates its size should be rejected");
+    }
+
     void TestMissingIfilRejected() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -1407,6 +1446,10 @@ int main() {
     TestInvalidTerminalReferencesRejected();
     g_currentTestName = "TestRomSampleRejected";
     TestRomSampleRejected();
+    g_currentTestName = "TestRomMetadataWithoutRomSampleRejected";
+    TestRomMetadataWithoutRomSampleRejected();
+    g_currentTestName = "TestTruncatedSmplChunkRejected";
+    TestTruncatedSmplChunkRejected();
     g_currentTestName = "TestNonMonotonicPbagRejected";
     TestNonMonotonicPbagRejected();
     std::printf("sf2_compliance: all tests passed\n");

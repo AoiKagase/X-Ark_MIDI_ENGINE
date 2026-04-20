@@ -673,6 +673,10 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
         if (r.Remaining() < 8) break;
         const u32 subId = r.ReadU32LE();
         const u32 subSize = r.ReadU32LE();
+        if (static_cast<size_t>(subSize) > r.Remaining()) {
+            errorMsg_ = "SF2 INFO subchunk size exceeds containing chunk";
+            return false;
+        }
         auto sub = r.ReadSlice(subSize);
         if (subSize & 1 && !r.IsEof()) r.Skip(1);
 
@@ -702,13 +706,15 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
         if (r.Remaining() < 8) break;
         u32 subId   = r.ReadU32LE();
         u32 subSize = r.ReadU32LE();
+        if (static_cast<size_t>(subSize) > r.Remaining()) {
+            errorMsg_ = "SF2 sdta subchunk size exceeds containing chunk";
+            return false;
+        }
 
         if (subId == MakeFourCC("smpl")) {
-            // サイズ検証: subSize が実際の残りデータを超えていないか確認
-            size_t available = r.Remaining();
-            if (static_cast<size_t>(subSize) > available) {
-                // 壊れたチャンクサイズ: 実際に読めるサイズに切り詰める
-                subSize = static_cast<u32>(available & ~1u); // 偶数に揃える
+            if ((subSize & 1u) != 0u) {
+                errorMsg_ = "SF2 smpl chunk size must be even";
+                return false;
             }
             size_t count = subSize / 2;
             const size_t maxSampleCount = maxSampleDataBytes_ / sizeof(i16);
@@ -1048,6 +1054,10 @@ bool Sf2File::ValidateInfoAndSdtaConsistency() {
     }
     if (hasIrom_ != hasIver_) {
         errorMsg_ = "SF2 irom and iver INFO chunks must appear together";
+        return false;
+    }
+    if (hasIrom_ && hasIver_) {
+        errorMsg_ = "SF2 irom and iver INFO chunks require ROM-backed sample headers";
         return false;
     }
     return true;
