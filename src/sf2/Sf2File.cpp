@@ -27,9 +27,24 @@ static u32 MakeFourCC(const char* s) {
 namespace {
 
 constexpr u16 kModSrcVelocity = 2u;
+constexpr u16 kModSrcChannelPressure = 13u;
+constexpr u16 kModSrcPitchWheel = 0x020Eu;
+constexpr u16 kModSrcPitchWheelSensitivity = 16u;
 constexpr u16 kModSrcCc1 = 0x0081u;
+constexpr u16 kModSrcCc7 = 0x0587u;
+constexpr u16 kModSrcCc10 = 0x028Au;
+constexpr u16 kModSrcCc11 = 0x058Bu;
+constexpr u16 kModSrcCc91 = 0x00DBu;
+constexpr u16 kModSrcCc93 = 0x00DDu;
 constexpr u16 kModSrcLink = 127u;
+constexpr u16 kModDestInitialPitch = 59u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
+constexpr i16 kDefaultChannelPressureToVibLfoPitchCents = 50;
+constexpr i16 kDefaultCc7ToInitialAttenuationCb = 960;
+constexpr i16 kDefaultCc10ToPan = 1000;
+constexpr i16 kDefaultCc11ToInitialAttenuationCb = 960;
+constexpr i16 kDefaultCc91ToReverbSend = 200;
+constexpr i16 kDefaultCc93ToChorusSend = 200;
 // sfModTransOper と sfModSrcOper の curve type は別物。
 // sfModSrcOper の concave / convex / switch は DecodeModSourceValue() が処理し、
 // sfModTransOper は SF2 2.01 で定義されている Linear / Absolute のみ扱う。
@@ -137,6 +152,55 @@ bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
            mod.sfModTransOper == kModTransformLinear;
 }
 
+bool IsChannelPressureToVibLfoPitchMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcChannelPressure &&
+           mod.sfModDestOper == GEN_VibLfoToPitch &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsCc7ToInitialAttenuationMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc7 &&
+           mod.sfModDestOper == GEN_InitialAttenuation &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsCc10ToPanMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc10 &&
+           mod.sfModDestOper == GEN_Pan &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsCc11ToInitialAttenuationMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc11 &&
+           mod.sfModDestOper == GEN_InitialAttenuation &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsCc91ToReverbSendMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc91 &&
+           mod.sfModDestOper == GEN_ReverbEffectsSend &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsCc93ToChorusSendMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcCc93 &&
+           mod.sfModDestOper == GEN_ChorusEffectsSend &&
+           mod.sfModAmtSrcOper == 0 &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
+bool IsPitchWheelToInitialPitchMod(const SFModList& mod) {
+    return mod.sfModSrcOper == kModSrcPitchWheel &&
+           mod.sfModDestOper == kModDestInitialPitch &&
+           mod.sfModAmtSrcOper == kModSrcPitchWheelSensitivity &&
+           mod.sfModTransOper == kModTransformLinear;
+}
+
 struct ZoneModEntry {
     SFModList mod{};
     bool ignored = false;
@@ -195,20 +259,6 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
     }
 
     return entries;
-}
-
-bool HasMatchingModulator(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                          bool (*predicate)(const SFModList&)) {
-    const std::vector<ZoneModEntry> entries = BuildEffectiveZoneModEntries(mods, modStart, modEnd);
-
-    for (const auto& entry : entries) {
-        if (!entry.ignored &&
-            (entry.mod.sfModDestOper & 0x8000u) == 0 &&
-            predicate(entry.mod)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 double DecodeModSourceValue(u16 oper, u8 key, u16 velocity, const ModulatorContext* ctx, bool& supported) {
@@ -397,6 +447,15 @@ i32 ClampGeneratorValue(u16 oper, i32 value) {
     }
 }
 
+void ApplyInitialPitchDelta(ResolvedZone& zone, i32 deltaCents) {
+    i32 totalCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune] + deltaCents;
+    totalCents = std::clamp(totalCents, -12099, 12099);
+    const i32 coarse = totalCents / 100;
+    const i32 fine = totalCents % 100;
+    zone.generators[GEN_CoarseTune] = ClampGeneratorValue(GEN_CoarseTune, coarse);
+    zone.generators[GEN_FineTune] = ClampGeneratorValue(GEN_FineTune, fine);
+}
+
 void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     switch (dest) {
     case GEN_ModLfoToPitch:
@@ -439,6 +498,9 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
         zone.generators[dest] = ClampGeneratorValue(dest, zone.generators[dest] + delta);
+        break;
+    case kModDestInitialPitch:
+        ApplyInitialPitchDelta(zone, delta);
         break;
     default:
         break;
@@ -486,6 +548,7 @@ bool IsSupportedModulatorDestination(u16 dest) {
     case GEN_ScaleTuning:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
+    case kModDestInitialPitch:
         return true;
     default:
         return false;
@@ -1113,106 +1176,109 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         }
     }
 
-    bool hasVelocityToAttenuationMod = false;
-    bool hasVelocityToFilterFcMod = false;
-    bool hasCc1ToVibLfoPitchMod = false;
+    DefaultModulatorState defaultState;
     if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
         const u8 effectiveKey = ResolveForcedKey(key, outZone);
         const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
-        hasVelocityToAttenuationMod |= ApplyModulators(
-            instMods_,
-            instBags_[globalInstBagIdx].wInstModNdx,
-            instBags_[globalInstBagIdx + 1].wInstModNdx,
-            effectiveKey, effectiveVelocity, ctx, outZone);
-        hasVelocityToFilterFcMod |= HasMatchingModulator(
-            instMods_,
-            instBags_[globalInstBagIdx].wInstModNdx,
-            instBags_[globalInstBagIdx + 1].wInstModNdx,
-            IsVelocityToInitialFilterFcMod);
-        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
-            instMods_,
-            instBags_[globalInstBagIdx].wInstModNdx,
-            instBags_[globalInstBagIdx + 1].wInstModNdx,
-            IsCc1ToVibLfoPitchMod);
+        ApplyModulatorEntries(instMods_,
+                              instBags_[globalInstBagIdx].wInstModNdx,
+                              instBags_[globalInstBagIdx + 1].wInstModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
     }
     if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
         const u8 effectiveKey = ResolveForcedKey(key, outZone);
         const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
-        hasVelocityToAttenuationMod |= ApplyModulators(
-            instMods_,
-            instBags_[instBagIdx].wInstModNdx,
-            instBags_[instBagIdx + 1].wInstModNdx,
-            effectiveKey, effectiveVelocity, ctx, outZone);
-        hasVelocityToFilterFcMod |= HasMatchingModulator(
-            instMods_,
-            instBags_[instBagIdx].wInstModNdx,
-            instBags_[instBagIdx + 1].wInstModNdx,
-            IsVelocityToInitialFilterFcMod);
-        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
-            instMods_,
-            instBags_[instBagIdx].wInstModNdx,
-            instBags_[instBagIdx + 1].wInstModNdx,
-            IsCc1ToVibLfoPitchMod);
-    }
-    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        const u8 effectiveKey = ResolveForcedKey(key, outZone);
-        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
-        hasVelocityToAttenuationMod |= ApplyModulators(
-            presetMods_,
-            presetBags_[globalPresetBagIdx].wModNdx,
-            presetBags_[globalPresetBagIdx + 1].wModNdx,
-            effectiveKey, effectiveVelocity, ctx, outZone);
-        hasVelocityToFilterFcMod |= HasMatchingModulator(
-            presetMods_,
-            presetBags_[globalPresetBagIdx].wModNdx,
-            presetBags_[globalPresetBagIdx + 1].wModNdx,
-            IsVelocityToInitialFilterFcMod);
-        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
-            presetMods_,
-            presetBags_[globalPresetBagIdx].wModNdx,
-            presetBags_[globalPresetBagIdx + 1].wModNdx,
-            IsCc1ToVibLfoPitchMod);
-    }
-    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        const u8 effectiveKey = ResolveForcedKey(key, outZone);
-        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
-        hasVelocityToAttenuationMod |= ApplyModulators(
-            presetMods_,
-            presetBags_[presetBagIdx].wModNdx,
-            presetBags_[presetBagIdx + 1].wModNdx,
-            effectiveKey, effectiveVelocity, ctx, outZone);
-        hasVelocityToFilterFcMod |= HasMatchingModulator(
-            presetMods_,
-            presetBags_[presetBagIdx].wModNdx,
-            presetBags_[presetBagIdx + 1].wModNdx,
-            IsVelocityToInitialFilterFcMod);
-        hasCc1ToVibLfoPitchMod |= HasMatchingModulator(
-            presetMods_,
-            presetBags_[presetBagIdx].wModNdx,
-            presetBags_[presetBagIdx + 1].wModNdx,
-            IsCc1ToVibLfoPitchMod);
+        ApplyModulatorEntries(instMods_,
+                              instBags_[instBagIdx].wInstModNdx,
+                              instBags_[instBagIdx + 1].wInstModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
     }
 
+    const u8 effectiveKey = ResolveForcedKey(key, outZone);
     const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
-    if (!hasVelocityToAttenuationMod) {
+
+    if (!defaultState.hasVelocityToAttenuationMod) {
         const i32 delta = ComputeDefaultVelocityAttenuationCb(effectiveVelocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
     }
-    if (!hasVelocityToFilterFcMod) {
+    if (!defaultState.hasVelocityToFilterFcMod) {
         ApplyModulatorDelta(outZone, GEN_InitialFilterFc, ComputeDefaultVelocityFilterCutoffDelta(effectiveVelocity));
     }
-    if (ctx && !hasCc1ToVibLfoPitchMod && ctx->ccValues[1] != 0) {
+    if (ctx && !defaultState.hasChannelPressureToVibLfoPitchMod && ctx->channelPressure != 0) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultChannelPressureToVibLfoPitchCents) *
+            (static_cast<double>(ctx->channelPressure) / 127.0)));
+        ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
+    }
+    if (ctx && !defaultState.hasCc1ToVibLfoPitchMod && ctx->ccValues[1] != 0) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc1ToVibLfoPitchCents) *
             (static_cast<double>(ctx->ccValues[1]) / 127.0)));
         ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
     }
+    if (ctx && !defaultState.hasCc7ToInitialAttenuationMod) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc7ToInitialAttenuationCb) *
+            std::sin((1.0 - static_cast<double>(ctx->ccValues[7]) / 127.0) * (3.14159265358979323846 / 2.0))));
+        ApplyModulatorDelta(outZone, GEN_InitialAttenuation, delta);
+    }
+    if (ctx && !defaultState.hasCc10ToPanMod) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc10ToPan) *
+            (2.0 * (static_cast<double>(ctx->ccValues[10]) / 127.0) - 1.0)));
+        ApplyModulatorDelta(outZone, GEN_Pan, delta);
+    }
+    if (ctx && !defaultState.hasCc11ToInitialAttenuationMod) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc11ToInitialAttenuationCb) *
+            std::sin((1.0 - static_cast<double>(ctx->ccValues[11]) / 127.0) * (3.14159265358979323846 / 2.0))));
+        ApplyModulatorDelta(outZone, GEN_InitialAttenuation, delta);
+    }
+    if (ctx && !defaultState.hasCc91ToReverbSendMod && ctx->ccValues[91] != 0) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc91ToReverbSend) *
+            (static_cast<double>(ctx->ccValues[91]) / 127.0)));
+        ApplyModulatorDelta(outZone, GEN_ReverbEffectsSend, delta);
+    }
+    if (ctx && !defaultState.hasCc93ToChorusSendMod && ctx->ccValues[93] != 0) {
+        const i32 delta = static_cast<i32>(std::lround(
+            static_cast<double>(kDefaultCc93ToChorusSend) *
+            (static_cast<double>(ctx->ccValues[93]) / 127.0)));
+        ApplyModulatorDelta(outZone, GEN_ChorusEffectsSend, delta);
+    }
+    if (ctx && !defaultState.hasPitchWheelToInitialPitchMod && ctx->pitchBend != 0) {
+        const i32 rangeCents = static_cast<i32>(ctx->pitchWheelSensitivitySemitones) * 100 +
+                               static_cast<i32>(ctx->pitchWheelSensitivityCents);
+        const double bend = std::clamp(static_cast<double>(ctx->pitchBend) / 8192.0, -1.0, 8191.0 / 8192.0);
+        ApplyModulatorDelta(outZone, kModDestInitialPitch,
+                            static_cast<i32>(std::lround(static_cast<double>(rangeCents) * bend)));
+    }
+
+    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[globalPresetBagIdx].wModNdx,
+                              presetBags_[globalPresetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+    }
+    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[presetBagIdx].wModNdx,
+                              presetBags_[presetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+    }
 }
 
 bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
                               u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const {
-    bool hasVelocityToAttenuationMod = false;
+    DefaultModulatorState defaultState;
+    ApplyModulatorEntries(mods, modStart, modEnd, key, velocity, ctx, zone, &defaultState);
+    return defaultState.hasVelocityToAttenuationMod;
+}
+
+void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modStart, int modEnd,
+                                    u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
+                                    DefaultModulatorState* outDefaultState) const {
     std::vector<ZoneModEntry> entries = BuildEffectiveZoneModEntries(mods, modStart, modEnd);
     std::vector<int> state(entries.size(), 0);
     std::vector<bool> cycle(entries.size(), false);
@@ -1283,11 +1349,19 @@ bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, 
         if (entries[i].ignored) {
             continue;
         }
-        if (IsVelocityToInitialAttenuationMod(mod)) {
-            hasVelocityToAttenuationMod = true;
+        if (outDefaultState) {
+            outDefaultState->hasVelocityToAttenuationMod |= IsVelocityToInitialAttenuationMod(mod);
+            outDefaultState->hasVelocityToFilterFcMod |= IsVelocityToInitialFilterFcMod(mod);
+            outDefaultState->hasChannelPressureToVibLfoPitchMod |= IsChannelPressureToVibLfoPitchMod(mod);
+            outDefaultState->hasCc1ToVibLfoPitchMod |= IsCc1ToVibLfoPitchMod(mod);
+            outDefaultState->hasCc7ToInitialAttenuationMod |= IsCc7ToInitialAttenuationMod(mod);
+            outDefaultState->hasCc10ToPanMod |= IsCc10ToPanMod(mod);
+            outDefaultState->hasCc11ToInitialAttenuationMod |= IsCc11ToInitialAttenuationMod(mod);
+            outDefaultState->hasCc91ToReverbSendMod |= IsCc91ToReverbSendMod(mod);
+            outDefaultState->hasCc93ToChorusSendMod |= IsCc93ToChorusSendMod(mod);
+            outDefaultState->hasPitchWheelToInitialPitchMod |= IsPitchWheelToInitialPitchMod(mod);
         }
         if ((mod.sfModDestOper & 0x8000u) != 0) continue;
-        if (mod.sfModDestOper >= GEN_COUNT) continue;
         if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
         if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
 
@@ -1295,7 +1369,6 @@ bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, 
         if (delta == 0) continue;
         ApplyModulatorDelta(zone, mod.sfModDestOper, delta);
     }
-    return hasVelocityToAttenuationMod;
 }
 
 void Sf2File::ScanUnsupportedModulators() {

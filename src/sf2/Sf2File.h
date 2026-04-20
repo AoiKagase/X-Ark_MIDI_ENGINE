@@ -66,6 +66,19 @@ public:
     bool GetInstrumentLocalZones(int instrumentIdx, std::vector<ZoneInfo>& outZones) const;
 
 private:
+    struct DefaultModulatorState {
+        bool hasVelocityToAttenuationMod = false;
+        bool hasVelocityToFilterFcMod = false;
+        bool hasChannelPressureToVibLfoPitchMod = false;
+        bool hasCc1ToVibLfoPitchMod = false;
+        bool hasCc7ToInitialAttenuationMod = false;
+        bool hasCc10ToPanMod = false;
+        bool hasCc11ToInitialAttenuationMod = false;
+        bool hasCc91ToReverbSendMod = false;
+        bool hasCc93ToChorusSendMod = false;
+        bool hasPitchWheelToInitialPitchMod = false;
+    };
+
     std::vector<i16>           sampleData_;
     std::vector<SFPresetHeader> presets_;
     std::vector<SFPresetBag>    presetBags_;
@@ -105,6 +118,9 @@ private:
 
     bool ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
                          u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
+    void ApplyModulatorEntries(const std::vector<SFModList>& mods, int modStart, int modEnd,
+                               u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
+                               DefaultModulatorState* outDefaultState) const;
     bool AnalyzePresetBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
                           u8& outVelLo, u8& outVelHi, int& outInstrumentIdx) const;
     bool AnalyzeInstrumentBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,

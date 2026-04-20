@@ -277,6 +277,15 @@ namespace {
         return mod;
     }
 
+    void SetDefaultMidiControllers(ModulatorContext& ctx) {
+        ctx.ccValues[7] = 127;
+        ctx.ccValues[10] = 64;
+        ctx.ccValues[11] = 127;
+        ctx.ccValues[91] = 40;
+        ctx.ccValues[93] = 0;
+        ctx.pitchWheelSensitivitySemitones = 2;
+    }
+
     i32 ExpectedVelocityAttenuationCb(u16 velocity) {
         if (velocity == 0) return 960;
         if (velocity >= 65535) return 0;
@@ -358,6 +367,7 @@ namespace {
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
         ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
         ctx.pitchWheelSensitivitySemitones = 24;
 
         std::vector<ResolvedZone> zones;
@@ -506,6 +516,7 @@ namespace {
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
         ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
         ctx.pitchBend = -8192;
         std::vector<ResolvedZone> zones;
         Require(sf2.FindZones(0, 0, 60, 65535, zones, &ctx), "FindZones with absolute transform should succeed");
@@ -601,6 +612,7 @@ namespace {
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
         ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
         ctx.polyPressure[60] = 127;
         ctx.channelPressure = 127;
 
@@ -619,6 +631,7 @@ namespace {
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
         ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
         ctx.pitchBend = 8191;
         ctx.pitchWheelSensitivitySemitones = 12;
 
@@ -627,6 +640,109 @@ namespace {
         Require(zone.generators[GEN_ModEnvToPitch] == 600,
             "Pitch wheel sensitivity amount source should scale pitch bend modulation");
     }
+
+    void TestRemainingDefaultModulators() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.channelPressure = 127;
+            ctx.ccValues[1] = 127;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_VibLfoToPitch] == 100,
+                "Channel pressure and CC1 defaults should sum into VibLfoToPitch");
+        }
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[7] = 0;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_InitialAttenuation] == 960,
+                "CC7 default should drive initial attenuation");
+        }
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[10] = 127;
+            ctx.ccValues[91] = 127;
+            ctx.ccValues[93] = 127;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_Pan] == 500,
+                "CC10 default should drive pan");
+            Require(zone.generators[GEN_ReverbEffectsSend] == 200,
+                "CC91 default should drive reverb send");
+            Require(zone.generators[GEN_ChorusEffectsSend] == 200,
+                "CC93 default should drive chorus send");
+        }
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[11] = 0;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_InitialAttenuation] == 960,
+                "CC11 default should drive initial attenuation");
+        }
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.pitchBend = 8191;
+            ctx.pitchWheelSensitivitySemitones = 12;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            const i32 pitchCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune];
+            Require(pitchCents == 1200,
+                "Pitch wheel default should feed initial pitch from pitch wheel sensitivity");
+        }
+    }
+
+    void TestDefaultModulatorSupersedeSemantics() {
+        {
+            MinimalSf2Config config;
+            config.instMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 0));
+
+            const std::vector<u8> bytes = BuildMinimalSf2(config);
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[10] = 80;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_Pan] == 26,
+                "Instrument-level explicit default mod should supersede the implicit default");
+        }
+
+        {
+            MinimalSf2Config config;
+            config.presetMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 0));
+
+            const std::vector<u8> bytes = BuildMinimalSf2(config);
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[10] = 80;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_Pan] == 286,
+                "Preset-level explicit default mod should add to the implicit default");
+        }
+    }
+
     void TestSourceCurvesSupport() {
         const u16 velocityConcave = static_cast<u16>(2u | (1u << 10));
         const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
@@ -863,6 +979,10 @@ int main() {
     TestPressureSources();
     g_currentTestName = "TestPitchWheelSensitivityAmountSource";
     TestPitchWheelSensitivityAmountSource();
+    g_currentTestName = "TestRemainingDefaultModulators";
+    TestRemainingDefaultModulators();
+    g_currentTestName = "TestDefaultModulatorSupersedeSemantics";
+    TestDefaultModulatorSupersedeSemantics();
     g_currentTestName = "TestSourceCurvesSupport";
     TestSourceCurvesSupport();
     g_currentTestName = "TestVelocityZoneBoundary";
