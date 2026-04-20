@@ -719,6 +719,27 @@ namespace {
         Require(sf2.UnsupportedModulatorTransformCount() == 1, message);
     }
 
+    void TestUnsupportedAmountSourceIgnored() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(2, GEN_Pan, 500, 1, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        char message[128];
+        std::snprintf(message, sizeof(message), "Unsupported amount-source modulator count should be reported (actual=%u)",
+            sf2.UnsupportedModulatorCount());
+        Require(sf2.UnsupportedModulatorCount() == 1, message);
+        Require(sf2.UnsupportedModulatorTransformCount() == 0,
+            "Unsupported amount-source modulator must not increment transform count");
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_Pan] == 0,
+            "Unsupported amount-source modulator should be ignored instead of applying full amount");
+    }
+
     void TestEffectsSendMixPolicy() {
         Voice sf2;
         sf2.soundBankKind = SoundBankKind::Sf2;
@@ -1412,6 +1433,8 @@ int main() {
     TestLinkedModulatorsFeedTargetSource();
     g_currentTestName = "TestUnsupportedTransformReporting";
     TestUnsupportedTransformReporting();
+    g_currentTestName = "TestUnsupportedAmountSourceIgnored";
+    TestUnsupportedAmountSourceIgnored();
     g_currentTestName = "TestEffectsSendMixPolicy";
     TestEffectsSendMixPolicy();
     g_currentTestName = "TestSf2PitchPrecedence";

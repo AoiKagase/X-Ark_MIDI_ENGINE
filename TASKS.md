@@ -12,6 +12,7 @@
 - [x] SF2 synth-side pan/send/pitch precedence is now aligned in the working tree, with updated compliance coverage for channel-mix and pitch ownership.
 - [x] Loader-side validation for terminal `Instrument` / `sampleID` references, ROM sample rejection, and `sm24` version/size checks is now aligned in the working tree.
 - [x] Loader now rejects inert ROM metadata (`irom` / `iver` without ROM-backed sample headers) and malformed truncated `INFO` / `sdta` subchunks, with compliance coverage.
+- [x] Unsupported SF2 modulator amount sources are now counted and ignored during zone resolution instead of falling back to full-scale application.
 
 ### Recommended Next Start Point
 
@@ -76,10 +77,11 @@
 - [x] Add compliance tests for linked modulators, illegal preset sample generators, and terminal-generator rules.
 - [x] Add compliance tests for invalid terminal references, ROM sample rejection, and `sm24` version/size validation.
 - [x] Add compliance tests for inert ROM metadata rejection and truncated `smpl` chunk rejection.
+- [x] Add compliance tests proving unsupported modulator amount sources are reported and ignored.
 
 ## Acceptable As Compat Option Only
 
-- [ ] Decide and document support level for unsupported modulator source types and transforms, especially spec-defined ignore behavior vs explicit counters.
+- [x] Unsupported modulator source / amount-source / transform definitions are counted for diagnostics and ignored during resolution instead of being coerced into active modulation.
 - [ ] Decide whether the current `multiplySf2MidiEffectsSends` behavior should remain only as an explicit non-spec compatibility mode, and document that distinction.
 - [ ] Decide whether any non-spec mixer-side pan behavior should remain as an explicit compatibility mode, or whether the current SF2-spec path should remain the only behavior.
 

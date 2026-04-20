@@ -1429,7 +1429,12 @@ void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modS
 
         bool amountSupported = false;
         const double amountSource = DecodeModSourceValue(mod.sfModAmtSrcOper, key, velocity, ctx, amountSupported);
-        const double amountScale = amountSupported ? amountSource : 1.0;
+        if (!amountSupported) {
+            entries[index].ignored = true;
+            state[index] = 2;
+            return false;
+        }
+        const double amountScale = amountSource;
         output[index] = static_cast<double>(mod.modAmount) * transformedSource * amountScale;
         state[index] = 2;
         return !cycle[index];
