@@ -671,21 +671,70 @@ namespace {
     }
 
     void TestEffectsSendMixPolicy() {
-        Voice additive;
-        additive.compatOptions.multiplySf2MidiEffectsSends = false;
-        additive.presetReverbSend = 0.25f;
-        additive.presetChorusSend = 0.4f;
-        additive.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
-        Require(std::fabs(additive.reverbSend - 0.75f) < 1.0e-4f, "Additive send policy should sum sends");
-        Require(std::fabs(additive.chorusSend - 0.65f) < 1.0e-4f, "Additive chorus policy should sum sends");
+        Voice sf2;
+        sf2.soundBankKind = SoundBankKind::Sf2;
+        sf2.presetReverbSend = 0.25f;
+        sf2.presetChorusSend = 0.4f;
+        sf2.UpdateChannelMix(0.75f, 0xFFFFFFFFu, FloatToU32(0.5f), FloatToU32(0.25f));
+        Require(std::fabs(sf2.channelGainL - 0.75f) < 1.0e-4f, "SF2 channel pan should not be post-applied on the left lane");
+        Require(std::fabs(sf2.channelGainR - 0.75f) < 1.0e-4f, "SF2 channel pan should not be post-applied on the right lane");
+        Require(std::fabs(sf2.reverbSend - 0.25f) < 1.0e-4f, "SF2 channel reverb send should come from modulators by default");
+        Require(std::fabs(sf2.chorusSend - 0.4f) < 1.0e-4f, "SF2 channel chorus send should come from modulators by default");
 
-        Voice multiplied;
-        multiplied.compatOptions.multiplySf2MidiEffectsSends = true;
-        multiplied.presetReverbSend = 0.25f;
-        multiplied.presetChorusSend = 0.4f;
-        multiplied.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
-        Require(std::fabs(multiplied.reverbSend - 0.125f) < 1.0e-4f, "Multiplicative send policy should multiply sends");
-        Require(std::fabs(multiplied.chorusSend - 0.1f) < 1.0e-4f, "Multiplicative chorus policy should multiply sends");
+        Voice sf2Compat;
+        sf2Compat.soundBankKind = SoundBankKind::Sf2;
+        sf2Compat.compatOptions.multiplySf2MidiEffectsSends = true;
+        sf2Compat.presetReverbSend = 0.25f;
+        sf2Compat.presetChorusSend = 0.4f;
+        sf2Compat.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
+        Require(std::fabs(sf2Compat.reverbSend - 0.125f) < 1.0e-4f, "SF2 compatibility mode should multiply reverb sends");
+        Require(std::fabs(sf2Compat.chorusSend - 0.1f) < 1.0e-4f, "SF2 compatibility mode should multiply chorus sends");
+
+        Voice dls;
+        dls.soundBankKind = SoundBankKind::Dls;
+        dls.presetReverbSend = 0.25f;
+        dls.presetChorusSend = 0.4f;
+        dls.UpdateChannelMix(1.0f, 0xFFFFFFFFu, FloatToU32(0.5f), FloatToU32(0.25f));
+        Require(dls.channelGainR > dls.channelGainL, "Non-SF2 channel pan should still affect the output mix");
+        Require(std::fabs(dls.reverbSend - 0.75f) < 1.0e-4f, "Non-SF2 send policy should still sum sends");
+        Require(std::fabs(dls.chorusSend - 0.65f) < 1.0e-4f, "Non-SF2 chorus policy should still sum sends");
+    }
+
+    void TestSf2PitchPrecedence() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> neutralZones;
+        const ResolvedZone& neutralZone = RequireSingleZone(sf2, 60, 65535, nullptr, neutralZones);
+
+        ModulatorContext bentCtx{};
+        SetDefaultMidiControllers(bentCtx);
+        bentCtx.pitchBend = 8191;
+        bentCtx.pitchWheelSensitivitySemitones = 12;
+        std::vector<ResolvedZone> bentZones;
+        const ResolvedZone& bentZone = RequireSingleZone(sf2, 60, 65535, &bentCtx, bentZones);
+
+        Voice neutralVoice;
+        neutralVoice.NoteOn(neutralZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                            SoundBankKind::Sf2, SynthCompatOptions{});
+
+        Voice bentVoice;
+        bentVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                         SoundBankKind::Sf2, SynthCompatOptions{});
+
+        Voice doubledVoice;
+        doubledVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 12.0,
+                            SoundBankKind::Sf2, SynthCompatOptions{});
+
+        const f64 neutralStep = static_cast<f64>(neutralVoice.sampleStepFixed);
+        const f64 bentStep = static_cast<f64>(bentVoice.sampleStepFixed);
+        const f64 doubledStep = static_cast<f64>(doubledVoice.sampleStepFixed);
+        Require(NearlyEqual(bentStep / neutralStep, 2.0, 1.0e-3),
+            "SF2 pitch bend should already be resolved into InitialPitch before voice start");
+        Require(NearlyEqual(doubledStep / bentStep, 2.0, 1.0e-3),
+            "Applying channel pitch again on top of the resolved SF2 zone would double the bend");
     }
 
     void TestEnvelopePitchAndKeynumScaling() {
@@ -1200,6 +1249,8 @@ int main() {
     TestUnsupportedTransformReporting();
     g_currentTestName = "TestEffectsSendMixPolicy";
     TestEffectsSendMixPolicy();
+    g_currentTestName = "TestSf2PitchPrecedence";
+    TestSf2PitchPrecedence();
     g_currentTestName = "TestEnvelopePitchAndKeynumScaling";
     TestEnvelopePitchAndKeynumScaling();
     g_currentTestName = "TestPressureSources";

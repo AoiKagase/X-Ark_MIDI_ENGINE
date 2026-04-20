@@ -640,19 +640,30 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
 }
 
 void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
-    // 32-bit pan を正規化: 0→-1.0(左全振り), 0xFFFFFFFF→+1.0(右全振り), center≈0.0
-    f32 channelPan = static_cast<f32>(pan32) / 4294967295.0f * 2.0f - 1.0f;
-    channelPan = std::max(-1.0f, std::min(1.0f, channelPan));
-
-    f32 panGainL = std::sqrt(0.5f * (1.0f - channelPan));
-    f32 panGainR = std::sqrt(0.5f * (1.0f + channelPan));
-
-    channelGainL = volumeFactor * panGainL;
-    channelGainR = volumeFactor * panGainR;
     channelReverbSend = NormalizeMidiSend(reverbSend32);
     channelChorusSend = NormalizeMidiSend(chorusSend32);
-    reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
-    chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
+
+    if (soundBankKind == SoundBankKind::Sf2) {
+        channelGainL = volumeFactor;
+        channelGainR = volumeFactor;
+        reverbSend = compatOptions.multiplySf2MidiEffectsSends
+            ? std::clamp(presetReverbSend * channelReverbSend, 0.0f, 1.0f)
+            : presetReverbSend;
+        chorusSend = compatOptions.multiplySf2MidiEffectsSends
+            ? std::clamp(presetChorusSend * channelChorusSend, 0.0f, 1.0f)
+            : presetChorusSend;
+    } else {
+        // 32-bit pan を正規化: 0→-1.0(左全振り), 0xFFFFFFFF→+1.0(右全振り), center≈0.0
+        f32 channelPan = static_cast<f32>(pan32) / 4294967295.0f * 2.0f - 1.0f;
+        channelPan = std::max(-1.0f, std::min(1.0f, channelPan));
+
+        f32 panGainL = std::sqrt(0.5f * (1.0f - channelPan));
+        f32 panGainR = std::sqrt(0.5f * (1.0f + channelPan));
+        channelGainL = volumeFactor * panGainL;
+        channelGainR = volumeFactor * panGainR;
+        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
+        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
+    }
     RefreshOutputGains();
 }
 

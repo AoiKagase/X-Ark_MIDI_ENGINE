@@ -55,6 +55,13 @@ bool IsTrackedRootVoice(const Voice& voice) {
     return !voice.ownedByParent;
 }
 
+f64 ResolveRealtimeChannelPitch(const Voice& voice, const ChannelState& state) {
+    if (voice.soundBankKind == SoundBankKind::Sf2) {
+        return state.ChannelTuningSemitones() + state.NoteTuningSemitones(voice.noteKey);
+    }
+    return state.TotalPitchSemitonesForKey(voice.noteKey);
+}
+
 void SynchronizeAggregatedLinkedVoice(Voice& root, Voice& linked) {
     if (root.specialRoute.preserveSampleTimeline || linked.specialRoute.preserveSampleTimeline) {
         return;
@@ -1246,7 +1253,7 @@ void VoicePool::UpdateChannelPitch(u8 channel, const ChannelState& state) {
         const u16 voiceIndex = activeIndices_[i];
         auto& v = voices_[voiceIndex];
         if (v.channel != channel) continue;
-        const f64 targetSemitones = state.isDrum ? 0.0 : state.TotalPitchSemitonesForKey(v.noteKey);
+        const f64 targetSemitones = state.isDrum ? 0.0 : ResolveRealtimeChannelPitch(v, state);
         const f64 previousChannelPitch = v.pitchBendSemitones;
         const f64 previousPerNotePitch = v.perNotePitchSemitones;
         const i64 previousSampleStepFixed = v.sampleStepFixed;

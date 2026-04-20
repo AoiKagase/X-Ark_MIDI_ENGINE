@@ -779,7 +779,12 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     if (!zoneScratch_.empty())
         excClass = static_cast<u8>(zoneScratch_[0].generators[GEN_ExclusiveClass]);
 
-    f64 pitchBend = state.isDrum ? 0.0 : state.TotalPitchSemitonesForKey(key);
+    f64 pitchBend = 0.0;
+    if (!state.isDrum) {
+        pitchBend = (soundBank_->Kind() == SoundBankKind::Sf2)
+            ? (state.ChannelTuningSemitones() + state.NoteTuningSemitones(key))
+            : state.TotalPitchSemitonesForKey(key);
+    }
 
     i32 portamentoSourceKey = -1;
     if (!state.isDrum && state.portamento) {
