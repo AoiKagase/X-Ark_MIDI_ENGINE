@@ -61,6 +61,7 @@ struct SampleHeader {
     u32      sampleRate = 0;
     u8       originalPitch = 60;
     i8       pitchCorrection = 0;
+    u16      sampleLink = 0;
     u16      sampleType = 1;
     f32      loudnessGain = 1.0f;
 };

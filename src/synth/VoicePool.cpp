@@ -25,6 +25,10 @@ constexpr f64 kSpecialLayerFifthSemitones = 7.0;
 constexpr f64 kSpecialLayerFifthTolerance = 0.35;
 constexpr f64 kSpecialLayerDetuneSemitones = 0.035;
 constexpr f32 kSpecialLayerPanSpread = 0.58f;
+constexpr u16 kSf2SampleTypeMono = 1u;
+constexpr u16 kSf2SampleTypeRight = 2u;
+constexpr u16 kSf2SampleTypeLeft = 4u;
+constexpr u16 kSf2SampleTypeLinked = 8u;
 
 f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
     if (!sample || !compatOptions.enableSf2SamplePitchCorrection) {
@@ -52,6 +56,9 @@ bool IsTrackedRootVoice(const Voice& voice) {
 }
 
 void SynchronizeAggregatedLinkedVoice(Voice& root, Voice& linked) {
+    if (root.specialRoute.preserveSampleTimeline || linked.specialRoute.preserveSampleTimeline) {
+        return;
+    }
     linked.samplePosFixed = root.samplePosFixed;
     linked.sampleStepFixed = root.sampleStepFixed;
     linked.baseSampleStep = root.baseSampleStep;
@@ -192,6 +199,55 @@ struct ProgramLayerPlan {
     bool aggregated = false;
 };
 
+bool IsExplicitStereoSampleType(u16 sampleType) {
+    const u16 type = static_cast<u16>(sampleType & 0x7FFFu);
+    return type == kSf2SampleTypeLeft || type == kSf2SampleTypeRight;
+}
+
+bool IsExplicitSf2StereoPair(const ResolvedZone& a, const ResolvedZone& b) {
+    if (!a.sample || !b.sample) {
+        return false;
+    }
+
+    const int sampleIdA = a.generators[GEN_SampleID];
+    const int sampleIdB = b.generators[GEN_SampleID];
+    if (sampleIdA < 0 || sampleIdB < 0 || sampleIdA == sampleIdB) {
+        return false;
+    }
+
+    const u16 typeA = static_cast<u16>(a.sample->sampleType & 0x7FFFu);
+    const u16 typeB = static_cast<u16>(b.sample->sampleType & 0x7FFFu);
+    if (!IsExplicitStereoSampleType(typeA) || !IsExplicitStereoSampleType(typeB) || typeA == typeB) {
+        return false;
+    }
+
+    if (a.sample->sampleLink != static_cast<u16>(sampleIdB) ||
+        b.sample->sampleLink != static_cast<u16>(sampleIdA)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool TryAppendExplicitSf2StereoPairPlan(const ResolvedZone& a,
+                                        const ResolvedZone& b,
+                                        ProgramLayerPlan& outPlan) {
+    if (!IsExplicitSf2StereoPair(a, b)) {
+        return false;
+    }
+
+    outPlan.aggregated = true;
+    outPlan.entries.reserve(2);
+    if ((a.sample->sampleType & 0x7FFFu) == kSf2SampleTypeLeft) {
+        outPlan.entries.push_back({&a, {true, 0.0, -1.0f, false, -1, true}});
+        outPlan.entries.push_back({&b, {true, 0.0, 1.0f, false, -1, true}});
+    } else {
+        outPlan.entries.push_back({&b, {true, 0.0, -1.0f, false, -1, true}});
+        outPlan.entries.push_back({&a, {true, 0.0, 1.0f, false, -1, true}});
+    }
+    return true;
+}
+
 bool PlanTargetsSample(const ProgramLayerPlan& plan, const SampleHeader* sample) {
     if (!sample) {
         return false;
@@ -298,26 +354,61 @@ std::vector<ProgramLayerPlan> BuildProgramLayerPlans(const std::vector<ResolvedZ
         return plans;
     }
 
-    const SpecialRouteDecision specialRouteDecision =
-        DetectSpecialSf2LayerRoute(zones, soundBankKind, key, compatOptions);
-    if (specialRouteDecision.enabled) {
-        ProgramLayerPlan aggregatedPlan;
-        aggregatedPlan.aggregated = true;
-        aggregatedPlan.entries.reserve(zones.size());
+    std::vector<bool> paired(zones.size(), false);
+    if (soundBankKind == SoundBankKind::Sf2) {
         for (size_t i = 0; i < zones.size(); ++i) {
-            aggregatedPlan.entries.push_back({
-                &zones[i],
-                (i < specialRouteDecision.routes.size()) ? specialRouteDecision.routes[i] : SpecialVoiceRoute{}
-            });
+            if (paired[i]) {
+                continue;
+            }
+            for (size_t j = i + 1; j < zones.size(); ++j) {
+                if (paired[j]) {
+                    continue;
+                }
+                ProgramLayerPlan explicitStereoPlan;
+                if (!TryAppendExplicitSf2StereoPairPlan(zones[i], zones[j], explicitStereoPlan)) {
+                    continue;
+                }
+                paired[i] = true;
+                paired[j] = true;
+                plans.push_back(std::move(explicitStereoPlan));
+                break;
+            }
         }
-        plans.push_back(std::move(aggregatedPlan));
-        return plans;
+    }
+
+    bool hasExplicitStereoPlan = false;
+    for (const auto& plan : plans) {
+        if (plan.aggregated && plan.entries.size() == 2) {
+            hasExplicitStereoPlan = true;
+            break;
+        }
+    }
+
+    if (!hasExplicitStereoPlan) {
+        const SpecialRouteDecision specialRouteDecision =
+            DetectSpecialSf2LayerRoute(zones, soundBankKind, key, compatOptions);
+        if (specialRouteDecision.enabled) {
+            ProgramLayerPlan aggregatedPlan;
+            aggregatedPlan.aggregated = true;
+            aggregatedPlan.entries.reserve(zones.size());
+            for (size_t i = 0; i < zones.size(); ++i) {
+                aggregatedPlan.entries.push_back({
+                    &zones[i],
+                    (i < specialRouteDecision.routes.size()) ? specialRouteDecision.routes[i] : SpecialVoiceRoute{}
+                });
+            }
+            plans.push_back(std::move(aggregatedPlan));
+            return plans;
+        }
     }
 
     plans.reserve(zones.size());
-    for (const auto& zone : zones) {
+    for (size_t i = 0; i < zones.size(); ++i) {
+        if (paired[i]) {
+            continue;
+        }
         ProgramLayerPlan plan;
-        plan.entries.push_back({&zone, {}});
+        plan.entries.push_back({&zones[i], {}});
         plans.push_back(std::move(plan));
     }
     return plans;

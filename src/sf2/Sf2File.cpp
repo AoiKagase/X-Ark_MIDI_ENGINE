@@ -898,6 +898,7 @@ void Sf2File::ParseShdr(BinaryReader& r, u32 size) {
         h.sampleRate      = s.dwSampleRate;
         h.originalPitch   = s.byOriginalPitch;
         h.pitchCorrection = s.chPitchCorrection;
+        h.sampleLink      = s.wSampleLink;
         h.sampleType      = s.sfSampleType;
     }
 }

@@ -24,6 +24,7 @@ struct SpecialVoiceRoute {
     f32 pan = 0.0f;
     bool clampAboveRoot = false;
     i32 clampRootKey = -1;
+    bool preserveSampleTimeline = false;
 };
 
 enum class EnvPhase : u8 {

@@ -2,6 +2,7 @@
 #include "../src/sf2/Sf2Types.h"
 #include "../src/synth/Interpolator.h"
 #include "../src/synth/Voice.h"
+#include "../src/synth/VoicePool.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -62,6 +63,134 @@ namespace {
         data.insert(data.end(), type, type + 4);
         data.insert(data.end(), payload.begin(), payload.end());
         AppendChunk(out, "LIST", data);
+    }
+
+    std::vector<u8> BuildStereoLinkedSf2() {
+        std::vector<u8> infoPayload;
+        std::vector<u8> ifil;
+        AppendU16LE(ifil, 2);
+        AppendU16LE(ifil, 4);
+        AppendChunk(infoPayload, "ifil", ifil);
+        const std::vector<u8> isng = { 'E','M','U','8','0','0','0', 0 };
+        AppendChunk(infoPayload, "isng", isng);
+        const std::vector<u8> inam = { 'S','t','e','r','e','o', 0 };
+        AppendChunk(infoPayload, "INAM", inam);
+
+        std::vector<u8> sdtaPayload;
+        std::vector<u8> smpl;
+        for (int i = 0; i < 64; ++i) {
+            AppendI16LE(smpl, static_cast<i16>(1000 + i * 120));
+        }
+        for (int i = 0; i < 64; ++i) {
+            AppendI16LE(smpl, static_cast<i16>(-1000 - i * 120));
+        }
+        AppendChunk(sdtaPayload, "smpl", smpl);
+
+        std::vector<u8> pdtaPayload;
+
+        std::vector<u8> phdr;
+        auto appendPresetHeader = [&](const char* name, u16 preset, u16 bank, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            phdr.insert(phdr.end(), padded, padded + 20);
+            AppendU16LE(phdr, preset);
+            AppendU16LE(phdr, bank);
+            AppendU16LE(phdr, bagIndex);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+        };
+        appendPresetHeader("Stereo", 0, 0, 0);
+        appendPresetHeader("EOP", 0, 0, 1);
+        AppendChunk(pdtaPayload, "phdr", phdr);
+
+        std::vector<u8> pbag;
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 1);
+        AppendU16LE(pbag, 0);
+        AppendChunk(pdtaPayload, "pbag", pbag);
+
+        std::vector<u8> pmod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(pmod, 0);
+        }
+        AppendChunk(pdtaPayload, "pmod", pmod);
+
+        std::vector<u8> pgen;
+        AppendU16LE(pgen, GEN_Instrument);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendChunk(pdtaPayload, "pgen", pgen);
+
+        std::vector<u8> inst;
+        auto appendInst = [&](const char* name, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            inst.insert(inst.end(), padded, padded + 20);
+            AppendU16LE(inst, bagIndex);
+        };
+        appendInst("StereoInst", 0);
+        appendInst("EOI", 2);
+        AppendChunk(pdtaPayload, "inst", inst);
+
+        std::vector<u8> ibag;
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 1);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 2);
+        AppendU16LE(ibag, 0);
+        AppendChunk(pdtaPayload, "ibag", ibag);
+
+        std::vector<u8> imod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(imod, 0);
+        }
+        AppendChunk(pdtaPayload, "imod", imod);
+
+        std::vector<u8> igen;
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 1);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, 0);
+        AppendChunk(pdtaPayload, "igen", igen);
+
+        std::vector<u8> shdr;
+        auto appendSampleHeader = [&](const char* name, u32 start, u32 end, u32 loopStart, u32 loopEnd,
+                                      u16 sampleLink, u16 sampleType) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            shdr.insert(shdr.end(), padded, padded + 20);
+            AppendU32LE(shdr, start);
+            AppendU32LE(shdr, end);
+            AppendU32LE(shdr, loopStart);
+            AppendU32LE(shdr, loopEnd);
+            AppendU32LE(shdr, 44100);
+            shdr.push_back(60);
+            shdr.push_back(0);
+            AppendU16LE(shdr, sampleLink);
+            AppendU16LE(shdr, sampleType);
+        };
+        appendSampleHeader("Left", 0, 64, 8, 56, 1, 4);
+        appendSampleHeader("Right", 64, 128, 72, 120, 0, 2);
+        appendSampleHeader("EOS", 0, 0, 0, 0, 0, 1);
+        AppendChunk(pdtaPayload, "shdr", shdr);
+
+        std::vector<u8> riffPayload;
+        AppendListChunk(riffPayload, "INFO", infoPayload);
+        AppendListChunk(riffPayload, "sdta", sdtaPayload);
+        AppendListChunk(riffPayload, "pdta", pdtaPayload);
+
+        std::vector<u8> file;
+        file.insert(file.end(), { 'R','I','F','F' });
+        AppendU32LE(file, static_cast<u32>(riffPayload.size() + 4));
+        file.insert(file.end(), { 's','f','b','k' });
+        file.insert(file.end(), riffPayload.begin(), riffPayload.end());
+        return file;
     }
 
     std::vector<u8> BuildMinimalSf2(const MinimalSf2Config& config) {
@@ -743,6 +872,104 @@ namespace {
         }
     }
 
+    void TestStereoSampleLinks() {
+        const std::vector<u8> bytes = BuildStereoLinkedSf2();
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+        Require(sf2.SampleHeaderCount() >= 2, "Stereo SF2 should expose sample headers");
+        Require(sf2.SampleDataCount() >= 128, "Stereo SF2 should expose sample PCM");
+        Require(sf2.SampleData()[0] == 1000, "Left stereo sample PCM should be preserved");
+        Require(sf2.SampleData()[64] == -1000, "Right stereo sample PCM should be preserved");
+        Require(sf2.SampleHeaders(0)->sampleLink == 1, "Left sample should preserve wSampleLink");
+        Require(sf2.SampleHeaders(1)->sampleLink == 0, "Right sample should preserve wSampleLink");
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 61, 65535, zones, nullptr), "Stereo SF2 should resolve zones");
+        Require(zones.size() == 2, "Stereo SF2 should resolve both linked zones");
+
+        {
+            Voice voice;
+            SynthCompatOptions compatOptions{};
+            std::array<f32, 256> testL{};
+            std::array<f32, 256> testR{};
+            std::array<f32, 256> testRevL{};
+            std::array<f32, 256> testRevR{};
+            std::array<f32, 256> testChoL{};
+            std::array<f32, 256> testChoR{};
+            voice.NoteOn(zones[0], sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 61, 65535, 1, 44100, 0.0,
+                         SoundBankKind::Sf2, compatOptions);
+            char stateMessage[256];
+            std::snprintf(stateMessage, sizeof(stateMessage),
+                          "Voice should activate for stereo sample (active=%d sampleEnd=%u step=%lld dryL=%f dryR=%f)",
+                          voice.active ? 1 : 0, voice.sampleEnd, static_cast<long long>(voice.sampleStepFixed),
+                          voice.dryGainL, voice.dryGainR);
+            Require(voice.active, stateMessage);
+            voice.UpdateChannelMix(1.0f, 0x81020408u, 0x50A14285u, 0u);
+            voice.RenderBlock(testL.data(), testR.data(), testRevL.data(), testRevR.data(), testChoL.data(), testChoR.data(),
+                              static_cast<u32>(testL.size()));
+            f32 directSum = 0.0f;
+            for (size_t i = 0; i < testL.size(); ++i) {
+                directSum += std::fabs(testL[i]) + std::fabs(testR[i]);
+            }
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                          "Direct stereo-zone voice should render audible output (sum=%f sampleEnd=%u step=%lld dryL=%f dryR=%f)",
+                          directSum, voice.sampleEnd, static_cast<long long>(voice.sampleStepFixed),
+                          voice.dryGainL, voice.dryGainR);
+            Require(directSum > 0.1f, message);
+        }
+
+        VoicePool pool;
+        SynthCompatOptions compatOptions{};
+        pool.NoteOn(zones,
+                    sf2.SampleData(),
+                    sf2.SampleDataCount(),
+                    0,
+                    0,
+                    0,
+                    61,
+                    65535,
+                    44100,
+                    0.0,
+                    0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    compatOptions);
+        Require(pool.ActiveCount() == 1, "Stereo linked zones should aggregate into one root voice");
+
+        std::array<f32, 256> outL{};
+        std::array<f32, 256> outR{};
+        std::array<f32, 256> reverbL{};
+        std::array<f32, 256> reverbR{};
+        std::array<f32, 256> chorusL{};
+        std::array<f32, 256> chorusR{};
+        pool.RenderBlock(outL.data(), outR.data(), reverbL.data(), reverbR.data(), chorusL.data(), chorusR.data(),
+                         static_cast<u32>(outL.size()));
+
+        f32 sumL = 0.0f;
+        f32 sumR = 0.0f;
+        for (size_t i = 0; i < outL.size(); ++i) {
+            sumL += outL[i];
+            sumR += outR[i];
+        }
+        char message[160];
+        std::snprintf(message, sizeof(message),
+                      "Stereo linked left lane should produce non-trivial output (sumL=%f sumR=%f)",
+                      sumL, sumR);
+        Require(std::fabs(sumL) > 0.1f, message);
+        std::snprintf(message, sizeof(message),
+                      "Stereo linked right lane should produce non-trivial output (sumL=%f sumR=%f)",
+                      sumL, sumR);
+        Require(std::fabs(sumR) > 0.1f, message);
+        std::snprintf(message, sizeof(message),
+                      "Stereo linked samples should render into separate left/right output lanes (sumL=%f sumR=%f)",
+                      sumL, sumR);
+        Require(sumL > 0.0f && sumR < 0.0f, message);
+    }
+
     void TestSourceCurvesSupport() {
         const u16 velocityConcave = static_cast<u16>(2u | (1u << 10));
         const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
@@ -983,6 +1210,8 @@ int main() {
     TestRemainingDefaultModulators();
     g_currentTestName = "TestDefaultModulatorSupersedeSemantics";
     TestDefaultModulatorSupersedeSemantics();
+    g_currentTestName = "TestStereoSampleLinks";
+    TestStereoSampleLinks();
     g_currentTestName = "TestSourceCurvesSupport";
     TestSourceCurvesSupport();
     g_currentTestName = "TestVelocityZoneBoundary";

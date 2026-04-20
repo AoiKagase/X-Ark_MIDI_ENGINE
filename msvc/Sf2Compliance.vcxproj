@@ -78,6 +78,7 @@
       <AdditionalOptions>/arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="..\src\synth\Voice.cpp" />
+    <ClCompile Include="..\src\synth\VoicePool.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\common\BinaryReader.h" />
@@ -90,6 +91,7 @@
     <ClInclude Include="..\src\synth\Interpolator.h" />
     <ClInclude Include="..\src\synth\SimdKernels.h" />
     <ClInclude Include="..\src\synth\Voice.h" />
+    <ClInclude Include="..\src\synth\VoicePool.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
