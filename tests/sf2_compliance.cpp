@@ -787,15 +787,15 @@ namespace {
         const ResolvedZone& bentZone = RequireSingleZone(sf2, 60, 65535, &bentCtx, bentZones);
 
         Voice neutralVoice;
-        neutralVoice.NoteOn(neutralZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+        neutralVoice.NoteOn(neutralZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
                             SoundBankKind::Sf2, SynthCompatOptions{});
 
         Voice bentVoice;
-        bentVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+        bentVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
                          SoundBankKind::Sf2, SynthCompatOptions{});
 
         Voice doubledVoice;
-        doubledVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 12.0,
+        doubledVoice.NoteOn(bentZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 12.0,
                             SoundBankKind::Sf2, SynthCompatOptions{});
 
         const f64 neutralStep = static_cast<f64>(neutralVoice.sampleStepFixed);
@@ -830,7 +830,7 @@ namespace {
         Require(zone.generators[GEN_ModEnvToPitch] == 600, "Resolved zone should preserve ModEnvToPitch");
 
         Voice voice;
-        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 72, 65535, 1, 48000, 0.0,
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 72, 65535, 1, 48000, 0.0,
             SoundBankKind::Sf2, SynthCompatOptions{});
 
         const f64 holdScale = std::pow(2.0, 100.0 * (60.0 - 72.0) / 1200.0);
@@ -865,7 +865,7 @@ namespace {
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
 
         Voice voice;
-        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
             SoundBankKind::Sf2, SynthCompatOptions{});
 
         voice.envPhase = EnvPhase::Sustain;
@@ -908,7 +908,7 @@ namespace {
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
 
         Voice voice;
-        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 48000, 0.0,
             SoundBankKind::Sf2, SynthCompatOptions{});
 
         const u32 expectedModLfoDelayEnd = static_cast<u32>(TimecentsToSeconds(-600) * 48000.0);
@@ -1095,7 +1095,7 @@ namespace {
             std::array<f32, 256> testRevR{};
             std::array<f32, 256> testChoL{};
             std::array<f32, 256> testChoR{};
-            voice.NoteOn(zones[0], sf2.SampleData(), sf2.SampleDataCount(), 0, 0, 0, 61, 65535, 1, 44100, 0.0,
+            voice.NoteOn(zones[0], sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 61, 65535, 1, 44100, 0.0,
                          SoundBankKind::Sf2, compatOptions);
             char stateMessage[256];
             std::snprintf(stateMessage, sizeof(stateMessage),
@@ -1122,6 +1122,7 @@ namespace {
         SynthCompatOptions compatOptions{};
         pool.NoteOn(zones,
                     sf2.SampleData(),
+                    sf2.SampleData24(),
                     sf2.SampleDataCount(),
                     0,
                     0,
@@ -1246,7 +1247,7 @@ namespace {
 
         std::vector<u8> sm24Chunk = { 's', 'm', '2', '4' };
         AppendU32LE(sm24Chunk, 64);
-        sm24Chunk.resize(sm24Chunk.size() + 64, 0);
+        sm24Chunk.resize(sm24Chunk.size() + 64, 0x7F);
         auto insertSm24 = [&](std::vector<u8>& file) {
             const size_t sdtaListPos = FindListChunk(file, "sdta");
             Require(sdtaListPos != std::numeric_limits<size_t>::max(), "sdta LIST chunk should exist");
@@ -1259,10 +1260,14 @@ namespace {
 
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "SF2 with sm24 chunk should load");
-        Require(sf2.HasIgnoredSm24(), "HasIgnoredSm24 should be true when sm24 chunk is present");
+        Require(!sf2.HasIgnoredSm24(), "HasIgnoredSm24 should be false when valid sm24 data is used");
+        Require(sf2.SampleData24() != nullptr, "Valid sm24 should produce a 24-bit sample pool");
+        Require(sf2.SampleData24()[0] == ((static_cast<i32>(sf2.SampleData()[0]) << 8) | 0x7F),
+            "sm24 low byte should be combined with smpl high word");
 
         Require(sf2.LoadFromMemory(original.data(), original.size()), "Base SF2 reload failed");
         Require(!sf2.HasIgnoredSm24(), "HasIgnoredSm24 should reset on subsequent loads");
+        Require(sf2.SampleData24() == nullptr, "24-bit sample pool should reset on subsequent loads");
     }
 
     void TestSm24RequiresIfil204() {
@@ -1290,6 +1295,7 @@ namespace {
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 before ifil 2.04 should be ignored");
         Require(sf2.HasIgnoredSm24(), "sm24 should still be reported as ignored");
+        Require(sf2.SampleData24() == nullptr, "Ignored sm24 should not produce a 24-bit sample pool");
     }
 
     void TestSm24SizeIgnored() {
@@ -1308,6 +1314,7 @@ namespace {
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "sm24 size mismatch should be ignored");
         Require(sf2.HasIgnoredSm24(), "invalid sm24 should still be reported as ignored");
+        Require(sf2.SampleData24() == nullptr, "Invalid sm24 should not produce a 24-bit sample pool");
     }
 
     void TestInvalidTerminalReferencesRejected() {
@@ -1340,7 +1347,7 @@ namespace {
         }
     }
 
-    void TestRomSampleIgnoredAtPlayback() {
+    void TestRomSampleSkippedWithoutAttachedRomBank() {
         MinimalSf2Config config;
         std::vector<u8> bytes = BuildMinimalSf2(config);
         const size_t infoPos = FindListChunk(bytes, "INFO");
@@ -1372,6 +1379,54 @@ namespace {
         std::vector<ResolvedZone> zones;
         Require(!sf2.FindZones(0, 0, 60, 50000, zones, nullptr),
             "ROM-backed instrument zones should be skipped at playback");
+    }
+
+    void TestRomSampleUsesAttachedRomBank() {
+        MinimalSf2Config config;
+        std::vector<u8> bytes = BuildMinimalSf2(config);
+        const size_t infoPos = FindListChunk(bytes, "INFO");
+        Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+
+        std::vector<u8> romInfo;
+        const std::vector<u8> iromData = { 'R','O','M',0 };
+        AppendChunk(romInfo, "irom", iromData);
+        std::vector<u8> iverData;
+        AppendU16LE(iverData, 2);
+        AppendU16LE(iverData, 0);
+        AppendChunk(romInfo, "iver", iverData);
+
+        const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd), romInfo.begin(), romInfo.end());
+        AddChunkSize(bytes, 4, static_cast<u32>(romInfo.size()));
+        AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
+
+        const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+        Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+        const size_t shdrData = shdrPos + 8;
+        const size_t sampleTypeOffset = shdrData + 44;
+        bytes[sampleTypeOffset] = 0x01;
+        bytes[sampleTypeOffset + 1] = 0x80;
+
+        std::vector<u8> romBytes = BuildMinimalSf2(config);
+        const size_t romSdtaPos = FindListChunk(romBytes, "sdta");
+        Require(romSdtaPos != std::numeric_limits<size_t>::max(), "ROM sdta list should exist");
+        const size_t romSmplPos = romSdtaPos + 12;
+        Require(std::memcmp(romBytes.data() + romSmplPos, "smpl", 4) == 0, "ROM smpl chunk should be first in sdta");
+        const size_t romSmplData = romSmplPos + 8;
+        romBytes[romSmplData] = 0xD2;
+        romBytes[romSmplData + 1] = 0x04;
+
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), "ROM samples should load");
+        Require(sf2.LoadRomSampleSourceFromMemory(romBytes.data(), romBytes.size()),
+            "ROM sample source should load");
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 50000, nullptr, zones);
+        Require(zone.sampleDataOverride != nullptr, "ROM-backed zone should use external sample data");
+        Require(zone.sampleDataOverrideCount == 64, "ROM-backed zone should expose external sample count");
+        Require(zone.sampleDataOverride[0] == 1234, "ROM-backed zone should read from attached ROM sample data");
+        Require(zone.sampleData24Override == nullptr, "16-bit ROM bank should not expose 24-bit override");
     }
 
     void TestRomMetadataWithoutRomSampleIgnored() {
@@ -1839,8 +1894,10 @@ int main() {
     TestChunkOrderingRejected();
     g_currentTestName = "TestInvalidTerminalReferencesRejected";
     TestInvalidTerminalReferencesRejected();
-    g_currentTestName = "TestRomSampleIgnoredAtPlayback";
-    TestRomSampleIgnoredAtPlayback();
+    g_currentTestName = "TestRomSampleSkippedWithoutAttachedRomBank";
+    TestRomSampleSkippedWithoutAttachedRomBank();
+    g_currentTestName = "TestRomSampleUsesAttachedRomBank";
+    TestRomSampleUsesAttachedRomBank();
     g_currentTestName = "TestRomMetadataWithoutRomSampleIgnored";
     TestRomMetadataWithoutRomSampleIgnored();
     g_currentTestName = "TestIllegalOriginalPitchFallsBackTo60";

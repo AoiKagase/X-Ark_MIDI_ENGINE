@@ -20,6 +20,7 @@ constexpr i32 kFilterFcMax = 13500;
 constexpr i32 kFilterQCbMin = 0;
 constexpr i32 kFilterQCbMax = 960;
 constexpr f32 kInvPcmScale = 1.0f / 32768.0f;
+constexpr f32 kInvPcm24Scale = 1.0f / 8388608.0f;
 constexpr f32 kEnvelopeSilenceThreshold = 1.0e-5f;
 constexpr f64 kEnvelopeSilenceTarget = 1.0e-5;
 constexpr f32 kMinimumLoopReleaseSeconds = 0.005f;
@@ -133,6 +134,42 @@ f32 ProcessFilterSample(f32 input,
 
 i64 ToFixedSamplePos(i32 sampleIndex) {
     return static_cast<i64>(sampleIndex) << kSamplePosFracBits;
+}
+
+inline f32 Normalize24BitSample(i32 sample) {
+    return static_cast<f32>(sample) * kInvPcm24Scale;
+}
+
+inline f32 Read24BitSampleNormalized(const i32* data, size_t index) {
+    return Normalize24BitSample(data[index]);
+}
+
+inline f32 CubicInterpFixed24Bit(const i32* data, i64 posFixed, size_t dataSize) {
+    if (dataSize == 0) return 0.0f;
+
+    const i64 i1 = posFixed >> kSamplePosFracBits;
+    const f32 frac = static_cast<f32>(posFixed & kSamplePosFracMask) * kSamplePosFracScale;
+    const f32 y0 = Normalize24BitSample(data[ClampSampleIndex(i1 - 1, dataSize)]);
+    const f32 y1 = Normalize24BitSample(data[ClampSampleIndex(i1, dataSize)]);
+    const f32 y2 = Normalize24BitSample(data[ClampSampleIndex(i1 + 1, dataSize)]);
+    const f32 y3 = Normalize24BitSample(data[ClampSampleIndex(i1 + 2, dataSize)]);
+    return CubicHermite(y0, y1, y2, y3, frac);
+}
+
+inline f32 CubicInterpFixedLooped24Bit(const i32* data,
+                                       i64 posFixed,
+                                       size_t dataSize,
+                                       size_t loopStartIndex,
+                                       size_t loopEndIndex) {
+    if (dataSize == 0) return 0.0f;
+
+    const i64 i1 = posFixed >> kSamplePosFracBits;
+    const f32 frac = static_cast<f32>(posFixed & kSamplePosFracMask) * kSamplePosFracScale;
+    const f32 y0 = Normalize24BitSample(data[WrapLoopSampleIndex(i1 - 1, dataSize, loopStartIndex, loopEndIndex)]);
+    const f32 y1 = Normalize24BitSample(data[WrapLoopSampleIndex(i1, dataSize, loopStartIndex, loopEndIndex)]);
+    const f32 y2 = Normalize24BitSample(data[WrapLoopSampleIndex(i1 + 1, dataSize, loopStartIndex, loopEndIndex)]);
+    const f32 y3 = Normalize24BitSample(data[WrapLoopSampleIndex(i1 + 2, dataSize, loopStartIndex, loopEndIndex)]);
+    return CubicHermite(y0, y1, y2, y3, frac);
 }
 
 u32 ComputeRenderableFrames(i64 posFixed, i64 stepFixed, i64 boundaryFixed, u32 maxFrames) {
@@ -430,7 +467,7 @@ void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effec
     RefreshOutputGains();
 }
 
-void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
+void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmData24, size_t pcmDataSize,
                    u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 newNoteId, u32 sampleRate, f64 pitchBendSemitones,
                    SoundBankKind newSoundBankKind, const SynthCompatOptions& compatOptions,
                    const SpecialVoiceRoute& newSpecialRoute,
@@ -446,8 +483,10 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataS
     sostenutoLatched = false;
     sostenutoHeld = false;
     soundBankKind  = newSoundBankKind;
-    sampleData     = pcmData;
-    sampleDataSize = pcmDataSize;
+    sampleData     = zone.sampleDataOverride ? zone.sampleDataOverride : pcmData;
+    sampleData24   = zone.sampleData24Override ? zone.sampleData24Override : pcmData24;
+    use24BitSamples = (sampleData24 != nullptr);
+    sampleDataSize = (zone.sampleDataOverrideCount != 0) ? zone.sampleDataOverrideCount : pcmDataSize;
     outputSampleRate = sampleRate;
     this->compatOptions = compatOptions;
     specialRoute = newSpecialRoute;
@@ -718,7 +757,7 @@ void Voice::Render(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorus
 }
 
 void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames) {
-    if (!active || sampleData == nullptr) return;
+    if (!active || (sampleData == nullptr && sampleData24 == nullptr)) return;
 
     i64 localSamplePosFixed = samplePosFixed;
     const i64 localSampleStepFixed = sampleStepFixed;
@@ -789,6 +828,111 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
     const bool localUseLfo = localUsePortamento ||
                              (modLfoPhaseStep > 0.0f && (modLfoToPitchCents != 0.0f || modLfoToFilterFcCents != 0.0f || modLfoToVolumeCb != 0.0f)) ||
                              (vibLfoPhaseStep > 0.0f && vibLfoToPitchCents != 0.0f);
+
+    if (use24BitSamples && sampleData24 != nullptr) {
+        u32 offset = 0;
+        while (offset < numFrames) {
+            const u32 chunkFrames = numFrames - offset;
+
+            for (u32 i = 0; i < chunkFrames; ++i) {
+                while (localSamplePosFixed >= sampleBoundaryFixed) {
+                    if (!localLooping) {
+                        commitState(false);
+                        return;
+                    }
+                    const i64 loopLenFixed = localLoopEndFixed - localLoopStartFixed;
+                    if (loopLenFixed <= 0) {
+                        commitState(false);
+                        return;
+                    }
+                    localSamplePosFixed = localLoopStartFixed + ((localSamplePosFixed - localLoopStartFixed) % loopLenFixed);
+                }
+
+                AdvanceEnvelope(localEnvPhase, localEnvLevel, localEnvSampleCount, envDelayEnd, envAttackRate,
+                                envHoldEnd, envDecayRate, envSustainLevel, envReleaseRate);
+                if (localUseModEnv) {
+                    AdvanceEnvelope(localModEnvPhase, localModEnvLevel, localModEnvSampleCount, modEnvDelayEnd, modEnvAttackRate,
+                                    modEnvHoldEnd, modEnvDecayRate, modEnvSustainLevel, modEnvReleaseRate);
+                }
+                if (localEnvPhase == EnvPhase::Off) {
+                    commitState(false);
+                    return;
+                }
+                if (localEnvPhase == EnvPhase::Decay && envSustainLevel < 1e-9f && localEnvLevel < 1e-5f) {
+                    commitState(false);
+                    return;
+                }
+
+                const f32 normalized = localIntegralStep
+                    ? Read24BitSampleNormalized(sampleData24, static_cast<size_t>(localSamplePosFixed >> kSamplePosFracBits))
+                    : (localLooping
+                        ? CubicInterpFixedLooped24Bit(sampleData24, localSamplePosFixed, sampleDataSize,
+                                                      static_cast<size_t>(localLoopStartFixed >> kSamplePosFracBits),
+                                                      static_cast<size_t>(localLoopEndFixed >> kSamplePosFracBits))
+                        : CubicInterpFixed24Bit(sampleData24, localSamplePosFixed, sampleDataSize));
+                const f32 modLfoValue = ComputeLfoValue(modLfoDelayEnd, localModLfoSampleCount, localModLfoPhase, modLfoPhaseStep);
+                const f32 vibLfoValue = ComputeLfoValue(vibLfoDelayEnd, localVibLfoSampleCount, localVibLfoPhase, vibLfoPhaseStep);
+                const f64 portamentoSemitones = localPortamentoOffsetSemitones;
+                const f64 pitchOffsetSemitones =
+                    pitchBendSemitones +
+                    perNotePitchSemitones +
+                    portamentoSemitones +
+                    static_cast<f64>(modEnvToPitchCents * localModEnvLevel + modLfoToPitchCents * modLfoValue + vibLfoToPitchCents * vibLfoValue) / 100.0;
+                const i64 dynamicSampleStepFixed = static_cast<i64>(std::llround(
+                    baseSampleStep * std::pow(2.0, pitchOffsetSemitones / 12.0) * 4294967296.0));
+                localSamplePosFixed += dynamicSampleStepFixed;
+                if (localPortamentoSamplesRemaining > 0) {
+                    --localPortamentoSamplesRemaining;
+                    localPortamentoOffsetSemitones += localPortamentoStepSemitones;
+                    if (localPortamentoSamplesRemaining == 0 || std::fabs(localPortamentoOffsetSemitones) < 1.0e-6) {
+                        localPortamentoSamplesRemaining = 0;
+                        localPortamentoOffsetSemitones = 0.0;
+                        localPortamentoStepSemitones = 0.0;
+                    }
+                }
+
+                f32 filteredSample = normalized;
+                if (filterEnabled) {
+                    const f32 dynamicOffset =
+                        static_cast<f32>(localFilterModEnvToFcCents) * localModEnvLevel +
+                        modLfoToFilterFcCents * modLfoValue;
+                    const i32 dynamicFc = std::clamp(
+                        localFilterBaseFcCents +
+                        static_cast<i32>(dynamicOffset >= 0.0f ? dynamicOffset + 0.5f : dynamicOffset - 0.5f),
+                        kFilterFcMin, kFilterFcMax);
+                    if (dynamicFc != localFilterCurrentFcCents) {
+                        localFilterCurrentFcCents = dynamicFc;
+                        ComputeLowPassCoeffs(dynamicFc, localFilterQCb, localOutputSampleRate,
+                                             localFilterB0, localFilterB1, localFilterB2, localFilterA1, localFilterA2);
+                    }
+                    filteredSample = ProcessFilterSample(
+                        filteredSample,
+                        localFilterB0, localFilterB1, localFilterB2, localFilterA1, localFilterA2,
+                        localFilterZ1, localFilterZ2);
+                }
+
+                const i32 tremoloAttenCb = static_cast<i32>(std::max(0.0f, ((modLfoValue + 1.0f) * 0.5f) * modLfoToVolumeCb));
+                const f32 tremoloGain = static_cast<f32>(AttenuationToGain(tremoloAttenCb));
+                const f32 out = filteredSample * localEnvLevel * tremoloGain;
+                const u32 frameIndex = offset + i;
+                outL[frameIndex] += out * dryGainL;
+                outR[frameIndex] += out * dryGainR;
+                if (hasReverb) {
+                    reverbL[frameIndex] += out * reverbGainL;
+                    reverbR[frameIndex] += out * reverbGainR;
+                }
+                if (hasChorus) {
+                    chorusL[frameIndex] += out * chorusGainL;
+                    chorusR[frameIndex] += out * chorusGainR;
+                }
+            }
+
+            offset += chunkFrames;
+        }
+
+        commitState(true);
+        return;
+    }
 
     if (localEnvPhase == EnvPhase::Sustain && !filterEnabled && !localUseModEnv && !localUseLfo) {
         const f32 outScale = static_cast<f32>(localEnvLevel) * kInvPcmScale;

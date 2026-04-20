@@ -155,10 +155,12 @@ public:
 
     // サンプルデータ参照（非所有）
     const i16* sampleData     = nullptr;
+    const i32* sampleData24   = nullptr;
+    bool       use24BitSamples = false;
     size_t     sampleDataSize = 0;      // LinearInterp 境界チェック用
 
     // NoteOn で初期化
-    void NoteOn(const ResolvedZone& zone, const i16* pcmData, size_t pcmDataSize,
+    void NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmData24, size_t pcmDataSize,
                 u16 bankNumber, u8 ch, u8 programNumber, u8 key, u16 vel, u32 noteId, u32 sampleRate, f64 pitchBendSemitones,
                 SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
                 const SpecialVoiceRoute& specialRoute = {},

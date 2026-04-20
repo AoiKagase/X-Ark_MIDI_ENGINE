@@ -18,6 +18,8 @@
 
 using namespace XArkMidi;
 
+static std::wstring Utf8ToWstring(const char* utf8);
+
 namespace {
 
 constexpr size_t kDefaultMaxSampleDataBytes = 512ull * 1024ull * 1024ull;
@@ -52,6 +54,18 @@ CreateLimits ResolveCreateLimits(const XAmeCreateOptions* options) {
         limits.maxDlsPoolTableEntries = options->maxDlsPoolTableEntries;
     }
     return limits;
+}
+
+std::wstring ResolveOptionalRomBankPath(const XAmeCreateOptions* options) {
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, sf2RomBankPath), sizeof(options->sf2RomBankPath)) &&
+        options->sf2RomBankPath && options->sf2RomBankPath[0]) {
+        return std::wstring(options->sf2RomBankPath);
+    }
+    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, sf2RomBankPathUtf8), sizeof(options->sf2RomBankPathUtf8)) &&
+        options->sf2RomBankPathUtf8 && options->sf2RomBankPathUtf8[0]) {
+        return Utf8ToWstring(options->sf2RomBankPathUtf8);
+    }
+    return std::wstring();
 }
 
 SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
@@ -192,6 +206,7 @@ XAmeResult XAmeCreateEngineWithOptions(
     }
     const CreateLimits limits = ResolveCreateLimits(options);
     const SynthCompatOptions compatOptions = ResolveCompatOptions(options);
+    const std::wstring romBankPath = ResolveOptionalRomBankPath(options);
     XAmeEngine_* eng = nullptr;
     try {
         eng = new XAmeEngine_();
@@ -209,6 +224,11 @@ XAmeResult XAmeCreateEngineWithOptions(
             sf2->SetResourceLimits(limits.maxSampleDataBytes, limits.maxSf2PdtaEntries);
             if (!sf2->LoadFromFile(soundBankPath)) {
                 SetError("SF2 parse error: " + sf2->ErrorMessage());
+                delete eng;
+                return XAME_ERR_PARSE_SF2;
+            }
+            if (!romBankPath.empty() && !sf2->LoadRomSampleSourceFromFile(romBankPath)) {
+                SetError("SF2 ROM source parse error: " + sf2->ErrorMessage());
                 delete eng;
                 return XAME_ERR_PARSE_SF2;
             }

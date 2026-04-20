@@ -220,6 +220,9 @@ struct ResolvedZone {
     const SampleHeader* sample; // サンプルヘッダーへのポインタ（非所有）
     i32 generators[GEN_COUNT];  // マージ済みジェネレーター値
     bool noTruncation = false;  // DLS wsmp NO_TRUNCATION
+    const i16* sampleDataOverride = nullptr;
+    const i32* sampleData24Override = nullptr;
+    size_t sampleDataOverrideCount = 0;
 };
 
 } // namespace XArkMidi

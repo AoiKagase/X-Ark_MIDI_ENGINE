@@ -724,7 +724,7 @@ Voice* VoicePool::AllocVoice(u8 channel, u8 key) {
     return nullptr;
 }
 
-void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, size_t sampleDataSize,
+void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, const i32* sampleData24, size_t sampleDataSize,
                         u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
                         f64 pitchBendSemitones, u8 exclusiveClass,
                         f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,
@@ -886,7 +886,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                 Voice* v = AllocVoice(channel, key);
                 if (!v) return;
                 const u16 voiceIndex = static_cast<u16>(v - voices_);
-                v->NoteOn(*primaryEntry.zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
+                v->NoteOn(*primaryEntry.zone, sampleData, sampleData24, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
                           pitchBendSemitones, soundBankKind, compatOptions, primaryEntry.route,
                           portamentoSourceKey, portamentoTime);
                 if (v->active) {
@@ -902,7 +902,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             Voice* root = AllocVoice(channel, key);
             if (!root) return;
             const u16 rootIndex = static_cast<u16>(root - voices_);
-            root->NoteOn(*layerPlan.entries[0].zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
+            root->NoteOn(*layerPlan.entries[0].zone, sampleData, sampleData24, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
                          pitchBendSemitones, soundBankKind, compatOptions, layerPlan.entries[0].route,
                          portamentoSourceKey, portamentoTime);
             if (!root->active) {
@@ -917,7 +917,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             }
 
             const u16 linkedIndex = static_cast<u16>(linked - voices_);
-            linked->NoteOn(*layerPlan.entries[1].zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
+            linked->NoteOn(*layerPlan.entries[1].zone, sampleData, sampleData24, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
                            pitchBendSemitones, soundBankKind, compatOptions, layerPlan.entries[1].route,
                            portamentoSourceKey, portamentoTime);
             if (!linked->active) {
@@ -949,7 +949,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             Voice* v = AllocVoice(channel, key);
             if (!v) return; // ボイス確保失敗
             const u16 voiceIndex = static_cast<u16>(v - voices_);
-            v->NoteOn(*entry.zone, sampleData, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
+            v->NoteOn(*entry.zone, sampleData, sampleData24, sampleDataSize, bank, channel, program, key, velocity, noteId, sampleRate,
                       pitchBendSemitones, soundBankKind, compatOptions, entry.route,
                       portamentoSourceKey, portamentoTime);
             if (v->active) {

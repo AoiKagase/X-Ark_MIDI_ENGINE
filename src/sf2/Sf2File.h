@@ -10,6 +10,7 @@
 #include "../common/FileUtil.h"
 #include "../soundbank/SoundBank.h"
 #include <string>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -20,6 +21,8 @@ public:
     SoundBankKind Kind() const override { return SoundBankKind::Sf2; }
     bool LoadFromMemory(const u8* data, size_t size);
     bool LoadFromFile(const std::wstring& path);
+    bool LoadRomSampleSourceFromMemory(const u8* data, size_t size);
+    bool LoadRomSampleSourceFromFile(const std::wstring& path);
     void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries);
 
     // プリセット検索: bank/program/key/velocity に一致する ResolvedZone リストを返す
@@ -29,16 +32,15 @@ public:
 
     // サンプルデータへのアクセス（smpl チャンクの i16 配列）
     const i16*  SampleData()      const override { return sampleData_.data(); }
+    const i32*  SampleData24()    const override { return sampleData24_.empty() ? nullptr : sampleData24_.data(); }
     size_t      SampleDataCount() const override { return sampleData_.size(); }
 
     const std::string& ErrorMessage() const override { return errorMsg_; }
     u32 UnsupportedModulatorCount() const { return unsupportedModulatorCount_; }
     u32 UnsupportedModulatorTransformCount() const { return unsupportedModulatorTransformCount_; }
 
-    // SF2 2.04 の sm24 チャンク（24-bit サンプル下位バイト）が存在したが
-    // 本実装では無視されたことを示す。true の場合、音源は 16-bit 精度で読まれている。
-    // 対応するには smpl と sm24 を結合して 24-bit PCM を構築する必要がある。
-    // 参照: SF2 spec §4.4 (SoundFont 2.04)
+    // SF2 2.04 の sm24 チャンクが存在したが無視されたことを示す。
+    // true の場合、音源は 16-bit 精度で読まれている。
     bool HasIgnoredSm24() const { return hasIgnoredSm24_; }
 
     f32 GetLoudnessNormCompensation() const override { return normCompensation_; }
@@ -80,6 +82,7 @@ private:
     };
 
     std::vector<i16>           sampleData_;
+    std::vector<i32>           sampleData24_;
     std::vector<SFPresetHeader> presets_;
     std::vector<SFPresetBag>    presetBags_;
     std::vector<SFGenList>      presetGens_;
@@ -91,6 +94,7 @@ private:
     std::vector<SFSample>       samples_;
     std::vector<SampleHeader>   sampleHeaders_;
     std::unordered_map<u32, std::vector<int>> presetIndexMap_;
+    std::shared_ptr<Sf2File> romBank_;
 
     std::string errorMsg_;
 
@@ -141,6 +145,7 @@ private:
     bool hasSmpl_ = false;
     bool hasSm24Chunk_ = false;
     u32 sm24ChunkSize_ = 0;
+    std::vector<u8> sm24Data_;
     bool hasIfil_ = false;
     u16 ifilMajor_ = 0;
     u16 ifilMinor_ = 0;

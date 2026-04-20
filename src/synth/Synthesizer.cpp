@@ -794,7 +794,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
         }
     }
 
-    voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleDataCount(),
+    voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleData24(), soundBank_->SampleDataCount(),
                       resolvedBank, ch, resolvedProgram, key, vel, sampleRate_,
                       pitchBend, excClass, state.VolumeFactor(), state.pan32,
                       state.reverbSend32, state.chorusSend32, soundBank_->Kind(), compatOptions_,

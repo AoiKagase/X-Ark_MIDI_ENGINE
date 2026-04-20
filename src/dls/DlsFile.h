@@ -26,6 +26,7 @@ public:
                    const ModulatorContext* ctx = nullptr) const override;
 
     const i16* SampleData() const override { return sampleData_.data(); }
+    const i32* SampleData24() const override { return nullptr; }
     size_t SampleDataCount() const override { return sampleData_.size(); }
     const std::string& ErrorMessage() const override { return errorMsg_; }
 

@@ -39,6 +39,7 @@ public:
                            const ModulatorContext* ctx = nullptr) const = 0;
 
     virtual const i16* SampleData() const = 0;
+    virtual const i32* SampleData24() const { return nullptr; }
     virtual size_t SampleDataCount() const = 0;
     virtual const std::string& ErrorMessage() const = 0;
 

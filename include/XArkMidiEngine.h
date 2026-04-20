@@ -73,6 +73,10 @@ typedef struct XAmeCreateOptions_ {
     unsigned int        maxDlsPoolTableEntries;
     /* Bitwise OR of XAmeCompatibilityFlags values. XAmeCompatibilityFlags の OR 値です。 */
     unsigned int        compatibilityFlags;
+    /* Optional UTF-16 path to an external SF2 ROM sample bank used by SoundFont ROM-backed samples. NULL disables ROM sample lookup. SF2 の ROM サンプル参照に使う外部 SF2 ROM バンクの UTF-16 パスです。 */
+    const wchar_t*      sf2RomBankPath;
+    /* Optional UTF-8 path to an external SF2 ROM sample bank used by SoundFont ROM-backed samples. Used when sf2RomBankPath is NULL. sf2RomBankPath が NULL の場合に使う UTF-8 パスです。 */
+    const char*         sf2RomBankPathUtf8;
 } XAmeCreateOptions;
 
 /* Key event popped from the engine's per-channel event queue. チャンネル別イベントキューから取得したキーイベントです。 */

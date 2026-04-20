@@ -25,7 +25,7 @@ public:
     VoicePool& operator=(const VoicePool&) = delete;
 
     // NoteOn: ゾーンリストから各ゾーンにボイスを割り当てる
-    void NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, size_t sampleDataSize,
+    void NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, const i32* sampleData24, size_t sampleDataSize,
                 u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
                 f64 pitchBendSemitones, u8 exclusiveClass,
                 f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,

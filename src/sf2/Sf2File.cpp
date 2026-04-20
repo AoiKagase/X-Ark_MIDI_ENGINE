@@ -586,11 +586,13 @@ void Sf2File::SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries) {
 
 bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     sampleData_.clear();
+    sampleData24_.clear();
     presets_.clear(); presetBags_.clear(); presetGens_.clear(); presetMods_.clear();
     instruments_.clear(); instBags_.clear(); instGens_.clear(); instMods_.clear();
     samples_.clear();
     sampleHeaders_.clear();
     presetIndexMap_.clear();
+    romBank_.reset();
     errorMsg_.clear();
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
@@ -598,6 +600,7 @@ bool Sf2File::LoadFromMemory(const u8* data, size_t size) {
     hasSmpl_ = false;
     hasSm24Chunk_ = false;
     sm24ChunkSize_ = 0;
+    sm24Data_.clear();
     hasIfil_ = false;
     ifilMajor_ = 0;
     ifilMinor_ = 0;
@@ -640,6 +643,24 @@ bool Sf2File::LoadFromFile(const std::wstring& path) {
     if (!ReadFileBytes(path, data, errorMsg_))
         return false;
     return LoadFromMemory(data.data(), data.size());
+}
+
+bool Sf2File::LoadRomSampleSourceFromMemory(const u8* data, size_t size) {
+    auto romBank = std::make_shared<Sf2File>();
+    romBank->SetResourceLimits(maxSampleDataBytes_, maxPdtaEntries_);
+    if (!romBank->LoadFromMemory(data, size)) {
+        errorMsg_ = "SF2 ROM source parse error: " + romBank->ErrorMessage();
+        return false;
+    }
+    romBank_ = std::move(romBank);
+    return true;
+}
+
+bool Sf2File::LoadRomSampleSourceFromFile(const std::wstring& path) {
+    std::vector<u8> data;
+    if (!ReadFileBytes(path, data, errorMsg_))
+        return false;
+    return LoadRomSampleSourceFromMemory(data.data(), data.size());
 }
 
 bool Sf2File::ParseRiff(BinaryReader& r) {
@@ -827,9 +848,12 @@ bool Sf2File::ParseSdta(BinaryReader& r, u32 /*chunkSize*/) {
                 errorMsg_ = "SF2 duplicate sm24 chunk";
                 return false;
             }
-            hasIgnoredSm24_ = true;
             hasSm24Chunk_ = true;
             sm24ChunkSize_ = subSize;
+            sm24Data_.resize(subSize);
+            if (subSize > 0) {
+                std::memcpy(sm24Data_.data(), r.CurrentPtr(), subSize);
+            }
             r.Skip(subSize);
             if ((subSize & 1) && !r.IsEof()) r.Skip(1);
         }
@@ -1192,9 +1216,19 @@ bool Sf2File::ValidateInfoAndSdtaConsistency() {
     }
     if (hasSm24Chunk_) {
         const bool is204OrLater = (ifilMajor_ > 2) || (ifilMajor_ == 2 && ifilMinor_ >= 4);
-        const u32 expectedSm24Size = static_cast<u32>((sampleData_.size() + 1u) / 2u);
+        const u32 expectedSm24Size = static_cast<u32>(sampleData_.size());
         if (!is204OrLater || sampleData_.empty() || sm24ChunkSize_ != expectedSm24Size) {
+            hasIgnoredSm24_ = true;
             hasSm24Chunk_ = false;
+            sm24Data_.clear();
+        } else {
+            hasIgnoredSm24_ = false;
+            sampleData24_.resize(sampleData_.size());
+            for (size_t i = 0; i < sampleData_.size(); ++i) {
+                const i32 hi16 = static_cast<i32>(sampleData_[i]);
+                const i32 lo8 = static_cast<i32>(sm24Data_[i]);
+                sampleData24_[i] = (hi16 << 8) | lo8;
+            }
         }
     }
 
@@ -1323,6 +1357,9 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                            const ModulatorContext* ctx,
                            ResolvedZone& outZone) const {
     outZone.sample = sample;
+    outZone.sampleDataOverride = nullptr;
+    outZone.sampleData24Override = nullptr;
+    outZone.sampleDataOverrideCount = 0;
     const i32* defaults = GetSF2GeneratorDefaults();
     constexpr i32 kUnset = std::numeric_limits<i32>::min();
 
@@ -1744,11 +1781,16 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                 if (sampleIdx < 0 || sampleIdx >= static_cast<int>(samples_.size())) continue;
 
                 const SFSample* smp = &samples_[sampleIdx];
-                // ROM サンプルはスキップ
-                if (smp->sfSampleType & 0x8000) continue;
-
                 ResolvedZone zone;
                 ResolveZone(globalPresetBag, globalInstBag, ib, pb, &sampleHeaders_[sampleIdx], key, velocity, ctx, zone);
+                if ((smp->sfSampleType & 0x8000u) != 0u) {
+                    if (!romBank_ || romBank_->SampleDataCount() == 0) {
+                        continue;
+                    }
+                    zone.sampleDataOverride = romBank_->SampleData();
+                    zone.sampleData24Override = romBank_->SampleData24();
+                    zone.sampleDataOverrideCount = romBank_->SampleDataCount();
+                }
                 // SampleID を確定値で設定
                 zone.generators[GEN_SampleID] = sampleIdx;
                 outZones.push_back(zone);
