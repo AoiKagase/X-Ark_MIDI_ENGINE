@@ -223,6 +223,9 @@ struct ResolvedZone {
     const i16* sampleDataOverride = nullptr;
     const i32* sampleData24Override = nullptr;
     size_t sampleDataOverrideCount = 0;
+    i32 presetBagIndex = -1;
+    i32 instrumentBagIndex = -1;
+    i32 sampleId = -1;
 };
 
 } // namespace XArkMidi

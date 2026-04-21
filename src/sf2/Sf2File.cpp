@@ -445,7 +445,7 @@ i32 ClampGeneratorValue(u16 oper, i32 value) {
     case GEN_EndAddrsCoarseOffset:
     case GEN_StartloopAddrsCoarse:
     case GEN_EndloopAddrsCoarse:
-        return std::clamp(value, 0, 32767);
+        return std::clamp(value, -32768, 32767);
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
@@ -1435,6 +1435,9 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     outZone.sampleDataOverride = nullptr;
     outZone.sampleData24Override = nullptr;
     outZone.sampleDataOverrideCount = 0;
+    outZone.presetBagIndex = presetBagIdx;
+    outZone.instrumentBagIndex = instBagIdx;
+    outZone.sampleId = -1;
     const i32* defaults = GetSF2GeneratorDefaults();
     constexpr i32 kUnset = std::numeric_limits<i32>::min();
 
@@ -1877,6 +1880,7 @@ bool Sf2File::FindZones(u16 bank, u8 program, u8 key, u16 velocity,
                 }
                 // SampleID を確定値で設定
                 zone.generators[GEN_SampleID] = sampleIdx;
+                zone.sampleId = sampleIdx;
                 outZones.push_back(zone);
             }
         }

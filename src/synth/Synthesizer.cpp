@@ -777,10 +777,6 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
         voicePool_.AllNotesOff(ch);
     }
 
-    u8 excClass = 0;
-    if (!zoneScratch_.empty())
-        excClass = static_cast<u8>(zoneScratch_[0].generators[GEN_ExclusiveClass]);
-
     f64 pitchBend = 0.0;
     if (!state.isDrum) {
         pitchBend = (soundBank_->Kind() == SoundBankKind::Sf2)
@@ -798,7 +794,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
 
     voicePool_.NoteOn(zoneScratch_, soundBank_->SampleData(), soundBank_->SampleData24(), soundBank_->SampleDataCount(),
                       resolvedBank, ch, resolvedProgram, key, vel, sampleRate_,
-                      pitchBend, excClass, state.VolumeFactor(), state.pan32,
+                      pitchBend, state.VolumeFactor(), state.pan32,
                       state.reverbSend32, state.chorusSend32, soundBank_->Kind(), compatOptions_,
                       portamentoSourceKey, state.portamentoTime, state.softPedal);
     state.lastNoteKey = key;

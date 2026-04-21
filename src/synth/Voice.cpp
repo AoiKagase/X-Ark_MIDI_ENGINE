@@ -495,6 +495,9 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     sampleData24   = zone.sampleData24Override ? zone.sampleData24Override : pcmData24;
     use24BitSamples = (sampleData24 != nullptr);
     sampleDataSize = (zone.sampleDataOverrideCount != 0) ? zone.sampleDataOverrideCount : pcmDataSize;
+    resolvedPresetBagIndex = zone.presetBagIndex;
+    resolvedInstrumentBagIndex = zone.instrumentBagIndex;
+    resolvedSampleId = zone.sampleId;
     outputSampleRate = sampleRate;
     this->compatOptions = compatOptions;
     specialRoute = newSpecialRoute;
@@ -551,7 +554,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     const i32 sampleEndIndex = std::max<i32>(0, static_cast<i32>(smp->end) + endOff);
     const i32 loopStartIndex = std::max<i32>(0, static_cast<i32>(smp->loopStart) + loopStartOff);
     const i32 loopEndIndex = std::max<i32>(0, static_cast<i32>(smp->loopEnd) + loopEndOff);
-    const i32 sampleDataLimit = static_cast<i32>(std::min<size_t>(pcmDataSize, static_cast<size_t>(std::numeric_limits<i32>::max())));
+    const i32 sampleDataLimit = static_cast<i32>(std::min<size_t>(sampleDataSize, static_cast<size_t>(std::numeric_limits<i32>::max())));
 
     if (sampleStartIndex >= sampleDataLimit || sampleEndIndex <= sampleStartIndex) {
         active = false;
@@ -678,13 +681,17 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
 
     const i32* gen = zone.generators;
     const u8 effectiveKeyU8 = ResolveForcedKey(noteKey, gen);
-    const i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
+    i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
     ApplyResolvedZoneControllerState(zone, effectiveKey);
 
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
     const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sampleHeader, compatOptions);
     const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
+    if (specialRoute.enabled && specialRoute.clampAboveRoot &&
+        specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
+        effectiveKey = specialRoute.clampRootKey;
+    }
     f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
     if (specialRoute.enabled) {
         baseSemitones += specialRoute.detuneSemitones;

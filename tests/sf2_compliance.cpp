@@ -2,6 +2,7 @@
 #include "../src/sf2/Sf2Types.h"
 #include "../src/synth/Channel.h"
 #include "../src/synth/Interpolator.h"
+#include "../src/synth/Synthesizer.h"
 #include "../src/synth/Voice.h"
 #include "../src/synth/VoicePool.h"
 #include <array>
@@ -18,6 +19,15 @@
 using namespace XArkMidi;
 
 namespace {
+
+    struct VoicePoolProbe {
+        Voice voices_[MAX_VOICES];
+        u32 nextNoteId_;
+        std::deque<u32> noteQueue_[MIDI_CHANNEL_COUNT][128];
+        std::array<u16, MAX_VOICES> activeIndices_;
+        std::array<i16, MAX_VOICES> activeSlots_;
+        u16 activeCount_;
+    };
 
     const char* g_currentTestName = "";
 
@@ -185,6 +195,141 @@ namespace {
         appendSampleHeader("Left", 0, 64, 8, 56, 1, 4);
         appendSampleHeader("Right", 110, 174, 118, 166, 0, 2);
         appendSampleHeader("EOS", 0, 0, 0, 0, 0, 1);
+        AppendChunk(pdtaPayload, "shdr", shdr);
+
+        std::vector<u8> riffPayload;
+        AppendListChunk(riffPayload, "INFO", infoPayload);
+        AppendListChunk(riffPayload, "sdta", sdtaPayload);
+        AppendListChunk(riffPayload, "pdta", pdtaPayload);
+
+        std::vector<u8> file;
+        file.insert(file.end(), { 'R','I','F','F' });
+        AppendU32LE(file, static_cast<u32>(riffPayload.size() + 4));
+        file.insert(file.end(), { 's','f','b','k' });
+        file.insert(file.end(), riffPayload.begin(), riffPayload.end());
+        return file;
+    }
+
+    std::vector<u8> BuildLayeredSameSampleSf2(i16 panA, i16 panB, u16 exclusiveClassA = 0, u16 exclusiveClassB = 0) {
+        std::vector<u8> infoPayload;
+        std::vector<u8> ifil;
+        AppendU16LE(ifil, 2);
+        AppendU16LE(ifil, 4);
+        AppendChunk(infoPayload, "ifil", ifil);
+        const std::vector<u8> isng = { 'E','M','U','8','0','0','0', 0 };
+        AppendChunk(infoPayload, "isng", isng);
+        const std::vector<u8> inam = { 'L','a','y','e','r','e','d', 0 };
+        AppendChunk(infoPayload, "INAM", inam);
+
+        std::vector<u8> sdtaPayload;
+        std::vector<u8> smpl;
+        for (int i = 0; i < 64; ++i) {
+            AppendI16LE(smpl, static_cast<i16>(std::lround(std::sin((static_cast<double>(i) / 64.0) * 6.283185307179586) * 12000.0)));
+        }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
+        }
+        AppendChunk(sdtaPayload, "smpl", smpl);
+
+        std::vector<u8> pdtaPayload;
+
+        std::vector<u8> phdr;
+        auto appendPresetHeader = [&](const char* name, u16 preset, u16 bank, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            phdr.insert(phdr.end(), padded, padded + 20);
+            AppendU16LE(phdr, preset);
+            AppendU16LE(phdr, bank);
+            AppendU16LE(phdr, bagIndex);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+        };
+        appendPresetHeader("Layered", 0, 0, 0);
+        appendPresetHeader("EOP", 0, 0, 1);
+        AppendChunk(pdtaPayload, "phdr", phdr);
+
+        std::vector<u8> pbag;
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 1);
+        AppendU16LE(pbag, 0);
+        AppendChunk(pdtaPayload, "pbag", pbag);
+
+        std::vector<u8> pmod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(pmod, 0);
+        }
+        AppendChunk(pdtaPayload, "pmod", pmod);
+
+        std::vector<u8> pgen;
+        AppendU16LE(pgen, GEN_Instrument);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendChunk(pdtaPayload, "pgen", pgen);
+
+        std::vector<u8> inst;
+        auto appendInst = [&](const char* name, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            inst.insert(inst.end(), padded, padded + 20);
+            AppendU16LE(inst, bagIndex);
+        };
+        appendInst("LayerInst", 0);
+        appendInst("EOI", 2);
+        AppendChunk(pdtaPayload, "inst", inst);
+
+        std::vector<u8> ibag;
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 3);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 6);
+        AppendU16LE(ibag, 0);
+        AppendChunk(pdtaPayload, "ibag", ibag);
+
+        std::vector<u8> imod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(imod, 0);
+        }
+        AppendChunk(pdtaPayload, "imod", imod);
+
+        std::vector<u8> igen;
+        auto appendGen = [&](u16 oper, i16 value) {
+            AppendU16LE(igen, oper);
+            AppendI16LE(igen, value);
+        };
+        appendGen(GEN_Pan, panA);
+        appendGen(GEN_ExclusiveClass, static_cast<i16>(exclusiveClassA));
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 0);
+        appendGen(GEN_Pan, panB);
+        appendGen(GEN_ExclusiveClass, static_cast<i16>(exclusiveClassB));
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, 0);
+        AppendChunk(pdtaPayload, "igen", igen);
+
+        std::vector<u8> shdr;
+        auto appendSampleHeader = [&](const char* name, u32 start, u32 end, u32 loopStart, u32 loopEnd,
+                                      u32 sampleRate, u8 originalPitch, i8 pitchCorrection, u16 sampleType) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            shdr.insert(shdr.end(), padded, padded + 20);
+            AppendU32LE(shdr, start);
+            AppendU32LE(shdr, end);
+            AppendU32LE(shdr, loopStart);
+            AppendU32LE(shdr, loopEnd);
+            AppendU32LE(shdr, sampleRate);
+            shdr.push_back(originalPitch);
+            shdr.push_back(static_cast<u8>(pitchCorrection));
+            AppendU16LE(shdr, 0);
+            AppendU16LE(shdr, sampleType);
+        };
+        appendSampleHeader("Sample", 0, 64, 8, 56, 44100, 60, 0, 1);
+        appendSampleHeader("EOS", 0, 0, 0, 0, 44100, 0, 0, 1);
         AppendChunk(pdtaPayload, "shdr", shdr);
 
         std::vector<u8> riffPayload;
@@ -783,6 +928,292 @@ namespace {
         Require(std::fabs(dls.chorusSend - 0.65f) < 1.0e-4f, "Non-SF2 chorus policy should still sum sends");
     }
 
+    void TestOutputLimiterAvoidsCrossSampleDucking() {
+        OutputLimiter limiter;
+
+        f32 loudL = 1.5f;
+        f32 loudR = -1.5f;
+        limiter.Process(loudL, loudR);
+        Require(std::fabs(loudL) <= 1.0f && std::fabs(loudR) <= 1.0f,
+            "Limiter should still constrain hot samples into the PCM range");
+
+        f32 quietL = 0.25f;
+        f32 quietR = -0.25f;
+        limiter.Process(quietL, quietR);
+        Require(std::fabs(quietL - 0.25f) < 1.0e-6f,
+            "Limiter should not duck later quiet samples after a transient peak");
+        Require(std::fabs(quietR + 0.25f) < 1.0e-6f,
+            "Limiter should preserve the opposite lane when no limiting is needed");
+    }
+
+    void TestOutputLimiterUsesLinkedStereoGain() {
+        OutputLimiter limiter;
+
+        f32 sampleL = 0.49f;
+        f32 sampleR = 1.40f;
+        limiter.Process(sampleL, sampleR);
+
+        Require(sampleR > 0.98f && sampleR < 1.0f,
+            "Limiter should soft-limit the hotter lane without exceeding full scale");
+        const f32 expectedGain = sampleR / 1.40f;
+        Require(std::fabs(sampleL - 0.49f * expectedGain) < 1.0e-6f,
+            "Limiter should apply the same gain to the left lane when the right lane clips");
+        Require(std::fabs(sampleR - 1.40f * expectedGain) < 1.0e-6f,
+            "Limiter should keep both lanes on the same linked gain curve");
+    }
+
+    void TestNegativeSampleOffsetsArePreserved() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
+        config.instGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -2));
+        config.instGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, -3));
+        config.instGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -1));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_StartAddrsOffset] == -4,
+            "Negative start address offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndAddrsOffset] == -2,
+            "Negative end address offsets should survive zone resolution");
+        Require(zone.generators[GEN_StartloopAddrsOffset] == -3,
+            "Negative loop-start offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndloopAddrsOffset] == -1,
+            "Negative loop-end offsets should survive zone resolution");
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        Require(voice.active, "Voice with negative sample offsets should still activate");
+        Require(voice.samplePosFixed == static_cast<i64>(sf2.SampleHeaders(0)->start) * (1ll << 32),
+            "Negative start offset should survive resolution without underflowing below sample start");
+        Require(voice.sampleEnd == sf2.SampleHeaders(0)->end - 2,
+            "Negative end offset should shorten the playable sample end");
+        Require(voice.loopStart == sf2.SampleHeaders(0)->loopStart - 3,
+            "Negative loop-start offset should move the loop earlier");
+        Require(voice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 1,
+            "Negative loop-end offset should move the loop end earlier");
+    }
+
+    void TestSpecialSf2RoutePreservesIndependentDetune() {
+        std::array<i16, 96> sampleData{};
+        for (size_t i = 0; i < sampleData.size(); ++i) {
+            sampleData[i] = static_cast<i16>(1000 + static_cast<i16>(i * 32));
+        }
+
+        SampleHeader sample{};
+        std::strncpy(sample.sampleName, "Layer", sizeof(sample.sampleName));
+        sample.start = 0;
+        sample.end = 64;
+        sample.loopStart = 8;
+        sample.loopEnd = 56;
+        sample.sampleRate = 44100;
+        sample.originalPitch = 60;
+        sample.sampleType = 1;
+
+        ResolvedZone zone0{};
+        ResolvedZone zone1{};
+        std::memcpy(zone0.generators, GetSF2GeneratorDefaults(), sizeof(zone0.generators));
+        std::memcpy(zone1.generators, GetSF2GeneratorDefaults(), sizeof(zone1.generators));
+        zone0.sample = &sample;
+        zone1.sample = &sample;
+        zone1.generators[GEN_CoarseTune] = 7;
+        zone1.generators[GEN_KeyRange] = 0x6400;
+
+        std::vector<ResolvedZone> zones = { zone0, zone1 };
+        VoicePool pool;
+        pool.NoteOn(zones,
+                    sampleData.data(),
+                    nullptr,
+                    sampleData.size(),
+                    0,
+                    0,
+                    0,
+                    60,
+                    65535,
+                    44100,
+                    0.0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    SynthCompatOptions{});
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        Require(probe.activeCount_ == 1, "Special SF2 route should aggregate into one root voice");
+        Voice& root = probe.voices_[probe.activeIndices_[0]];
+        Require(root.HasLinkedVoice(), "Aggregated special route should still create a linked voice");
+        Voice& linked = probe.voices_[root.linkedVoiceIndex];
+        Require(root.sampleStepFixed != linked.sampleStepFixed,
+            "Special-route linked voice should keep its own detuned playback step");
+    }
+
+    void TestSpecialSf2RouteClampSurvivesControllerRefresh() {
+        std::array<i16, 96> sampleData{};
+        for (size_t i = 0; i < sampleData.size(); ++i) {
+            sampleData[i] = static_cast<i16>(1000 + static_cast<i16>(i * 32));
+        }
+
+        SampleHeader sample{};
+        std::strncpy(sample.sampleName, "Layer", sizeof(sample.sampleName));
+        sample.start = 0;
+        sample.end = 64;
+        sample.loopStart = 8;
+        sample.loopEnd = 56;
+        sample.sampleRate = 44100;
+        sample.originalPitch = 60;
+        sample.sampleType = 1;
+
+        ResolvedZone zone{};
+        std::memcpy(zone.generators, GetSF2GeneratorDefaults(), sizeof(zone.generators));
+        zone.sample = &sample;
+        zone.sampleId = 0;
+        zone.presetBagIndex = 0;
+        zone.instrumentBagIndex = 0;
+
+        SpecialVoiceRoute route{};
+        route.enabled = true;
+        route.clampAboveRoot = true;
+        route.clampRootKey = 60;
+
+        Voice voice;
+        voice.NoteOn(zone, sampleData.data(), nullptr, sampleData.size(), 0, 0, 0, 72, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{}, route);
+        Require(voice.active, "Special-route voice should activate");
+        const i64 initialStep = voice.sampleStepFixed;
+        voice.RefreshResolvedZoneControllers(zone);
+        Require(voice.sampleStepFixed == initialStep,
+            "Special-route clamp should survive controller refresh recalculation");
+    }
+
+    void TestProgramLayerRefreshMatchesZoneIdentity() {
+        const std::vector<u8> bytes = BuildLayeredSameSampleSf2(-500, 500);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 60, 65535, zones, nullptr), "Layered SF2 should resolve zones");
+        Require(zones.size() == 2, "Layered SF2 should expose two local zones");
+        Require(zones[0].sample == zones[1].sample, "Layered SF2 test should share one sample");
+        Require(zones[0].instrumentBagIndex != zones[1].instrumentBagIndex,
+            "Layered SF2 test should use distinct instrument zones");
+
+        VoicePool pool;
+        pool.NoteOn(zones,
+                    sf2.SampleData(),
+                    sf2.SampleData24(),
+                    sf2.SampleDataCount(),
+                    0,
+                    0,
+                    0,
+                    60,
+                    65535,
+                    44100,
+                    0.0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    SynthCompatOptions{});
+        Require(pool.ActiveCount() == 2, "Non-aggregated same-sample layers should create two root voices");
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        Voice& first = probe.voices_[probe.activeIndices_[0]];
+        Voice& second = probe.voices_[probe.activeIndices_[1]];
+        const bool hasLeftRightBefore =
+            (first.baseGainL > first.baseGainR && second.baseGainR > second.baseGainL) ||
+            (first.baseGainR > first.baseGainL && second.baseGainL > second.baseGainR);
+        Require(hasLeftRightBefore, "Layered same-sample voices should start with distinct pan lanes");
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        pool.RefreshSf2Controllers(0, sf2, ctx, 1.0f, 0x81020408u, 0x50A14285u, 0u);
+
+        const bool hasLeftRightAfter =
+            (first.baseGainL > first.baseGainR && second.baseGainR > second.baseGainL) ||
+            (first.baseGainR > first.baseGainL && second.baseGainL > second.baseGainR);
+        Require(hasLeftRightAfter,
+            "Controller refresh should preserve layer-specific zone identity for shared samples");
+    }
+
+    void TestExclusiveClassRespectsProgramLayerZone() {
+        const std::vector<u8> bytes = BuildLayeredSameSampleSf2(-250, 250, 1, 0);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 60, 65535, zones, nullptr), "Layered SF2 should resolve zones");
+        Require(zones.size() == 2, "Layered SF2 should expose two local zones");
+
+        VoicePool pool;
+        pool.NoteOn(zones,
+                    sf2.SampleData(),
+                    sf2.SampleData24(),
+                    sf2.SampleDataCount(),
+                    0,
+                    0,
+                    0,
+                    60,
+                    65535,
+                    44100,
+                    0.0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    SynthCompatOptions{});
+        Require(pool.ActiveCount() == 2, "Layered exclusive-class SF2 should create two root voices");
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        const u8 exc0 = probe.voices_[probe.activeIndices_[0]].exclusiveClass;
+        const u8 exc1 = probe.voices_[probe.activeIndices_[1]].exclusiveClass;
+        Require((exc0 == 1 && exc1 == 0) || (exc0 == 0 && exc1 == 1),
+            "ExclusiveClass should remain per-zone after ProgramLayer expansion");
+    }
+
+    void TestRomOverrideUsesOverrideSampleLimit() {
+        std::array<i16, 128> basePcm{};
+        std::array<i16, 24> romPcm{};
+        for (size_t i = 0; i < basePcm.size(); ++i) {
+            basePcm[i] = static_cast<i16>(i);
+        }
+        for (size_t i = 0; i < romPcm.size(); ++i) {
+            romPcm[i] = static_cast<i16>(i * 3);
+        }
+
+        SampleHeader sample{};
+        std::strncpy(sample.sampleName, "ROM", sizeof(sample.sampleName));
+        sample.start = 0;
+        sample.end = 64;
+        sample.loopStart = 8;
+        sample.loopEnd = 16;
+        sample.sampleRate = 44100;
+        sample.originalPitch = 60;
+        sample.sampleType = 0x8001u;
+
+        ResolvedZone zone{};
+        std::memcpy(zone.generators, GetSF2GeneratorDefaults(), sizeof(zone.generators));
+        zone.sample = &sample;
+        zone.sampleDataOverride = romPcm.data();
+        zone.sampleDataOverrideCount = romPcm.size();
+        zone.sampleId = 0;
+        zone.presetBagIndex = 0;
+        zone.instrumentBagIndex = 0;
+
+        Voice voice;
+        voice.NoteOn(zone, basePcm.data(), nullptr, basePcm.size(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        Require(voice.active, "ROM override voice should activate when override sample data is available");
+        Require(voice.sampleEnd == romPcm.size(),
+            "ROM override playback range should be clamped by override sample data length");
+    }
+
     void TestSf2PitchPrecedence() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -1149,7 +1580,6 @@ namespace {
                     65535,
                     44100,
                     0.0,
-                    0,
                     1.0f,
                     0x81020408u,
                     0x50A14285u,
@@ -2197,6 +2627,11 @@ int main(int argc, char** argv) {
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
     RUN_TEST(TestEffectsSendMixPolicy);
+    RUN_TEST(TestOutputLimiterAvoidsCrossSampleDucking);
+    RUN_TEST(TestOutputLimiterUsesLinkedStereoGain);
+    RUN_TEST(TestNegativeSampleOffsetsArePreserved);
+    RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
+    RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
     RUN_TEST(TestSf2PitchPrecedence);
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
     RUN_TEST(TestEnvelopeReleaseRecalculation);
@@ -2206,6 +2641,9 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRemainingDefaultModulators);
     RUN_TEST(TestDefaultModulatorSupersedeSemantics);
     RUN_TEST(TestStereoSampleLinks);
+    RUN_TEST(TestProgramLayerRefreshMatchesZoneIdentity);
+    RUN_TEST(TestExclusiveClassRespectsProgramLayerZone);
+    RUN_TEST(TestRomOverrideUsesOverrideSampleLimit);
     RUN_TEST(TestSourceCurvesSupport);
     RUN_TEST(TestSourceCurvesQuarterPoints);
     RUN_TEST(TestSf2NrpnGeneratorOffsets);

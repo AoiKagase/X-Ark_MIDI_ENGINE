@@ -67,13 +67,6 @@ void SynchronizeAggregatedLinkedVoice(Voice& root, Voice& linked) {
         return;
     }
     linked.samplePosFixed = root.samplePosFixed;
-    linked.sampleStepFixed = root.sampleStepFixed;
-    linked.baseSampleStep = root.baseSampleStep;
-    linked.pitchBendSemitones = root.pitchBendSemitones;
-    linked.perNotePitchSemitones = root.perNotePitchSemitones;
-    linked.portamentoOffsetSemitones = root.portamentoOffsetSemitones;
-    linked.portamentoStepSemitones = root.portamentoStepSemitones;
-    linked.portamentoSamplesRemaining = root.portamentoSamplesRemaining;
     linked.loopStart = root.loopStart;
     linked.loopEnd = root.loopEnd;
     linked.sampleEnd = root.sampleEnd;
@@ -255,12 +248,12 @@ bool TryAppendExplicitSf2StereoPairPlan(const ResolvedZone& a,
     return true;
 }
 
-bool PlanTargetsSample(const ProgramLayerPlan& plan, const SampleHeader* sample) {
-    if (!sample) {
+bool PlanTargetsVoice(const ProgramLayerPlan& plan, const Voice& voice) {
+    if (!voice.sampleHeader) {
         return false;
     }
     for (const auto& entry : plan.entries) {
-        if (entry.zone && entry.zone->sample == sample) {
+        if (entry.zone && voice.MatchesResolvedZone(*entry.zone)) {
             return true;
         }
     }
@@ -726,7 +719,7 @@ Voice* VoicePool::AllocVoice(u8 channel, u8 key) {
 
 void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sampleData, const i32* sampleData24, size_t sampleDataSize,
                         u16 bank, u8 channel, u8 program, u8 key, u16 velocity, u32 sampleRate,
-                        f64 pitchBendSemitones, u8 exclusiveClass,
+                        f64 pitchBendSemitones,
                         f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32, SoundBankKind soundBankKind,
                         const SynthCompatOptions& compatOptions,
                         i32 portamentoSourceKey, u8 portamentoTime, bool softPedalActive) {
@@ -763,10 +756,6 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             }
         }
     }
-    // ExclusiveClass が非ゼロなら同クラスのボイスを停止
-    if (exclusiveClass != 0)
-        KillExclusiveClass(channel, exclusiveClass);
-
     u32 noteId = nextNoteId_++;
     noteQueue_[channel][key].push_back(noteId);
     const SpecialRouteDecision specialRouteDecision = DetectSpecialSf2LayerRoute(zones, soundBankKind, key, compatOptions);
@@ -795,7 +784,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             if (v.envPhase == EnvPhase::Release || v.envPhase == EnvPhase::Off) {
                 continue;
             }
-            if (!PlanTargetsSample(layerPlan, v.sampleHeader)) {
+            if (!PlanTargetsVoice(layerPlan, v)) {
                 continue;
             }
             v.noteId = noteId;
@@ -831,7 +820,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             if (v.channel != channel || v.program != program) {
                 continue;
             }
-            if (!PlanTargetsSample(layerPlan, v.sampleHeader)) {
+            if (!PlanTargetsVoice(layerPlan, v)) {
                 continue;
             }
             const bool sameKeyRetrigger = (v.noteKey == key);
@@ -883,6 +872,10 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                         ? 0
                         : 1;
                 const auto& primaryEntry = layerPlan.entries[primaryIndex];
+                const u8 entryExclusiveClass = static_cast<u8>(primaryEntry.zone->generators[GEN_ExclusiveClass]);
+                if (entryExclusiveClass != 0) {
+                    KillExclusiveClass(channel, entryExclusiveClass);
+                }
                 Voice* v = AllocVoice(channel, key);
                 if (!v) return;
                 const u16 voiceIndex = static_cast<u16>(v - voices_);
@@ -891,7 +884,6 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                           portamentoSourceKey, portamentoTime, softPedalActive);
                 if (v->active) {
                     v->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
-                    v->exclusiveClass = exclusiveClass;
                     AppendVoiceDebugLog(zoneLogIndex, voiceIndex, *v);
                     TrackVoice(voiceIndex);
                 }
@@ -899,6 +891,14 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                 continue;
             }
 
+            const u8 rootExclusiveClass = static_cast<u8>(layerPlan.entries[0].zone->generators[GEN_ExclusiveClass]);
+            const u8 linkedExclusiveClass = static_cast<u8>(layerPlan.entries[1].zone->generators[GEN_ExclusiveClass]);
+            if (rootExclusiveClass != 0) {
+                KillExclusiveClass(channel, rootExclusiveClass);
+            }
+            if (linkedExclusiveClass != 0 && linkedExclusiveClass != rootExclusiveClass) {
+                KillExclusiveClass(channel, linkedExclusiveClass);
+            }
             Voice* root = AllocVoice(channel, key);
             if (!root) return;
             const u16 rootIndex = static_cast<u16>(root - voices_);
@@ -930,8 +930,6 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             root->ClearLinkedVoice();
             root->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
             linked->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
-            root->exclusiveClass = exclusiveClass;
-            linked->exclusiveClass = exclusiveClass;
             linked->ownedByParent = true;
             root->LinkVoice(linkedIndex);
             SynchronizeAggregatedLinkedVoice(*root, *linked);
@@ -946,6 +944,10 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             if (!entry.zone) {
                 continue;
             }
+            const u8 entryExclusiveClass = static_cast<u8>(entry.zone->generators[GEN_ExclusiveClass]);
+            if (entryExclusiveClass != 0) {
+                KillExclusiveClass(channel, entryExclusiveClass);
+            }
             Voice* v = AllocVoice(channel, key);
             if (!v) return; // ボイス確保失敗
             const u16 voiceIndex = static_cast<u16>(v - voices_);
@@ -954,7 +956,6 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                       portamentoSourceKey, portamentoTime, softPedalActive);
             if (v->active) {
                 v->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
-                v->exclusiveClass = exclusiveClass;
                 AppendVoiceDebugLog(zoneLogIndex, voiceIndex, *v);
                 TrackVoice(voiceIndex);
             }

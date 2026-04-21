@@ -51,6 +51,9 @@ public:
     u16     velocity = 0;
     u32     noteId   = 0;
     u8      exclusiveClass = 0;
+    i32     resolvedPresetBagIndex = -1;
+    i32     resolvedInstrumentBagIndex = -1;
+    i32     resolvedSampleId = -1;
     bool    sustainHeld = false; // Sustain Pedal 保留中
     bool    sostenutoLatched = false;
     bool    sostenutoHeld = false;
@@ -167,7 +170,12 @@ public:
                 SoundBankKind soundBankKind, const SynthCompatOptions& compatOptions,
                 const SpecialVoiceRoute& specialRoute = {},
                 i32 portamentoSourceKey = -1, u8 portamentoTime = 0, bool softPedalActive = false);
-    bool MatchesResolvedZone(const ResolvedZone& zone) const { return sampleHeader == zone.sample; }
+    bool MatchesResolvedZone(const ResolvedZone& zone) const {
+        return resolvedPresetBagIndex == zone.presetBagIndex &&
+               resolvedInstrumentBagIndex == zone.instrumentBagIndex &&
+               resolvedSampleId == zone.sampleId &&
+               sampleHeader == zone.sample;
+    }
     bool HasLinkedVoice() const { return linkedVoiceIndex != kInvalidLinkedVoice; }
     void LinkVoice(u16 index) { linkedVoiceIndex = index; }
     void ClearLinkedVoice() { linkedVoiceIndex = kInvalidLinkedVoice; }
@@ -196,6 +204,9 @@ public:
     void Kill() {
         active = false;
         envPhase = EnvPhase::Off;
+        resolvedPresetBagIndex = -1;
+        resolvedInstrumentBagIndex = -1;
+        resolvedSampleId = -1;
         ownedByParent = false;
         linkedVoiceIndex = kInvalidLinkedVoice;
     }
