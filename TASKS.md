@@ -2,21 +2,6 @@
 
 2026-04-20 実装完了。
 
-## 未対応
-
-- `SF2 ROM sample override`
-  - `Voice::NoteOn()` が ROM 差し替え時でも `pcmDataSize` を境界計算に使っているため、`sampleDataOverrideCount` を使うよう修正。
-  - ROM バンク長が本体 SF2 と異なるケースを `Sf2Compliance` に追加。
-- `SF2 controller refresh zone matching`
-  - `ProgramLayerPlan` は zone 単位で構築される一方、`Voice::MatchesResolvedZone()` が `sampleHeader` のみで一致判定しているため、同一 sample を共有する複数ゾーンを識別できる layer / zone キーへ見直し。
-  - CC / pressure / pitch bend 更新で別ゾーン値に上書きされない回帰テストを追加。
-- `Special SF2 route clamp refresh`
-  - 特殊 SF2 ルートの `clampAboveRoot` が controller refresh 後も維持されるよう、`RefreshResolvedZoneControllers()` 側の再計算へ同等処理を反映。
-  - 特殊ルート対象ノートで pitch/controller 更新後もピッチが跳ねないことをテストで固定。
-- `Exclusive class per-zone`
-  - `Synthesizer` / `VoicePool` で先頭ゾーンの `ExclusiveClass` を全ボイスへ配布しているため、`ProgramLayerPlan` の各 entry / zone ごとの resolved 値を保持する実装へ修正。
-  - 複数ゾーンで exclusive class が異なるプリセットのチョーク挙動テストを追加。
-
 ## 完了項目
 
 - `§9.6 NRPN`
@@ -31,11 +16,27 @@
 - `sm24`
   - 既存 24-bit 読み込み経路を維持。
   - `sm24 before smpl` を含む追加ケースをテストで固定。
+- `SF2 ProgramLayer identity`
+  - `ResolvedZone` / `Voice` に layer 識別子を保持し、controller refresh / retrigger 判定を `sample` 単位ではなく zone 単位へ修正。
+  - 同一 sample を共有する複数 layer が refresh 後も別設定を保つ回帰テストを追加。
+- `SF2 ROM sample override`
+  - `Voice::NoteOn()` の境界計算が ROM override 時も `sampleDataOverrideCount` を使うよう修正。
+  - ROM バンク長が本体 SF2 と異なるケースを `Sf2Compliance` に追加。
+- `Special SF2 route clamp refresh`
+  - `RefreshResolvedZoneControllers()` 側でも特殊 SF2 ルートの `clampAboveRoot` を再適用するよう修正。
+  - 特殊ルート対象ノートで controller refresh 後もピッチが跳ねないことをテストで固定。
+- `Exclusive class per-zone`
+  - `Synthesizer` / `VoicePool` の先頭ゾーン一括配布をやめ、各 `ProgramLayer` / zone の resolved `ExclusiveClass` を使う実装へ修正。
+  - 複数ゾーンで exclusive class が異なるプリセットのチョーク挙動テストを追加。
 
 ## テスト
 
 - `Sf2Compliance` 全件パス。
 - 追加した主な確認:
+  - `TestProgramLayerRefreshMatchesZoneIdentity`
+  - `TestExclusiveClassRespectsProgramLayerZone`
+  - `TestRomOverrideUsesOverrideSampleLimit`
+  - `TestSpecialSf2RouteClampSurvivesControllerRefresh`
   - `TestSourceCurvesQuarterPoints`
   - `TestSf2NrpnGeneratorOffsets`
   - `TestSoftPedalAffectsNewNoteOnOnly`
