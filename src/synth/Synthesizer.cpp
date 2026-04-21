@@ -700,12 +700,10 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     }
 
     auto& state = channels_[ch];
-    // ドラムチャンネルは標準GMの bank 128 を既定値にしつつ、
-    // MIDI側で明示されたドラムバリエーションバンクも先に試す。
+    // ドラムチャンネル(既定では CH10)は標準GMの bank 128 を既定値にしつつ、
+    // MIDI側で明示されたバンクも先に試す。
     const u16 requestedBank = state.bank;
-    u16 resolvedBank = state.isDrum
-        ? static_cast<u16>((requestedBank != 0) ? requestedBank : MIDI_DRUM_BANK)
-        : requestedBank;
+    u16 resolvedBank = requestedBank;
 
     zoneScratch_.clear();
     ModulatorContext ctx{};
@@ -718,53 +716,82 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
     ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
 
-    auto tryResolveZones = [&](u16 bankToTry) -> bool {
+    u8 resolvedProgram = state.program;
+    auto tryResolveZones = [&](u16 bankToTry, u8 programToTry) -> bool {
         zoneScratch_.clear();
-        if (!soundBank_->FindZones(bankToTry, state.program, key, vel, zoneScratch_, &ctx)) {
+        if (!soundBank_->FindZones(bankToTry, programToTry, key, vel, zoneScratch_, &ctx)) {
             return false;
         }
         resolvedBank = bankToTry;
+        resolvedProgram = programToTry;
         return true;
     };
 
     bool foundZones = false;
-    u8 resolvedProgram = state.program;
+    bool resolvedIsDrum = state.isDrum;
     if (state.isDrum) {
+        // CH10は通常ドラムだが、SF2によっては bank 128 を持たず bank 0 にキット/メロディが
+        // 置かれているケースがあるため、最後にメロディ候補へフォールバックする。
         if (requestedBank != 0) {
-            foundZones = tryResolveZones(requestedBank);
+            foundZones = tryResolveZones(requestedBank, state.program);
         }
-        if (!foundZones && resolvedBank != static_cast<u16>(MIDI_DRUM_BANK)) {
-            foundZones = tryResolveZones(static_cast<u16>(MIDI_DRUM_BANK));
+        if (!foundZones) {
+            foundZones = tryResolveZones(static_cast<u16>(MIDI_DRUM_BANK), state.program);
         }
         if (!foundZones && state.program != 0) {
-            zoneScratch_.clear();
-            if (requestedBank != 0 && soundBank_->FindZones(requestedBank, 0, key, vel, zoneScratch_, &ctx)) {
-                foundZones = true;
-                resolvedBank = requestedBank;
-                resolvedProgram = 0;
+            if (requestedBank != 0) {
+                foundZones = tryResolveZones(requestedBank, 0);
+            }
+            if (!foundZones) {
+                foundZones = tryResolveZones(static_cast<u16>(MIDI_DRUM_BANK), 0);
             }
         }
-        if (!foundZones && state.program != 0) {
-            zoneScratch_.clear();
-            if (soundBank_->FindZones(static_cast<u16>(MIDI_DRUM_BANK), 0, key, vel, zoneScratch_, &ctx)) {
-                foundZones = true;
-                resolvedBank = static_cast<u16>(MIDI_DRUM_BANK);
-                resolvedProgram = 0;
+
+        if (foundZones) {
+            resolvedIsDrum = true;
+        } else {
+            // Non-standard SF2: bank 0 (or MIDI-specified bank) may contain the intended preset even on CH10.
+            if (requestedBank == 0) {
+                foundZones = tryResolveZones(0, state.program);
+            }
+            // Some MIDIs send a non-zero bank, but many SF2 only define bank 0 for melodic presets.
+            if (!foundZones && requestedBank != 0) {
+                foundZones = tryResolveZones(0, state.program);
+            }
+            if (!foundZones && state.program != 0) {
+                if (requestedBank == 0) {
+                    foundZones = tryResolveZones(0, 0);
+                }
+                if (!foundZones && requestedBank != 0) {
+                    foundZones = tryResolveZones(0, 0);
+                }
+            }
+
+            if (foundZones) {
+                resolvedIsDrum = false;
             }
         }
     } else {
-        foundZones = tryResolveZones(requestedBank);
+        foundZones = tryResolveZones(requestedBank, state.program);
         // 一部のGM MIDIは melodic channel に非0 bank を送るが、実際のSF2は bank 0 にしか
         // プリセットを持たないことが多い。ドラム以外は bank 0 へ一度だけフォールバックする。
         if (!foundZones && requestedBank != 0) {
-            zoneScratch_.clear();
-            foundZones = tryResolveZones(0);
+            foundZones = tryResolveZones(0, state.program);
+        }
+        if (foundZones) {
+            resolvedIsDrum = false;
         }
     }
 
     if (!foundZones) {
         AppendProgramMissLog(requestedBank, soundBank_->Kind(), ch, state.program, key, vel, state);
         return;
+    }
+
+    // CH10の自動判定: ドラム候補で見つからず、bank 0 側で見つかった場合はメロディ扱いへ切り替える。
+    // これによりピッチベンド/ポルタメント等が期待通り動く。
+    if (ch == MIDI_DRUM_CHANNEL) {
+        state.isDrum = resolvedIsDrum;
     }
 
     if (ShouldLogProgram(state.program)) {
