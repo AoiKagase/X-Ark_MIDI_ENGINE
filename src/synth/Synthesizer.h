@@ -19,42 +19,29 @@ namespace XArkMidi {
 
 class OutputLimiter {
 public:
-    OutputLimiter() : peakL_(0.0f), peakR_(0.0f), gainL_(1.0f), gainR_(1.0f) {}
+    OutputLimiter() = default;
 
     void Process(f32& sampleL, f32& sampleR) {
-        constexpr f32 kCeiling = 0.95f;
-        constexpr f32 kAttack = 0.1f;
-        constexpr f32 kRelease = 0.001f;
-        constexpr f32 kPeakDecay = 0.9999f;
-
-        f32 absL = std::abs(sampleL);
-        f32 absR = std::abs(sampleR);
-        f32 absPeak = (absL > absR) ? absL : absR;
-
-        peakL_ = std::max(peakL_ * kPeakDecay, absL);
-        peakR_ = std::max(peakR_ * kPeakDecay, absR);
-
-        f32 currentPeak = (peakL_ > peakR_) ? peakL_ : peakR_;
-
-        f32 targetGain = (currentPeak > kCeiling) ? (kCeiling / currentPeak) : 1.0f;
-
-        if (targetGain < gainL_) {
-            gainL_ += (targetGain - gainL_) * kAttack;
-            gainR_ += (targetGain - gainR_) * kAttack;
-        } else {
-            gainL_ += (targetGain - gainL_) * kRelease;
-            gainR_ += (targetGain - gainR_) * kRelease;
+        if (!std::isfinite(sampleL)) {
+            sampleL = 0.0f;
+        }
+        if (!std::isfinite(sampleR)) {
+            sampleR = 0.0f;
         }
 
-        sampleL *= gainL_;
-        sampleR *= gainR_;
-    }
+        constexpr f32 kCeiling = 0.98f;
+        constexpr f32 kLimit = 0.999f;
+        const f32 absPeak = std::max(std::abs(sampleL), std::abs(sampleR));
+        if (absPeak <= kCeiling) {
+            return;
+        }
 
-private:
-    f32 peakL_;
-    f32 peakR_;
-    f32 gainL_;
-    f32 gainR_;
+        const f32 over = (absPeak - kCeiling) / (kLimit - kCeiling);
+        const f32 shapedPeak = kCeiling + (kLimit - kCeiling) * std::tanh(over);
+        const f32 gain = shapedPeak / absPeak;
+        sampleL *= gain;
+        sampleR *= gain;
+    }
 };
 
 class Synthesizer {
