@@ -906,6 +906,14 @@ namespace {
         Require(std::fabs(sf2.reverbSend - 0.25f) < 1.0e-4f, "SF2 channel reverb send should come from modulators by default");
         Require(std::fabs(sf2.chorusSend - 0.4f) < 1.0e-4f, "SF2 channel chorus send should come from modulators by default");
 
+        Voice sf2Center;
+        sf2Center.soundBankKind = SoundBankKind::Sf2;
+        sf2Center.UpdateChannelMix(0.75f, 0x81020408u, 0u, 0u);
+        Require(sf2Center.channelGainL < 0.75f && sf2Center.channelGainR < 0.75f,
+            "Default SF2 center pan should currently attenuate both lanes below channel volume");
+        Require(std::fabs(sf2Center.channelGainL - sf2Center.channelGainR) < 0.01f,
+            "Default SF2 center pan should keep both lanes nearly symmetric");
+
         Voice sf2Compat;
         sf2Compat.soundBankKind = SoundBankKind::Sf2;
         sf2Compat.compatOptions.applySf2ChannelDefaults = true;

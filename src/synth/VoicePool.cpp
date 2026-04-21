@@ -199,6 +199,17 @@ struct ProgramLayerPlan {
     bool aggregated = false;
 };
 
+struct NoteGainSummary {
+    size_t voiceCount = 0;
+    size_t linkedVoiceCount = 0;
+    f64 sumResolvedAttenuationCb = 0.0;
+    f64 sumResolvedAttenuationGain = 0.0;
+    f64 sumDryGainL = 0.0;
+    f64 sumDryGainR = 0.0;
+    f64 peakDryGainL = 0.0;
+    f64 peakDryGainR = 0.0;
+};
+
 bool IsExplicitStereoSampleType(u16 sampleType) {
     const u16 type = static_cast<u16>(sampleType & 0x7FFFu);
     return type == kSf2SampleTypeLeft || type == kSf2SampleTypeRight;
@@ -572,6 +583,74 @@ void AppendVoiceDebugLog(size_t zoneIndex,
         << '\n';
 }
 
+void AccumulateNoteGainSummary(NoteGainSummary& summary,
+                               const ResolvedZone* zone,
+                               const Voice& voice,
+                               bool linkedVoice) {
+    ++summary.voiceCount;
+    if (linkedVoice) {
+        ++summary.linkedVoiceCount;
+    }
+    if (zone) {
+        const f64 attenCb = static_cast<f64>(zone->generators[GEN_InitialAttenuation]);
+        summary.sumResolvedAttenuationCb += attenCb;
+        summary.sumResolvedAttenuationGain += AttenuationToGain(static_cast<i32>(attenCb));
+    }
+    summary.sumDryGainL += voice.dryGainL;
+    summary.sumDryGainR += voice.dryGainR;
+    summary.peakDryGainL = std::max(summary.peakDryGainL, static_cast<f64>(voice.dryGainL));
+    summary.peakDryGainR = std::max(summary.peakDryGainR, static_cast<f64>(voice.dryGainR));
+}
+
+void AppendNoteGainSummaryLog(u8 channel,
+                              u8 program,
+                              u8 key,
+                              u16 velocity,
+                              u32 noteId,
+                              const std::vector<ResolvedZone>& zones,
+                              const NoteGainSummary& summary) {
+    if (!IsProgramLoggingEnabled()) {
+        return;
+    }
+
+    std::filesystem::create_directories(std::filesystem::path(kProgramDebugLogPath).parent_path());
+    std::ofstream log(kProgramDebugLogPath, std::ios::app);
+    if (!log) {
+        return;
+    }
+
+    log << "  note_gain_summary"
+        << " ch=" << static_cast<int>(channel)
+        << " program=" << static_cast<int>(program)
+        << " key=" << static_cast<int>(key)
+        << " vel=" << static_cast<int>(velocity)
+        << " note_id=" << noteId
+        << " resolved_zones=" << zones.size()
+        << " spawned_voices=" << summary.voiceCount
+        << " linked_voices=" << summary.linkedVoiceCount
+        << " normalization_scale=1"
+        << " sum_initial_atten_cb=" << summary.sumResolvedAttenuationCb
+        << " sum_initial_atten_gain=" << summary.sumResolvedAttenuationGain
+        << " sum_dry_gain_l=" << summary.sumDryGainL
+        << " sum_dry_gain_r=" << summary.sumDryGainR
+        << " peak_dry_gain_l=" << summary.peakDryGainL
+        << " peak_dry_gain_r=" << summary.peakDryGainR
+        << '\n';
+
+    for (size_t i = 0; i < zones.size(); ++i) {
+        const auto& zone = zones[i];
+        log << "    resolved_zone_gain[" << i << "]"
+            << " sample_name=\"" << SampleNameString(zone.sample) << "\""
+            << " initial_atten_cb=" << zone.generators[GEN_InitialAttenuation]
+            << " initial_atten_gain=" << AttenuationToGain(zone.generators[GEN_InitialAttenuation])
+            << " pan=" << zone.generators[GEN_Pan]
+            << " sample_id=" << zone.sampleId
+            << " preset_bag=" << zone.presetBagIndex
+            << " inst_bag=" << zone.instrumentBagIndex
+            << '\n';
+    }
+}
+
 void AppendPitchDebugLog(const char* eventName,
                          u16 voiceIndex,
                          const Voice& voice,
@@ -859,6 +938,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
     AppendActiveProgramNoteSummaryLog(voices_, activeIndices_, activeCount_, channel, program, key, noteId);
 
     size_t zoneLogIndex = 0;
+    NoteGainSummary noteGainSummary;
     for (const auto& layerPlan : layerPlans) {
         if (layerPlan.aggregated && layerPlan.entries.size() == 2 &&
             layerPlan.entries[0].zone && layerPlan.entries[1].zone) {
@@ -885,6 +965,7 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
                 if (v->active) {
                     v->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
                     AppendVoiceDebugLog(zoneLogIndex, voiceIndex, *v);
+                    AccumulateNoteGainSummary(noteGainSummary, primaryEntry.zone, *v, false);
                     TrackVoice(voiceIndex);
                 }
                 ++zoneLogIndex;
@@ -935,6 +1016,8 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             SynchronizeAggregatedLinkedVoice(*root, *linked);
             AppendVoiceDebugLog(zoneLogIndex, rootIndex, *root);
             AppendVoiceDebugLog(zoneLogIndex + 1, linkedIndex, *linked);
+            AccumulateNoteGainSummary(noteGainSummary, layerPlan.entries[0].zone, *root, false);
+            AccumulateNoteGainSummary(noteGainSummary, layerPlan.entries[1].zone, *linked, true);
             TrackVoice(rootIndex);
             zoneLogIndex += 2;
             continue;
@@ -957,11 +1040,14 @@ void VoicePool::NoteOn(const std::vector<ResolvedZone>& zones, const i16* sample
             if (v->active) {
                 v->UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
                 AppendVoiceDebugLog(zoneLogIndex, voiceIndex, *v);
+                AccumulateNoteGainSummary(noteGainSummary, entry.zone, *v, false);
                 TrackVoice(voiceIndex);
             }
             ++zoneLogIndex;
         }
     }
+
+    AppendNoteGainSummaryLog(channel, program, key, velocity, noteId, zones, noteGainSummary);
 }
 
 void VoicePool::NoteOff(u8 channel, u8 key, bool sustain) {
