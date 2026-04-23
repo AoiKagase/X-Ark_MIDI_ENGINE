@@ -36,6 +36,9 @@ public:
     // tick -> サンプルオフセット変換（テンポマップ参照）
     double TickToSample(u32 tick) const;
 
+    // MIDI イベント列の末尾 tick までの総サンプル数（エフェクトテール除く概算）
+    double TotalSamples() const;
+
     // 現在のサンプル位置
     double CurrentSample() const { return currentSample_; }
 

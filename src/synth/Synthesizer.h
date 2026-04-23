@@ -71,6 +71,8 @@ public:
     u32 GetChannelActiveNoteCount(u32 channel) const;
     u32 GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const;
     bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
+    u64 GetCurrentFramePosition() const;
+    u64 GetLengthFramesEstimate() const;
 
     const std::string& ErrorMessage() const { return errorMsg_; }
 

@@ -220,6 +220,10 @@ XAME_API unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned 
 XAME_API unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex);
 /* Pop the oldest queued channel key event. Returns non-zero if an event was written to outEvent. 最も古いキーイベントを取り出します。 */
 XAME_API int XAmePopChannelKeyEvent(XAmeEngine engine, XAmeChannelKeyEvent* outEvent);
+/* Get the current rendered frame position. レンダリング済みの現在フレーム位置を取得します。 */
+XAME_API unsigned long long XAmeGetCurrentFramePosition(XAmeEngine engine);
+/* Get the estimated song length in frames, excluding tail effects. エフェクトテールを除く概算の曲長フレーム数を取得します。 */
+XAME_API unsigned long long XAmeGetLengthFramesEstimate(XAmeEngine engine);
 
 /* Return non-zero once all audio has been rendered. 全音声のレンダリング完了後に非 0 を返します。 */
 XAME_API int XAmeIsFinished(XAmeEngine engine);

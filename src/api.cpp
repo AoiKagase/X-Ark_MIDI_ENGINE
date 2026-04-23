@@ -360,6 +360,20 @@ int XAmePopChannelKeyEvent(XAmeEngine engine, XAmeChannelKeyEvent* outEvent) {
     return 1;
 }
 
+unsigned long long XAmeGetCurrentFramePosition(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return static_cast<unsigned long long>(engine->synthesizer.GetCurrentFramePosition());
+}
+
+unsigned long long XAmeGetLengthFramesEstimate(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return static_cast<unsigned long long>(engine->synthesizer.GetLengthFramesEstimate());
+}
+
 int XAmeIsFinished(XAmeEngine engine) {
     if (!engine || !engine->initialized) return 1;
     return engine->synthesizer.IsFinished() ? 1 : 0;

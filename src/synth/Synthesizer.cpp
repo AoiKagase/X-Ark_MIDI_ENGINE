@@ -603,6 +603,22 @@ bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {
     return true;
 }
 
+u64 Synthesizer::GetCurrentFramePosition() const {
+    const double currentSample = sequencer_.CurrentSample();
+    if (currentSample <= 0.0) {
+        return 0;
+    }
+    return static_cast<u64>(currentSample);
+}
+
+u64 Synthesizer::GetLengthFramesEstimate() const {
+    const double totalSamples = sequencer_.TotalSamples();
+    if (totalSamples <= 0.0) {
+        return 0;
+    }
+    return static_cast<u64>(std::ceil(totalSamples));
+}
+
 bool Synthesizer::HasAudibleEffectTail() const {
     const auto hasAudibleSample = [](const std::vector<f32>& buffer) {
         for (f32 sample : buffer) {
@@ -1282,4 +1298,3 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
 }
 
 } // namespace XArkMidi
-

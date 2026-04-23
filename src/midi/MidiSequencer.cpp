@@ -121,6 +121,13 @@ double MidiSequencer::TickToSample(u32 tick) const {
     return entry->sampleOffset + tickDelta * secPerTick * sampleRate_;
 }
 
+double MidiSequencer::TotalSamples() const {
+    if (mergedEvents_.empty()) {
+        return 0.0;
+    }
+    return TickToSample(mergedEvents_.back().absoluteTick);
+}
+
 u32 MidiSequencer::SamplesToNextEvent() const {
     if (IsFinished()) return 0;
     double diff = nextEventSample_ - currentSample_;

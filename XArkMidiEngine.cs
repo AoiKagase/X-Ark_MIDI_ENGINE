@@ -189,6 +189,12 @@ public static class XArkMidiEngine
     private static extern int XAmePopChannelKeyEvent(IntPtr engine, out ChannelKeyEvent outEvent);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern ulong XAmeGetCurrentFramePosition(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern ulong XAmeGetLengthFramesEstimate(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int XAmeIsFinished(IntPtr engine);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -415,6 +421,32 @@ public static class XArkMidiEngine
         {
             ThrowIfDisposed();
             return XAmePopChannelKeyEvent(_handle, out channelKeyEvent) != 0;
+        }
+
+        /// <summary>
+        /// Get the current rendered frame position.
+        /// 現在のレンダリング済みフレーム位置を取得します。
+        /// </summary>
+        public ulong CurrentFramePosition
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetCurrentFramePosition(_handle);
+            }
+        }
+
+        /// <summary>
+        /// Get an estimated total song length in frames, excluding tail effects.
+        /// エフェクトテールを除く概算の総フレーム長を取得します。
+        /// </summary>
+        public ulong LengthFramesEstimate
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetLengthFramesEstimate(_handle);
+            }
         }
 
         /// <summary>
