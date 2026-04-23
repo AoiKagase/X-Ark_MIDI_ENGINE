@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.4.11626.88 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XArkMidiGuiPlayer", "XArkMidiGuiPlayer.csproj", "{A94C2A5C-3700-0492-4B22-3B550F39D970}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A94C2A5C-3700-0492-4B22-3B550F39D970}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A94C2A5C-3700-0492-4B22-3B550F39D970}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A94C2A5C-3700-0492-4B22-3B550F39D970}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A94C2A5C-3700-0492-4B22-3B550F39D970}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AEAE7EE9-A457-4CE2-92E1-F866A68A4EEC}
+	EndGlobalSection
+EndGlobal
