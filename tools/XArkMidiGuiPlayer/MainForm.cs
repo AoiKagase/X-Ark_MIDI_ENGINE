@@ -19,7 +19,7 @@ public sealed class MainForm : Form
     private readonly TextBox _midiPathTextBox = new() { Width = 520 };
     private readonly TextBox _soundFontPathTextBox = new() { Width = 520 };
     private readonly Button _browseMidiButton = new() { Text = "Open MIDI..." };
-    private readonly Button _browseSoundFontButton = new() { Text = "Open SF2..." };
+    private readonly Button _browseSoundFontButton = new() { Text = "Open Bank..." };
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
     private readonly Button _stopButton = new() { Text = "Stop", Width = 90, Enabled = false };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
@@ -66,7 +66,7 @@ public sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
     private readonly BindingList<ChannelRow> _channels = new();
     private readonly OpenFileDialog _midiDialog = new() { Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*" };
-    private readonly OpenFileDialog _soundFontDialog = new() { Filter = "SoundFont (*.sf2)|*.sf2|All files (*.*)|*.*" };
+    private readonly OpenFileDialog _soundFontDialog = new() { Filter = "Sound banks (*.sf2;*.dls)|*.sf2;*.dls|SoundFont (*.sf2)|*.sf2|DLS (*.dls)|*.dls|All files (*.*)|*.*" };
     private readonly Label _keyboardLabel = new() { AutoSize = true, Text = "Keyboard: Ch 1" };
     private readonly PianoKeyboardControl _keyboard = new() { Dock = DockStyle.Fill, Height = 120, MinimumSize = new Size(0, 120) };
     private readonly ToolTip _optionToolTip = new() {
@@ -140,7 +140,7 @@ public sealed class MainForm : Form
         filePanel.Controls.Add(new Label { AutoSize = true, Text = "MIDI", Anchor = AnchorStyles.Left }, 0, 0);
         filePanel.Controls.Add(_midiPathTextBox, 1, 0);
         filePanel.Controls.Add(_browseMidiButton, 2, 0);
-        filePanel.Controls.Add(new Label { AutoSize = true, Text = "SF2", Anchor = AnchorStyles.Left }, 0, 1);
+        filePanel.Controls.Add(new Label { AutoSize = true, Text = "Bank", Anchor = AnchorStyles.Left }, 0, 1);
         filePanel.Controls.Add(_soundFontPathTextBox, 1, 1);
         filePanel.Controls.Add(_browseSoundFontButton, 2, 1);
 
@@ -353,7 +353,7 @@ public sealed class MainForm : Form
             return;
         }
         if (!File.Exists(_soundFontPathTextBox.Text)) {
-            MessageBox.Show(this, "SF2 file not found.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Sound bank file not found.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -957,7 +957,7 @@ public sealed class WaveOutPlayer : IDisposable
     private XArkMidiEngine.Engine CreateEngineAtPosition()
     {
         var engine = new XArkMidiEngine.Engine(_midiPath, _soundFontPath,
-            XArkMidiEngine.SoundBankKind.Sf2, SampleRate, NumChannels,
+            DetectSoundBankKind(_soundFontPath), SampleRate, NumChannels,
             _createOptions);
         _lengthFramesEstimate = engine.LengthFramesEstimate;
         if (_startFramePosition == 0) {
@@ -975,6 +975,18 @@ public sealed class WaveOutPlayer : IDisposable
             remaining -= written;
         }
         return engine;
+    }
+
+    private static XArkMidiEngine.SoundBankKind DetectSoundBankKind(string path)
+    {
+        var extension = Path.GetExtension(path);
+        if (extension.Equals(".sf2", StringComparison.OrdinalIgnoreCase)) {
+            return XArkMidiEngine.SoundBankKind.Sf2;
+        }
+        if (extension.Equals(".dls", StringComparison.OrdinalIgnoreCase)) {
+            return XArkMidiEngine.SoundBankKind.Dls;
+        }
+        return XArkMidiEngine.SoundBankKind.Auto;
     }
 }
 
