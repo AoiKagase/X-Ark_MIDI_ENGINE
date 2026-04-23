@@ -1303,6 +1303,16 @@ int VoicePool::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32
     for (u16 read = 0; read < localActiveCount; ++read) {
         const u16 voiceIndex = activeIndices_[read];
         auto& v = voices_[voiceIndex];
+        if (v.HasLinkedVoice()) {
+            auto& linked = voices_[v.linkedVoiceIndex];
+            if (!v.active) {
+                linked.Kill();
+                v.ClearLinkedVoice();
+            } else if (!linked.active) {
+                linked.Kill();
+                v.ClearLinkedVoice();
+            }
+        }
         if (!v.active) {
             activeSlots_[voiceIndex] = -1;
             continue;
@@ -1589,4 +1599,3 @@ void VoicePool::EnsureWorkerScratch(u16 workerIndex, u32 numFrames) {
 }
 
 } // namespace XArkMidi
-

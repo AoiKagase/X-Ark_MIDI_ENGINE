@@ -210,6 +210,143 @@ namespace {
         return file;
     }
 
+    std::vector<u8> BuildStereoLinkedSf2WithLengths(u32 leftLength, u32 rightLength) {
+        std::vector<u8> infoPayload;
+        std::vector<u8> ifil;
+        AppendU16LE(ifil, 2);
+        AppendU16LE(ifil, 4);
+        AppendChunk(infoPayload, "ifil", ifil);
+        const std::vector<u8> isng = { 'E','M','U','8','0','0','0', 0 };
+        AppendChunk(infoPayload, "isng", isng);
+        const std::vector<u8> inam = { 'S','t','e','r','e','o','L','e','n', 0 };
+        AppendChunk(infoPayload, "INAM", inam);
+
+        std::vector<u8> sdtaPayload;
+        std::vector<u8> smpl;
+        for (u32 i = 0; i < leftLength; ++i) {
+            AppendI16LE(smpl, static_cast<i16>(1000 + static_cast<i32>(i % 128u) * 32));
+        }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
+        }
+        for (u32 i = 0; i < rightLength; ++i) {
+            AppendI16LE(smpl, static_cast<i16>(-1000 - static_cast<i32>(i % 128u) * 32));
+        }
+        for (int i = 0; i < 46; ++i) {
+            AppendI16LE(smpl, 0);
+        }
+        AppendChunk(sdtaPayload, "smpl", smpl);
+
+        std::vector<u8> pdtaPayload;
+
+        std::vector<u8> phdr;
+        auto appendPresetHeader = [&](const char* name, u16 preset, u16 bank, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            phdr.insert(phdr.end(), padded, padded + 20);
+            AppendU16LE(phdr, preset);
+            AppendU16LE(phdr, bank);
+            AppendU16LE(phdr, bagIndex);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+            AppendU32LE(phdr, 0);
+        };
+        appendPresetHeader("StereoLen", 0, 0, 0);
+        appendPresetHeader("EOP", 0, 0, 1);
+        AppendChunk(pdtaPayload, "phdr", phdr);
+
+        std::vector<u8> pbag;
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 0);
+        AppendU16LE(pbag, 1);
+        AppendU16LE(pbag, 0);
+        AppendChunk(pdtaPayload, "pbag", pbag);
+
+        std::vector<u8> pmod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(pmod, 0);
+        }
+        AppendChunk(pdtaPayload, "pmod", pmod);
+
+        std::vector<u8> pgen;
+        AppendU16LE(pgen, GEN_Instrument);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendU16LE(pgen, 0);
+        AppendChunk(pdtaPayload, "pgen", pgen);
+
+        std::vector<u8> inst;
+        auto appendInst = [&](const char* name, u16 bagIndex) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            inst.insert(inst.end(), padded, padded + 20);
+            AppendU16LE(inst, bagIndex);
+        };
+        appendInst("StereoInst", 0);
+        appendInst("EOI", 2);
+        AppendChunk(pdtaPayload, "inst", inst);
+
+        std::vector<u8> ibag;
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 1);
+        AppendU16LE(ibag, 0);
+        AppendU16LE(ibag, 2);
+        AppendU16LE(ibag, 0);
+        AppendChunk(pdtaPayload, "ibag", ibag);
+
+        std::vector<u8> imod;
+        for (int i = 0; i < 5; ++i) {
+            AppendU16LE(imod, 0);
+        }
+        AppendChunk(pdtaPayload, "imod", imod);
+
+        std::vector<u8> igen;
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, GEN_SampleID);
+        AppendU16LE(igen, 1);
+        AppendU16LE(igen, 0);
+        AppendU16LE(igen, 0);
+        AppendChunk(pdtaPayload, "igen", igen);
+
+        std::vector<u8> shdr;
+        auto appendSampleHeader = [&](const char* name, u32 start, u32 end, u16 sampleLink, u16 sampleType) {
+            char padded[20] = {};
+            std::strncpy(padded, name, sizeof(padded));
+            shdr.insert(shdr.end(), padded, padded + 20);
+            AppendU32LE(shdr, start);
+            AppendU32LE(shdr, end);
+            AppendU32LE(shdr, start);
+            AppendU32LE(shdr, end);
+            AppendU32LE(shdr, 44100);
+            shdr.push_back(60);
+            shdr.push_back(0);
+            AppendU16LE(shdr, sampleLink);
+            AppendU16LE(shdr, sampleType);
+        };
+        const u32 leftStart = 0;
+        const u32 leftEnd = leftStart + leftLength;
+        const u32 rightStart = leftEnd + 46;
+        const u32 rightEnd = rightStart + rightLength;
+        appendSampleHeader("LeftLong", leftStart, leftEnd, 1, 4);
+        appendSampleHeader("RightShort", rightStart, rightEnd, 0, 2);
+        appendSampleHeader("EOS", 0, 0, 0, 1);
+        AppendChunk(pdtaPayload, "shdr", shdr);
+
+        std::vector<u8> riffPayload;
+        AppendListChunk(riffPayload, "INFO", infoPayload);
+        AppendListChunk(riffPayload, "sdta", sdtaPayload);
+        AppendListChunk(riffPayload, "pdta", pdtaPayload);
+
+        std::vector<u8> file;
+        file.insert(file.end(), { 'R','I','F','F' });
+        AppendU32LE(file, static_cast<u32>(riffPayload.size() + 4));
+        file.insert(file.end(), { 's','f','b','k' });
+        file.insert(file.end(), riffPayload.begin(), riffPayload.end());
+        return file;
+    }
+
     std::vector<u8> BuildLayeredSameSampleSf2(i16 panA, i16 panB, u16 exclusiveClassA = 0, u16 exclusiveClassB = 0) {
         std::vector<u8> infoPayload;
         std::vector<u8> ifil;
@@ -1626,6 +1763,61 @@ namespace {
         Require(sumL > 0.0f && sumR < 0.0f, message);
     }
 
+    void TestParallelRenderClearsFinishedLinkedVoice() {
+        if (std::thread::hardware_concurrency() <= 1) {
+            return;
+        }
+
+        const std::vector<u8> bytes = BuildStereoLinkedSf2WithLengths(4096, 32);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 48, 65535, zones, nullptr), "Stereo SF2 should resolve zones for parallel cleanup test");
+        Require(zones.size() == 2, "Parallel cleanup test should resolve an explicit stereo pair");
+
+        VoicePool pool;
+        SynthCompatOptions compatOptions{};
+        for (u8 key = 36; key < 60; ++key) {
+            pool.NoteOn(zones,
+                        sf2.SampleData(),
+                        sf2.SampleData24(),
+                        sf2.SampleDataCount(),
+                        0,
+                        0,
+                        0,
+                        key,
+                        65535,
+                        44100,
+                        0.0,
+                        1.0f,
+                        0x81020408u,
+                        0x50A14285u,
+                        0u,
+                        SoundBankKind::Sf2,
+                        compatOptions);
+        }
+        Require(pool.ActiveCount() == 24, "Parallel cleanup test should create 24 root voices");
+
+        std::array<f32, 256> outL{};
+        std::array<f32, 256> outR{};
+        std::array<f32, 256> reverbL{};
+        std::array<f32, 256> reverbR{};
+        std::array<f32, 256> chorusL{};
+        std::array<f32, 256> chorusR{};
+        pool.RenderBlock(outL.data(), outR.data(), reverbL.data(), reverbR.data(), chorusL.data(), chorusR.data(),
+                         static_cast<u32>(outL.size()));
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        Require(probe.activeCount_ > 0, "At least one root voice should remain after parallel render");
+        for (u16 i = 0; i < probe.activeCount_; ++i) {
+            const Voice& root = probe.voices_[probe.activeIndices_[i]];
+            Require(root.active, "Parallel cleanup test should retain active root voices");
+            Require(!root.HasLinkedVoice(),
+                "Finished linked voice should be detached after parallel RenderBlock cleanup");
+        }
+    }
+
     void TestSourceCurvesSupport() {
         const u16 velocityConcave = static_cast<u16>(2u | (1u << 10));
         const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
@@ -2649,6 +2841,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRemainingDefaultModulators);
     RUN_TEST(TestDefaultModulatorSupersedeSemantics);
     RUN_TEST(TestStereoSampleLinks);
+    RUN_TEST(TestParallelRenderClearsFinishedLinkedVoice);
     RUN_TEST(TestProgramLayerRefreshMatchesZoneIdentity);
     RUN_TEST(TestExclusiveClassRespectsProgramLayerZone);
     RUN_TEST(TestRomOverrideUsesOverrideSampleLimit);
