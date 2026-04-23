@@ -20,3 +20,8 @@ msvc/XArkMidiEngine.vcxproj.user
 /.dotnet-home
 *.patch
 apply_remaining_fixes.sh
+/.codex
+/.planning
+/evaluate
+/diagnostics
+/.dotnet_cli
