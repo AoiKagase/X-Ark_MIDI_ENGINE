@@ -48,6 +48,7 @@ public sealed class MainForm : Form
     private readonly CheckBox _sf2ZeroLengthLoopRetriggerCheckBox = new() {
         AutoSize = true,
         Text = "SF2 zero-length loop retrigger",
+        Checked = true,
     };
     private readonly CheckBox _enableSf2SamplePitchCorrectionCheckBox = new() {
         AutoSize = true,
