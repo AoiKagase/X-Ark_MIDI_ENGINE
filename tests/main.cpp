@@ -9,8 +9,8 @@
  * WAVファイルに書き出すことで動作確認できる
  *
  * 使用方法:
- *   X-ArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
- *   X-ArkMidiTest.exe <input.mid> <input.sf2> <output.wav> [--solo <1-16>] [--mute <1-16>] [--chunk <frames>]
+ *   X-ArkMidiTest.exe <input.mid> <input.sf2|input.dls> <output.wav>
+ *   X-ArkMidiTest.exe <input.mid> <input.sf2|input.dls> <output.wav> [--solo <1-16>] [--mute <1-16>] [--chunk <frames>]
  *                                                     [--max-seconds <sec>] [--progress-seconds <sec>]
  */
 
@@ -67,7 +67,7 @@ namespace {
 
 void PrintUsage(const char* exeName) {
     std::fprintf(stderr,
-                 "Usage: %s <input.mid> <input.sf2> <output.wav> "
+                 "Usage: %s <input.mid> <input.sf2|input.dls> <output.wav> "
                  "[--solo <1-16>] [--mute <1-16>] [--chunk <frames>] "
                  "[--max-seconds <sec>] [--progress-seconds <sec>]\n",
                  exeName);
@@ -112,8 +112,8 @@ int main(int argc, char* argv[]) {
     }
 
     const char* midiPath = argv[1];
-    const char* sf2Path  = argv[2];
-    const char* wavPath  = argv[3];
+    const char* soundBankPath = argv[2];
+    const char* wavPath       = argv[3];
 
     unsigned int chunkFrames = 4096;
     unsigned int soloMask = 0;
@@ -173,8 +173,8 @@ int main(int argc, char* argv[]) {
     XAmeEngine engine = nullptr;
     XAmeResult r = XAmeCreateEngineWithOptionsUtf8(
         midiPath,
-        sf2Path,
-        XAME_SOUNDBANK_SF2,
+        soundBankPath,
+        XAME_SOUNDBANK_AUTO,
         SAMPLE_RATE, NUM_CHANNELS,
         &options,
         &engine);
