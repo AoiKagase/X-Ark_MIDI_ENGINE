@@ -1,54 +1,51 @@
-# What is this?
+# X-ArkMIDIEngine
 [![Build](https://github.com/AoiKagase/X-Ark_MIDI_ENGINE/actions/workflows/build.yml/badge.svg)](https://github.com/AoiKagase/X-Ark_MIDI_ENGINE/actions/workflows/build.yml)
 
-MIDIファイルとSF2/DLSファイルを読み込んでPCMデータを出力するWindows用DLLです。
+MIDI ファイルを SF2 / DLS サウンドバンクで PCM 音声へレンダリングする共有ライブラリです。Windows では DLL、Linux / macOS では共有ライブラリとして利用できます。
 
-# 
-ClaudeCodeとCodexを利用して作成しました。ソースは全く読んでも見てもいません。
-AI純正です。
+## 概要
 
----
+- 入力: Standard MIDI File (`.mid`), SoundFont 2 (`.sf2`), Downloadable Sounds (`.dls`)
+- 出力: 16-bit interleaved PCM
+- 公開 API: C API (`include/XArkMidiEngine.h`)
+- 同梱ラッパー: C# P/Invoke (`XArkMidiEngine.cs`)
+- 対応: x64, C++17
 
-以下、Codexが追記
+主な用途:
 
-## プロジェクト概要
+- MIDI をオフラインでレンダリングして WAV 生成処理へ渡す
+- ネイティブアプリや .NET アプリに MIDI 音源機能を組み込む
+- チャンネルごとの状態監視付きでレンダリングする
 
-X-ArkMIDIEngine は、MIDI ファイルを SF2/DLS サウンドバンクを用いて PCM 音声へレンダリングする DLL / 共有ライブラリです。
+## 主な機能
 
-- 入力: MIDI ファイル、SF2 または DLS ファイル
-- 出力: PCM オーディオデータ
-- 形式: Windows DLL / Linux shared object
-- 主用途: ネイティブアプリや .NET アプリからの MIDI レンダリング
-
-## 主な特徴
-
-- C API によるシンプルな利用形態
-- UTF-16 / UTF-8 パス対応
-- x64 / C++17 ベース
-- AVX2 SIMD カーネルを利用したビルド構成
-- C# から利用できる P/Invoke ラッパーを同梱
+- SF2 / DLS の自動判定または明示指定
+- UTF-16 / UTF-8 の両方のパス API
+- レンダリング中のチャンネル mute / solo 制御
+- チャンネルごとの program / 発音中ノート / アクティブキー取得
+- note on / off イベントキュー取得
+- 曲の現在フレーム位置 / 概算長取得
+- 最終エラー文字列とライブラリバージョン取得
+- AVX2 利用可能環境での SIMD 最適化
 
 ## ビルド
 
-Visual Studio 2022 環境を前提としています。
-
-### DLL をビルド
+### Windows (MSVC / Visual Studio 2022)
 
 ```powershell
+# Build main DLL
 msbuild msvc/XArkMidiEngine.vcxproj /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo /v:minimal
-```
 
-### ソリューション全体をビルド
-
-```powershell
+# Build from solution
 msbuild msvc/XArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebuild /nologo
 ```
 
-- 出力先: `build/msvc/bin/Release/XArkMidiEngine.dll`
+- 出力: `build/msvc/bin/Release/XArkMidiEngine.dll`
 - ツールセット: v145
-- 対応プラットフォーム: x64 のみ
+- 言語: C++17
+- 対応プラットフォーム: x64
 
-### CMake
+### Linux / macOS (CMake)
 
 ```bash
 cmake -B build/cmake -DCMAKE_BUILD_TYPE=Release
@@ -56,46 +53,214 @@ cmake --build build/cmake
 # Output: build/cmake/libXArkMidiEngine.so
 ```
 
+要件:
+
+- GCC 9+ または Clang 10+
+- C++17
+- x86-64
+
 ## ディレクトリ構成
 
-- `include/`
-  公開 API ヘッダー
-- `src/`
-  実装本体
-- `tests/`
-  テスト用実行ファイルとダンプツール
-- `msvc/`
-  Visual Studio ソリューション / プロジェクト
-- `build/`
-  生成物専用
-- `XArkMidiEngine.cs`
-  C# P/Invoke ラッパー
+- `include/` 公開 API ヘッダ
+- `src/` 実装本体
+- `tests/` テストコードとダンプツール
+- `msvc/` Visual Studio ソリューション / プロジェクト
+- `tools/` 補助ツール
+- `build/` 生成物
+- `XArkMidiEngine.cs` C# P/Invoke ラッパー
 
-## API 概要
+## C API
 
-公開 C API は `include/XArkMidiEngine.h` に定義されています。
+公開 API は [include/XArkMidiEngine.h](include/XArkMidiEngine.h) に定義されています。
+
+### 基本型
+
+- `XAmeResult`
+  - `XAME_OK`
+  - `XAME_ERR_INVALID_ARG`
+  - `XAME_ERR_PARSE_MIDI`
+  - `XAME_ERR_PARSE_SF2`
+  - `XAME_ERR_OUT_OF_MEM`
+  - `XAME_ERR_NOT_INIT`
+  - `XAME_ERR_PARSE_DLS`
+  - `XAME_ERR_UNSUPPORTED`
+  - `XAME_ERR_IO`
+- `XAmeSoundBankKind`
+  - `XAME_SOUNDBANK_AUTO`
+  - `XAME_SOUNDBANK_SF2`
+  - `XAME_SOUNDBANK_DLS`
+- `XAmeCompatibilityFlags`
+  - `XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER`
+  - `XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION`
+  - `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`
+  - `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS`
+
+### エンジン生成 API
 
 - `XAmeCreateEngineFromPaths()`
+  - UTF-16 パス版。Windows 向け。
 - `XAmeCreateEngineWithOptions()`
+  - UTF-16 パス版 + `XAmeCreateOptions` 指定。
 - `XAmeCreateEngineFromPathsUtf8()`
+  - UTF-8 パス版。Linux 向けだが全プラットフォームで使用可能。
 - `XAmeCreateEngineWithOptionsUtf8()`
+  - UTF-8 パス版 + `XAmeCreateOptions` 指定。
+
+### `XAmeCreateOptions`
+
+`options` を使う場合は `structSize = sizeof(XAmeCreateOptions)` を必ず設定してください。
+
+指定できる項目:
+
+- `maxSampleDataBytes`
+- `maxSf2PdtaEntries`
+- `maxDlsPoolTableEntries`
+- `compatibilityFlags`
+- `sf2RomBankPath`
+- `sf2RomBankPathUtf8`
+
+`sf2RomBankPath` / `sf2RomBankPathUtf8` は、ROM 参照サンプルを持つ SF2 のために外部 SF2 ROM バンクを指定するフィールドです。
+
+### レンダリング API
+
 - `XAmeRender()`
+  - `short*` のインターリーブ PCM バッファへ最大 `numFrames` フレームを書き込みます。
 - `XAmeIsFinished()`
+  - 全音声のレンダリング完了後に非 0 を返します。
 - `XAmeDestroyEngine()`
+  - エンジンを破棄します。
 
-### 注意点
+### チャンネル制御 / 状態取得 API
 
-- パスは Windows では `wchar_t*`、Linux では UTF-8 `char*` 推奨
-- `numChannels` は `1` または `2`
-- デフォルトサンプルレートは `44100Hz`
+- `XAmeSetChannelMuteMask()`
+- `XAmeSetChannelSoloMask()`
+- `XAmeGetChannelMuteMask()`
+- `XAmeGetChannelSoloMask()`
+- `XAmeGetChannelProgram()`
+- `XAmeGetChannelActiveNoteCount()`
+- `XAmeGetChannelActiveKeyMaskWord()`
+- `XAmePopChannelKeyEvent()`
 
-## C# からの利用
+`channelMask` は 16bit マスクで、bit 0 が MIDI channel 0、bit 15 が channel 15 に対応します。
 
-`XArkMidiEngine.cs` に `Engine` クラスがあり、P/Invoke 経由で DLL を利用できます。`RenderAll()` ヘルパーにより、全フレームのレンダリングをまとめて扱えます。
+### 再生位置 / 補助 API
+
+- `XAmeGetCurrentFramePosition()`
+- `XAmeGetLengthFramesEstimate()`
+- `XAmeGetVersion()`
+- `XAmeGetLastError()`
+
+`XAmeGetLengthFramesEstimate()` はエフェクトテールを除いた概算値です。
+
+## C API 使用例
+
+```c
+#include "XArkMidiEngine.h"
+#include <stdlib.h>
+
+int main(void) {
+    XAmeEngine engine = NULL;
+    XAmeResult result = XAmeCreateEngineFromPathsUtf8(
+        "example.mid",
+        "example.sf2",
+        XAME_SOUNDBANK_AUTO,
+        44100,
+        2,
+        &engine
+    );
+    if (result != XAME_OK) {
+        const char* err = XAmeGetLastError();
+        return 1;
+    }
+
+    short buffer[4096 * 2];
+    while (!XAmeIsFinished(engine)) {
+        unsigned int written = 0;
+        result = XAmeRender(engine, buffer, 4096, &written);
+        if (result != XAME_OK) {
+            XAmeDestroyEngine(engine);
+            return 1;
+        }
+        if (written == 0) {
+            break;
+        }
+        /* buffer[0 .. written * 2 - 1] を利用 */
+    }
+
+    XAmeDestroyEngine(engine);
+    return 0;
+}
+```
+
+## C# ラッパー
+
+[XArkMidiEngine.cs](XArkMidiEngine.cs) に管理ラッパーを同梱しています。
+
+公開している主な要素:
+
+- `XArkMidiEngine.XAmeResult`
+- `XArkMidiEngine.SoundBankKind`
+- `XArkMidiEngine.CompatibilityFlags`
+- `XArkMidiEngine.CreateOptions`
+- `XArkMidiEngine.ChannelKeyEvent`
+- `XArkMidiEngine.Engine`
+- `XArkMidiEngine.XArkMidiException`
+
+`Engine` クラスの主な機能:
+
+- UTF-8 API を使ったエンジン生成
+- `Render()`
+- `RenderAll()`
+- `RenderAllBytes()`
+- `IsFinished`
+- `ChannelMuteMask`
+- `ChannelSoloMask`
+- `GetChannelProgram()`
+- `GetChannelActiveNoteCount()`
+- `GetChannelActiveKeyMaskWord()`
+- `TryPopChannelKeyEvent()`
+- `CurrentFramePosition`
+- `LengthFramesEstimate`
+
+注意:
+
+- 現在の C# ラッパーは UTF-8 版 API を使います。
+- `CreateOptions` は `StructSize`、各種上限値、`CompatibilityFlags` を公開しています。
+- C ヘッダにある `sf2RomBankPath` / `sf2RomBankPathUtf8` は、現時点の C# `CreateOptions` では公開していません。
+
+### C# 使用例
+
+```csharp
+using var engine = new XArkMidiEngine.Engine(
+    "example.mid",
+    "example.sf2",
+    XArkMidiEngine.SoundBankKind.Auto,
+    44100,
+    2);
+
+short[] pcm = engine.RenderAll();
+```
+
+互換オプション付きの例:
+
+```csharp
+var options = XArkMidiEngine.CreateOptions.Default();
+options.CompatibilityFlags =
+    XArkMidiEngine.CompatibilityFlags.EnableSf2SamplePitchCorrection |
+    XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
+
+using var engine = new XArkMidiEngine.Engine(
+    "example.mid",
+    "example.sf2",
+    XArkMidiEngine.SoundBankKind.Auto,
+    44100,
+    2,
+    options);
+```
 
 ## テスト
 
-### テストアプリのビルド
+### Windows でテスト用ツールをビルド
 
 ```powershell
 msbuild msvc/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /nologo
@@ -107,61 +272,61 @@ msbuild msvc/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /
 XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 ```
 
-## SF2 準拠メモ
+### 補助テスト / 検証コード
 
-現時点の SF2 実装では、次を優先して追従しています。
+- `tests/sf2_compliance.cpp`
+  - synthetic SF2 を使って SF2 実装の互換性を検証します。
+- `tests/dump_sf2_zone.cpp`
+  - 読み込んだ SF2 に未対応 modulator がある場合、その件数を確認できます。
+
+## SF2 実装メモ
+
+現時点では次を優先して実装しています。
 
 - generator の既定値マージ
-- key/velocity 強制
-- default modulator の主要系
+- key / velocity 強制
+- 主要 default modulator
   - velocity -> initial attenuation
   - velocity -> initial filter cutoff
   - CC1 -> vibrato LFO pitch
-- runtime 再評価が必要な modulator source
+- ランタイム再評価が必要な source
   - CC
   - poly pressure
   - channel pressure
   - pitch bend
   - pitch wheel sensitivity
 - 再評価対象 destination
-  - pitch/filter/attenuation/pan
-  - volume/mod envelope
-  - modulation/vibrato LFO
-  - reverb/chorus send
-  - tuning/root/exclusive class
+  - pitch
+  - filter
+  - attenuation
+  - pan
+  - volume / mod envelope
+  - modulation / vibrato LFO
+  - reverb / chorus send
+  - tuning / root / exclusive class
 
-補助確認:
-
-- `tests/dump_sf2_zone.cpp` は、読み込んだ SF2 に未対応 modulator がある場合、その件数と未対応 transform 件数を表示します。
-
-残件:
+既知の制限:
 
 - 一部の modulator destination は未対応です。
-- `sfModTransOper` は linear と absolute のみ対応しています。
-- CC7/CC10/CC11 の implicit default modulator は既定では無効です。必要なら `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を指定してください。
-- SF2 send と MIDI send の最終ミキシング方針は、既定では加算です。
-- `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` を指定すると、send 合成を乗算へ切り替えられます。
+- `sfModTransOper` は `linear` と `absolute` のみ対応しています。
+- CC7 / CC10 / CC11 の implicit default modulator は既定で無効です。
+  必要なら `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を指定してください。
+- SF2 send と MIDI send の最終ミキシング方針は既定で加算です。
+  `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` を指定すると乗算に切り替えられます。
 
-テスト:
+## 注意事項
 
-- `tests/sf2_compliance.cpp` は synthetic SF2 を使って、forced velocity、default modulator、absolute transform、unsupported transform 集計、send mixing policy を検証します。
-- 追加で、`mod env to pitch`、`keynum-to-hold / keynum-to-decay`、poly pressure、channel pressure、pitch wheel sensitivity amount source も検証します。
-
-## 想定ユースケース
-
-- MIDI から WAV 相当の PCM データを生成したい
-- SF2/DLS 音源を使ったオフラインレンダリングを行いたい
-- C++ または C# アプリへ MIDI 再生エンジンを組み込みたい
+- `sampleRate` は 0 より大きい値を指定してください。
+- `numChannels` は `1` または `2` のみ対応です。
+- Windows では UTF-16 API、Linux / macOS では UTF-8 API の利用を推奨します。
+- `XAmeRender()` の出力バッファは `numFrames * channelCount` サンプル以上必要です。
+- 作成失敗時やレンダリング失敗時の詳細は `XAmeGetLastError()` で取得できます。
 
 ## License
 
-このリポジトリ内のソースコードは、別途明記がない限り `MPL-2.0`
-(Mozilla Public License 2.0) の下で提供します。
+このリポジトリ内のソースコードは、別途明記がない限り `MPL-2.0` (Mozilla Public License 2.0) の下で提供します。
 
 - ライセンス本文は [LICENSE](LICENSE) を参照してください。
-- このライブラリを変更して再配布する場合、変更した MPL 対象ファイルは
-  MPL-2.0 の条件に従って提供する必要があります。
-- このライブラリを利用するアプリケーション全体が、直ちに MPL-2.0 になる
-  わけではありません。
-- SF2/DLS 音源、MIDI データ、テスト用素材などを別途同梱または配布する場合、
-  それらのライセンスは本リポジトリのコードとは別に確認してください。
+- このライブラリを変更して再配布する場合、変更した MPL 対象ファイルは MPL-2.0 の条件に従って提供する必要があります。
+- このライブラリを利用するアプリケーション全体が直ちに MPL-2.0 になるわけではありません。
+- SF2 / DLS 音源、MIDI データ、テスト素材などを別途同梱または配布する場合、それらのライセンスは別途確認してください。
