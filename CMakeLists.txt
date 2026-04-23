@@ -86,8 +86,14 @@ if(XAME_BUILD_TESTS)
     target_link_libraries(XArkMidiTest PRIVATE XArkMidiEngine)
     target_include_directories(XArkMidiTest PRIVATE include)
 
+    add_executable(analyze_wav_clipping tests/analyze_wav_clipping.cpp)
+    target_compile_features(analyze_wav_clipping PRIVATE cxx_std_17)
+
+    add_executable(compare_wav_diff tests/compare_wav_diff.cpp)
+    target_compile_features(compare_wav_diff PRIVATE cxx_std_17)
+
     # Internal dump/inspect tools (link directly against sources, not the shared lib)
-    foreach(_tool dump_midi_track dump_sf2_zone dump_dls_zone)
+    foreach(_tool dump_midi_track dump_midi_window dump_sf2_zone dump_dls_zone)
         add_executable(${_tool} tests/${_tool}.cpp)
         target_include_directories(${_tool} PRIVATE src)
         target_compile_features(${_tool} PRIVATE cxx_std_17)
