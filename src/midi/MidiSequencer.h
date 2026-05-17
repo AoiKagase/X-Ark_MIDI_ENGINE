@@ -24,6 +24,15 @@ class MidiSequencer {
 public:
     bool Init(const MidiFile* file, u32 sampleRate);
 
+    // Rewind to the beginning while keeping the parsed tempo map and merged events.
+    void Reset();
+    void ResetToLoopStart();
+    bool SetLoopRangeTicks(u32 startTick, u32 endTick);
+    void ClearLoopRange();
+    bool HasLoopRange() const { return loopRangeEnabled_; }
+    bool IsAtLoopEnd() const;
+    u32 LoopStartTick() const { return loopStartTick_; }
+
     // 次のイベントまで何サンプルあるか（0なら即時処理すべきイベントが存在）
     u32 SamplesToNextEvent() const;
 
@@ -56,6 +65,11 @@ private:
     size_t                  eventCursor_ = 0;
     double                  currentSample_ = 0.0;
     double                  nextEventSample_ = 0.0;
+    bool                    loopRangeEnabled_ = false;
+    u32                     loopStartTick_ = 0;
+    u32                     loopEndTick_ = 0;
+    double                  loopStartSample_ = 0.0;
+    double                  loopEndSample_ = 0.0;
 
     std::string errorMsg_;
 

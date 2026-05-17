@@ -334,12 +334,14 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
                         u32 sampleRate, u32 numChannels,
                         const SynthCompatOptions& compatOptions) {
     compatOptions_    = compatOptions;
+    midi_             = midi;
     soundBank_        = soundBank;
     sampleRate_       = sampleRate;
     numChannels_      = numChannels;
     finished_         = false;
     normGain_         = soundBank ? soundBank->GetLoudnessNormCompensation() : 1.0f;
     seqEndNotified_   = false;
+    completedLoops_   = 0;
     errorMsg_.clear();
     reverbIndex_      = 0;
     chorusIndex_      = 0;
@@ -392,6 +394,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
         errorMsg_ = "Sequencer init failed: " + sequencer_.ErrorMessage();
         return false;
     }
+    ConfigureSequencerLoopRange();
     return true;
 }
 
@@ -408,11 +411,27 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
 
     u32 frame = 0;
     while (frame < numFrames) {
+        if (sequencer_.IsAtLoopEnd()) {
+            if (TryRestartLoop()) {
+                continue;
+            }
+            sequencer_.ClearLoopRange();
+        }
         while (!sequencer_.IsFinished()) {
             u32 samplesToNext = sequencer_.SamplesToNextEvent();
             if (samplesToNext > 0) break;
             const MidiEvent* ev = sequencer_.ConsumeEvent();
             if (ev) HandleEvent(*ev);
+            if (sequencer_.IsAtLoopEnd()) {
+                if (TryRestartLoop()) {
+                    break;
+                }
+                sequencer_.ClearLoopRange();
+            }
+        }
+
+        if (sequencer_.IsFinished() && TryRestartLoop()) {
+            continue;
         }
 
         u32 blockFrames = numFrames - frame;
@@ -572,6 +591,16 @@ bool Synthesizer::IsFinished() const {
     return finished_;
 }
 
+void Synthesizer::SetLoop(bool enabled, u32 loopCount) {
+    loopEnabled_ = enabled;
+    loopCount_ = loopCount;
+    completedLoops_ = 0;
+    ConfigureSequencerLoopRange();
+    if (enabled) {
+        finished_ = false;
+    }
+}
+
 int Synthesizer::GetChannelProgram(u32 channel) const {
     if (channel >= MIDI_CHANNEL_COUNT) {
         return -1;
@@ -617,6 +646,108 @@ u64 Synthesizer::GetLengthFramesEstimate() const {
         return 0;
     }
     return static_cast<u64>(std::ceil(totalSamples));
+}
+
+bool Synthesizer::TryRestartLoop() {
+    if (!loopEnabled_ || sequencer_.TotalSamples() <= 0.0) {
+        return false;
+    }
+    if (loopCount_ != 0 && completedLoops_ >= loopCount_) {
+        return false;
+    }
+
+    ++completedLoops_;
+    ResetPlaybackStateForLoop();
+    if (sequencer_.HasLoopRange()) {
+        ApplyEventsBeforeTick(sequencer_.LoopStartTick());
+        sequencer_.ResetToLoopStart();
+    } else {
+        sequencer_.Reset();
+    }
+    finished_ = false;
+    seqEndNotified_ = false;
+    return true;
+}
+
+void Synthesizer::ResetPlaybackStateForLoop() {
+    for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+        voicePool_.AllSoundOff(static_cast<u8>(ch));
+        channels_[ch].Reset();
+        channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
+        channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
+        channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
+        channelHeldKeyCounts_[ch].fill(0);
+        for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
+            channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
+        }
+    }
+    ResetGsEffectState();
+    std::fill(reverbDelayL_.begin(), reverbDelayL_.end(), 0.0f);
+    std::fill(reverbDelayR_.begin(), reverbDelayR_.end(), 0.0f);
+    std::fill(chorusDelayL_.begin(), chorusDelayL_.end(), 0.0f);
+    std::fill(chorusDelayR_.begin(), chorusDelayR_.end(), 0.0f);
+    reverbIndex_ = 0;
+    chorusIndex_ = 0;
+    chorusSin_ = 0.0f;
+    chorusCos_ = 1.0f;
+    mixGainCurrent_ = 1.0f;
+    masterVolume_ = 1.0f;
+    dcBlockPrevInL_ = 0.0f;
+    dcBlockPrevInR_ = 0.0f;
+    dcBlockPrevOutL_ = 0.0f;
+    dcBlockPrevOutR_ = 0.0f;
+}
+
+void Synthesizer::ConfigureSequencerLoopRange() {
+    sequencer_.ClearLoopRange();
+    if (!loopEnabled_ || !midi_) {
+        return;
+    }
+    const auto& loopMarkers = midi_->LoopMarkers();
+    if (loopMarkers.hasLoop) {
+        sequencer_.SetLoopRangeTicks(loopMarkers.startTick, loopMarkers.endTick);
+    }
+}
+
+bool Synthesizer::ShouldApplyBeforeLoopStart(const MidiEvent& ev) {
+    switch (ev.type) {
+    case MidiEventType::ControlChange:
+    case MidiEventType::ProgramChange:
+    case MidiEventType::PitchBend:
+    case MidiEventType::PolyPressure:
+    case MidiEventType::ChannelPressure:
+    case MidiEventType::SysEx:
+    case MidiEventType::PerNotePitchBend:
+    case MidiEventType::PerNoteRegCtrl:
+    case MidiEventType::PerNoteManagement:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void Synthesizer::ApplyEventsBeforeTick(u32 tick) {
+    if (!midi_) {
+        return;
+    }
+    std::vector<const MidiEvent*> events;
+    for (int trackIndex = 0; trackIndex < midi_->TrackCount(); ++trackIndex) {
+        const auto& track = midi_->Track(trackIndex);
+        for (const auto& ev : track.Events()) {
+            if (ev.absoluteTick >= tick) {
+                continue;
+            }
+            if (ShouldApplyBeforeLoopStart(ev)) {
+                events.push_back(&ev);
+            }
+        }
+    }
+    std::stable_sort(events.begin(), events.end(), [](const MidiEvent* a, const MidiEvent* b) {
+        return a->absoluteTick < b->absoluteTick;
+    });
+    for (const MidiEvent* ev : events) {
+        HandleEvent(*ev);
+    }
 }
 
 bool Synthesizer::HasAudibleEffectTail() const {

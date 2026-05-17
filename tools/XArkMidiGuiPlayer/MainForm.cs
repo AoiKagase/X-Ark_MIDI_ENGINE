@@ -22,6 +22,14 @@ public sealed class MainForm : Form
     private readonly Button _browseSoundFontButton = new() { Text = "Open Bank..." };
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
     private readonly Button _stopButton = new() { Text = "Stop", Width = 90, Enabled = false };
+    private readonly CheckBox _loopEnabledCheckBox = new() { AutoSize = true, Text = "Loop" };
+    private readonly NumericUpDown _loopCountUpDown = new() {
+        Width = 80,
+        Minimum = 0,
+        Maximum = uint.MaxValue,
+        ThousandsSeparator = true,
+        Enabled = false,
+    };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
@@ -152,6 +160,10 @@ public sealed class MainForm : Form
         };
         controlPanel.Controls.Add(_playButton);
         controlPanel.Controls.Add(_stopButton);
+        controlPanel.Controls.Add(new Label { AutoSize = true, Width = 12 });
+        controlPanel.Controls.Add(_loopEnabledCheckBox);
+        controlPanel.Controls.Add(new Label { AutoSize = true, Text = "Count", Anchor = AnchorStyles.Left, Margin = new Padding(8, 6, 0, 0) });
+        controlPanel.Controls.Add(_loopCountUpDown);
         controlPanel.Controls.Add(new Label { AutoSize = true, Width = 20 });
         controlPanel.Controls.Add(_statusLabel);
 
@@ -302,6 +314,11 @@ public sealed class MainForm : Form
         _browseSoundFontButton.Click += (_, _) => BrowseFile(_soundFontDialog, _soundFontPathTextBox);
         _playButton.Click += async (_, _) => await StartPlaybackAsync();
         _stopButton.Click += (_, _) => StopPlayback();
+        _loopEnabledCheckBox.CheckedChanged += (_, _) => {
+            _loopCountUpDown.Enabled = _loopEnabledCheckBox.Checked;
+            ApplyLoopToPlayer();
+        };
+        _loopCountUpDown.ValueChanged += (_, _) => ApplyLoopToPlayer();
         _uiTimer.Tick += (_, _) => RefreshUiState();
         _seekTrackBar.Scroll += (_, _) => RefreshSeekUi();
         _seekTrackBar.MouseDown += (_, _) => _seekDragActive = true;
@@ -362,6 +379,7 @@ public sealed class MainForm : Form
             player.PlaybackStopped += OnPlaybackStopped;
             _player = player;
             ApplyMasksToPlayer();
+            ApplyLoopToPlayer();
             _playButton.Enabled = false;
             _stopButton.Enabled = true;
             _statusLabel.Text = startPositionSeconds > 0.0 ? "Seeking" : "Playing";
@@ -424,6 +442,11 @@ public sealed class MainForm : Form
             }
         }
         _player.SetChannelMasks(muteMask, soloMask);
+    }
+
+    private void ApplyLoopToPlayer()
+    {
+        _player?.SetLoop(_loopEnabledCheckBox.Checked, DecimalToUInt32(_loopCountUpDown.Value));
     }
 
     private void RefreshUiState()
@@ -723,7 +746,10 @@ public sealed class WaveOutPlayer : IDisposable
     private Task? _playTask;
     private uint _pendingMuteMask;
     private uint _pendingSoloMask;
+    private bool _pendingLoopEnabled;
+    private uint _pendingLoopCount;
     private int _pendingMaskDirty;
+    private int _pendingLoopDirty;
     private Exception? _playbackException;
     private WavDumpWriter? _dumpWriter;
     private ulong _lengthFramesEstimate;
@@ -806,6 +832,13 @@ public sealed class WaveOutPlayer : IDisposable
         Interlocked.Exchange(ref _pendingMaskDirty, 1);
     }
 
+    public void SetLoop(bool enabled, uint loopCount)
+    {
+        _pendingLoopEnabled = enabled;
+        _pendingLoopCount = loopCount;
+        Interlocked.Exchange(ref _pendingLoopDirty, 1);
+    }
+
     public ChannelSnapshot GetChannelSnapshot()
     {
         lock (_engineLock) {
@@ -871,6 +904,9 @@ public sealed class WaveOutPlayer : IDisposable
                         if (Interlocked.Exchange(ref _pendingMaskDirty, 0) != 0) {
                             _engine.ChannelMuteMask = _pendingMuteMask;
                             _engine.ChannelSoloMask = _pendingSoloMask;
+                        }
+                        if (Interlocked.Exchange(ref _pendingLoopDirty, 0) != 0) {
+                            _engine.SetLoop(_pendingLoopEnabled, _pendingLoopCount);
                         }
                         if (_engine.IsFinished) {
                             playbackFinished = true;
@@ -943,8 +979,11 @@ public sealed class WaveOutPlayer : IDisposable
         _playTask = null;
         _pendingMuteMask = 0;
         _pendingSoloMask = 0;
+        _pendingLoopEnabled = false;
+        _pendingLoopCount = 0;
         _lengthFramesEstimate = 0;
         Interlocked.Exchange(ref _pendingMaskDirty, 0);
+        Interlocked.Exchange(ref _pendingLoopDirty, 0);
     }
 
     public Exception? ConsumePlaybackException()

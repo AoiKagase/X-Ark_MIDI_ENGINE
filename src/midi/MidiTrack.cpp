@@ -65,14 +65,19 @@ bool MidiTrack::ParseEvent(BinaryReader& r, u32 currentTick) {
         u8  metaType = r.ReadU8();
         u32 length   = r.ReadVLQ();
         auto metaData = r.ReadSlice(length);
+        ev.metaType = metaType;
+        ev.payload.reserve(length);
+        for (u32 i = 0; i < length; ++i) {
+            ev.payload.push_back(metaData.ReadU8());
+        }
 
         switch (metaType) {
         case 0x51: // Set Tempo
             if (length >= 3) {
                 ev.type    = MidiEventType::MetaTempo;
-                ev.tempoUs = (static_cast<u32>(metaData.ReadU8()) << 16)
-                           | (static_cast<u32>(metaData.ReadU8()) <<  8)
-                           |  static_cast<u32>(metaData.ReadU8());
+                ev.tempoUs = (static_cast<u32>(ev.payload[0]) << 16)
+                           | (static_cast<u32>(ev.payload[1]) <<  8)
+                           |  static_cast<u32>(ev.payload[2]);
                 events_.push_back(ev);
             }
             break;
@@ -156,4 +161,3 @@ bool MidiTrack::ParseEvent(BinaryReader& r, u32 currentTick) {
 }
 
 } // namespace XArkMidi
-

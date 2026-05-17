@@ -8,6 +8,9 @@
 #include "../midi2/Midi2File.h"
 #include <stdexcept>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
+#include <limits>
 
 namespace XArkMidi {
 
@@ -29,11 +32,13 @@ bool MidiFile::LoadMidi2FromMemory(const u8* data, size_t size) {
     tracks_.clear();
     for (int i = 0; i < midi2.TrackCount(); ++i)
         tracks_.push_back(midi2.Track(i));
+    DetectLoopMarkers();
     return true;
 }
 
 bool MidiFile::LoadFromMemory(const u8* data, size_t size) {
     tracks_.clear();
+    loopMarkers_ = {};
     errorMsg_.clear();
 
     // MIDI 2.0 Clip File (RIFF/MIDI) を自動検出
@@ -98,6 +103,7 @@ bool MidiFile::LoadFromMemory(const u8* data, size_t size) {
         errorMsg_ = e.what();
         return false;
     }
+    DetectLoopMarkers();
     return true;
 }
 
@@ -108,5 +114,83 @@ bool MidiFile::LoadFromFile(const std::wstring& path) {
     return LoadFromMemory(data.data(), data.size());
 }
 
-} // namespace XArkMidi
+namespace {
+std::string LowerAscii(const std::vector<u8>& payload) {
+    std::string text;
+    text.reserve(payload.size());
+    for (u8 ch : payload) {
+        text.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return text;
+}
 
+bool IsLoopStartText(const std::string& text) {
+    return text.find("loopstart") != std::string::npos ||
+           text.find("loop start") != std::string::npos ||
+           text.find("loop_start") != std::string::npos ||
+           text.find("loop begin") != std::string::npos;
+}
+
+bool IsLoopEndText(const std::string& text) {
+    return text.find("loopend") != std::string::npos ||
+           text.find("loop end") != std::string::npos ||
+           text.find("loop_end") != std::string::npos;
+}
+}
+
+void MidiFile::DetectLoopMarkers() {
+    loopMarkers_ = {};
+
+    u32 songEndTick = 0;
+    u32 textStartTick = 0;
+    u32 textEndTick = 0;
+    bool hasTextStart = false;
+    bool hasTextEnd = false;
+    u32 cc111Tick = std::numeric_limits<u32>::max();
+    u32 cc116Tick = std::numeric_limits<u32>::max();
+    u32 cc117Tick = std::numeric_limits<u32>::max();
+
+    for (const auto& track : tracks_) {
+        for (const auto& ev : track.Events()) {
+            songEndTick = std::max(songEndTick, ev.absoluteTick);
+
+            if (ev.type == MidiEventType::MetaOther &&
+                (ev.metaType == 0x01 || ev.metaType == 0x05 || ev.metaType == 0x06 || ev.metaType == 0x07)) {
+                const std::string text = LowerAscii(ev.payload);
+                if (!hasTextStart && IsLoopStartText(text)) {
+                    hasTextStart = true;
+                    textStartTick = ev.absoluteTick;
+                }
+                if (!hasTextEnd && IsLoopEndText(text)) {
+                    hasTextEnd = true;
+                    textEndTick = ev.absoluteTick;
+                }
+            } else if (ev.type == MidiEventType::ControlChange) {
+                if (ev.data1 == 111 && ev.absoluteTick < cc111Tick) {
+                    cc111Tick = ev.absoluteTick;
+                } else if (ev.data1 == 116 && ev.absoluteTick < cc116Tick) {
+                    cc116Tick = ev.absoluteTick;
+                } else if (ev.data1 == 117 && ev.absoluteTick < cc117Tick) {
+                    cc117Tick = ev.absoluteTick;
+                }
+            }
+        }
+    }
+
+    if (hasTextStart && hasTextEnd && textStartTick < textEndTick) {
+        loopMarkers_ = { true, textStartTick, textEndTick, MidiLoopMarkerSource::TextMarker };
+        return;
+    }
+    if (cc111Tick != std::numeric_limits<u32>::max() && cc111Tick < songEndTick) {
+        loopMarkers_ = { true, cc111Tick, songEndTick, MidiLoopMarkerSource::Cc111 };
+        return;
+    }
+    if (cc116Tick != std::numeric_limits<u32>::max() &&
+        cc117Tick != std::numeric_limits<u32>::max() &&
+        cc116Tick < cc117Tick) {
+        loopMarkers_ = { true, cc116Tick, cc117Tick, MidiLoopMarkerSource::Cc116117 };
+        return;
+    }
+}
+
+} // namespace XArkMidi

@@ -52,6 +52,7 @@ struct MidiEvent {
 
     // MetaTempo 専用: μsec/beat (BPM = 60,000,000 / tempoUs)
     u32           tempoUs;
+    u8            metaType = 0;
     std::vector<u8> payload;
 
     // PitchBend の値: (data2 << 7 | data1) - 8192, 範囲 [-8192, 8191]

@@ -166,6 +166,18 @@ public static class XArkMidiEngine
         uint channelMask);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetLoop(
+        IntPtr engine,
+        int enabled,
+        uint loopCount);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int XAmeGetLoopEnabled(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint XAmeGetLoopCount(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern XAmeResult XAmeSetChannelSoloMask(
         IntPtr engine,
         uint channelMask);
@@ -338,6 +350,52 @@ public static class XArkMidiEngine
                 if (_disposed) return true;
                 return XAmeIsFinished(_handle) != 0;
             }
+        }
+
+        /// <summary>
+        /// Gets or sets whether whole-MIDI looping is enabled.
+        /// MIDI 全体のループが有効かどうかを取得または設定します。
+        /// </summary>
+        public bool LoopEnabled
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetLoopEnabled(_handle) != 0;
+            }
+            set
+            {
+                SetLoop(value, LoopCount);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the number of additional repeats after the first play. 0 means infinite when looping is enabled.
+        /// 初回再生後の追加ループ回数を取得または設定します。ループ有効時の 0 は無限です。
+        /// </summary>
+        public uint LoopCount
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return XAmeGetLoopCount(_handle);
+            }
+            set
+            {
+                SetLoop(LoopEnabled, value);
+            }
+        }
+
+        /// <summary>
+        /// Configure whole-MIDI looping.
+        /// MIDI 全体のループ設定を行います。
+        /// </summary>
+        public void SetLoop(bool enabled, uint loopCount)
+        {
+            ThrowIfDisposed();
+            var result = XAmeSetLoop(_handle, enabled ? 1 : 0, loopCount);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
         }
 
         /// <summary>

@@ -299,6 +299,29 @@ XAmeResult XAmeSetChannelMuteMask(XAmeEngine engine, unsigned int channelMask) {
     return XAME_OK;
 }
 
+XAmeResult XAmeSetLoop(XAmeEngine engine, int enabled, unsigned int loopCount) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    engine->synthesizer.SetLoop(enabled != 0, loopCount);
+    return XAME_OK;
+}
+
+int XAmeGetLoopEnabled(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetLoopEnabled() ? 1 : 0;
+}
+
+unsigned int XAmeGetLoopCount(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 0;
+    }
+    return engine->synthesizer.GetLoopCount();
+}
+
 XAmeResult XAmeSetChannelSoloMask(XAmeEngine engine, unsigned int channelMask) {
     if (!engine || !engine->initialized) {
         SetError("Engine not initialized");

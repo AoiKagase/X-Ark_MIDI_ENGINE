@@ -63,6 +63,9 @@ public:
     u32 Render(i16* buf, u32 numFrames);
 
     bool IsFinished() const;
+    void SetLoop(bool enabled, u32 loopCount);
+    bool GetLoopEnabled() const { return loopEnabled_; }
+    u32 GetLoopCount() const { return loopCount_; }
     void SetChannelMuteMask(u32 channelMask) { channelMuteMask_.store(channelMask & 0xFFFFu, std::memory_order_relaxed); }
     void SetChannelSoloMask(u32 channelMask) { channelSoloMask_.store(channelMask & 0xFFFFu, std::memory_order_relaxed); }
     u32 GetChannelMuteMask() const { return channelMuteMask_.load(std::memory_order_relaxed); }
@@ -78,6 +81,7 @@ public:
 
 private:
     SynthCompatOptions compatOptions_{};
+    const MidiFile* midi_ = nullptr;
     const SoundBank* soundBank_ = nullptr;
     u32             sampleRate_ = 44100;
     u32             numChannels_= 2;
@@ -88,6 +92,9 @@ private:
 
     bool            finished_        = false;
     bool            seqEndNotified_  = false; // シーケンサー終了時の AllNotesOff 送信済みフラグ
+    bool            loopEnabled_     = false;
+    u32             loopCount_       = 0;
+    u32             completedLoops_  = 0;
     std::string     errorMsg_;
 
     std::vector<f32> reverbDelayL_;
@@ -154,6 +161,11 @@ private:
     void RefreshSf2ControllersForChannel(u8 ch);
     bool HasAudibleEffectTail() const;
     void ResetGsEffectState();
+    bool TryRestartLoop();
+    void ResetPlaybackStateForLoop();
+    void ConfigureSequencerLoopRange();
+    void ApplyEventsBeforeTick(u32 tick);
+    static bool ShouldApplyBeforeLoopStart(const MidiEvent& ev);
     void PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity);
 };
 

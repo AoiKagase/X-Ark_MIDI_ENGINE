@@ -18,6 +18,20 @@ struct MidiHeader {
     u16 division;  // PPQ (ticks per quarter note) ※SMPTE非対応
 };
 
+enum class MidiLoopMarkerSource : u8 {
+    None = 0,
+    TextMarker,
+    Cc111,
+    Cc116117,
+};
+
+struct MidiLoopMarkers {
+    bool hasLoop = false;
+    u32 startTick = 0;
+    u32 endTick = 0;
+    MidiLoopMarkerSource source = MidiLoopMarkerSource::None;
+};
+
 class MidiFile {
 public:
     bool LoadFromMemory(const u8* data, size_t size);
@@ -26,18 +40,20 @@ public:
     const MidiHeader&   Header()     const { return header_; }
     int                 TrackCount() const { return static_cast<int>(tracks_.size()); }
     const MidiTrack&    Track(int i) const { return tracks_[i]; }
+    const MidiLoopMarkers& LoopMarkers() const { return loopMarkers_; }
 
     const std::string& ErrorMessage() const { return errorMsg_; }
 
 private:
     MidiHeader              header_{};
     std::vector<MidiTrack>  tracks_;
+    MidiLoopMarkers         loopMarkers_{};
     std::string             errorMsg_;
 
     // MIDI 2.0 Clip File (RIFF/MIDI) のロード。
     // LoadFromMemory() が自動的に呼び出す。
     bool LoadMidi2FromMemory(const u8* data, size_t size);
+    void DetectLoopMarkers();
 };
 
 } // namespace XArkMidi
-

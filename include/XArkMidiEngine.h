@@ -204,6 +204,21 @@ XAME_API XAmeResult XAmeRender(
     unsigned int*  outWritten
 );
 
+/*
+ * Enable or disable whole-MIDI looping.
+ * MIDI 全体のループを有効または無効にします。
+ *
+ * loopCount is the number of additional repeats after the first play.
+ * loopCount は初回再生後の追加ループ回数です。
+ * When enabled is non-zero and loopCount is 0, looping continues indefinitely.
+ * enabled が非 0 かつ loopCount が 0 の場合は無限ループします。
+ */
+XAME_API XAmeResult XAmeSetLoop(XAmeEngine engine, int enabled, unsigned int loopCount);
+/* Return non-zero if whole-MIDI looping is enabled. MIDI 全体のループが有効な場合に非 0 を返します。 */
+XAME_API int XAmeGetLoopEnabled(XAmeEngine engine);
+/* Return the configured loop count. 0 means infinite when looping is enabled. 設定済みループ回数を返します。ループ有効時の 0 は無限です。 */
+XAME_API unsigned int XAmeGetLoopCount(XAmeEngine engine);
+
 /* Set a 16-bit MIDI channel mute mask. Bit 0 controls channel 0, bit 15 controls channel 15. 16bit の MIDI チャンネルミュートマスクを設定します。 */
 XAME_API XAmeResult XAmeSetChannelMuteMask(XAmeEngine engine, unsigned int channelMask);
 /* Set a 16-bit MIDI channel solo mask. When non-zero, only selected channels are rendered. 16bit の MIDI チャンネルソロマスクを設定します。 */

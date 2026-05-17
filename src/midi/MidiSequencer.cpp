@@ -40,6 +40,54 @@ bool MidiSequencer::Init(const MidiFile* file, u32 sampleRate) {
     return true;
 }
 
+void MidiSequencer::Reset() {
+    eventCursor_ = 0;
+    currentSample_ = 0.0;
+    nextEventSample_ = mergedEvents_.empty() ? 0.0 : TickToSample(mergedEvents_[0].absoluteTick);
+}
+
+void MidiSequencer::ResetToLoopStart() {
+    if (!loopRangeEnabled_) {
+        Reset();
+        return;
+    }
+    currentSample_ = loopStartSample_;
+    eventCursor_ = 0;
+    while (eventCursor_ < mergedEvents_.size() && mergedEvents_[eventCursor_].absoluteTick < loopStartTick_) {
+        ++eventCursor_;
+    }
+    nextEventSample_ = IsFinished() ? currentSample_ : TickToSample(mergedEvents_[eventCursor_].absoluteTick);
+}
+
+bool MidiSequencer::SetLoopRangeTicks(u32 startTick, u32 endTick) {
+    if (startTick >= endTick) {
+        ClearLoopRange();
+        return false;
+    }
+    loopStartTick_ = startTick;
+    loopEndTick_ = endTick;
+    loopStartSample_ = TickToSample(startTick);
+    loopEndSample_ = TickToSample(endTick);
+    if (loopStartSample_ >= loopEndSample_) {
+        ClearLoopRange();
+        return false;
+    }
+    loopRangeEnabled_ = true;
+    return true;
+}
+
+void MidiSequencer::ClearLoopRange() {
+    loopRangeEnabled_ = false;
+    loopStartTick_ = 0;
+    loopEndTick_ = 0;
+    loopStartSample_ = 0.0;
+    loopEndSample_ = 0.0;
+}
+
+bool MidiSequencer::IsAtLoopEnd() const {
+    return loopRangeEnabled_ && currentSample_ >= loopEndSample_;
+}
+
 void MidiSequencer::BuildTempoMap(const MidiFile* file) {
     // デフォルトテンポ（120 BPM = 500000 μs/beat）
     tempoMap_.push_back({ 0, MIDI_DEFAULT_TEMPO_US, 0.0 });
@@ -129,8 +177,17 @@ double MidiSequencer::TotalSamples() const {
 }
 
 u32 MidiSequencer::SamplesToNextEvent() const {
-    if (IsFinished()) return 0;
-    double diff = nextEventSample_ - currentSample_;
+    double targetSample = 0.0;
+    if (IsFinished()) {
+        if (!loopRangeEnabled_) return 0;
+        targetSample = loopEndSample_;
+    } else {
+        targetSample = nextEventSample_;
+        if (loopRangeEnabled_) {
+            targetSample = std::min(targetSample, loopEndSample_);
+        }
+    }
+    double diff = targetSample - currentSample_;
     if (diff <= 0.0) return 0;
     return static_cast<u32>(diff);
 }
