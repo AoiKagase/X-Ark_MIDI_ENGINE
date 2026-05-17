@@ -7,6 +7,8 @@
 #include "FileUtil.h"
 #include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <new>
 
 namespace XArkMidi {
 
@@ -46,18 +48,36 @@ bool ReadFileBytes(const std::wstring& path, std::vector<u8>& outData, std::stri
         return false;
     }
 
+#ifdef _WIN32
+    if (_fseeki64(file, 0, SEEK_END) != 0) {
+#else
     if (std::fseek(file, 0, SEEK_END) != 0) {
+#endif
         std::fclose(file);
         outError = "Failed to seek file";
         return false;
     }
-    long size = std::ftell(file);
+    i64 size = 0;
+#ifdef _WIN32
+    size = static_cast<i64>(_ftelli64(file));
+#else
+    size = static_cast<i64>(std::ftell(file));
+#endif
     if (size < 0) {
         std::fclose(file);
         outError = "Failed to get file size";
         return false;
     }
+    if (static_cast<u64>(size) > static_cast<u64>(std::numeric_limits<size_t>::max()) ||
+        static_cast<size_t>(size) > outData.max_size()) {
+        std::fclose(file);
+        throw std::bad_alloc();
+    }
+#ifdef _WIN32
+    if (_fseeki64(file, 0, SEEK_SET) != 0) {
+#else
     if (std::fseek(file, 0, SEEK_SET) != 0) {
+#endif
         std::fclose(file);
         outError = "Failed to rewind file";
         return false;
@@ -79,4 +99,3 @@ bool ReadFileBytes(const std::wstring& path, std::vector<u8>& outData, std::stri
 }
 
 } // namespace XArkMidi
-
