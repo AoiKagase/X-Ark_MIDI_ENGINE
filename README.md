@@ -5,7 +5,7 @@ MIDI ファイルを SF2 / DLS サウンドバンクで PCM 音声へレンダ�
 
 ## 概要
 
-- 入力: Standard MIDI File (`.mid`), SoundFont 2 (`.sf2`), Downloadable Sounds (`.dls`)
+- 入力: Standard MIDI File (`.mid`), MIDI 2.0 Clip File (RIFF/MIDI), SoundFont 2 (`.sf2`), Downloadable Sounds (`.dls`)
 - 出力: 16-bit interleaved PCM
 - 公開 API: C API (`include/XArkMidiEngine.h`)
 - 同梱ラッパー: C# P/Invoke (`XArkMidiEngine.cs`)
@@ -20,7 +20,9 @@ MIDI ファイルを SF2 / DLS サウンドバンクで PCM 音声へレンダ�
 ## 主な機能
 
 - SF2 / DLS の自動判定または明示指定
+- MIDI 2.0 UMP チャンネルボイスメッセージの MIDI 1.0 互換イベントへのダウンコンバート
 - UTF-16 / UTF-8 の両方のパス API
+- MIDI 全体の有限 / 無限ループ制御
 - レンダリング中のチャンネル mute / solo 制御
 - チャンネルごとの program / 発音中ノート / アクティブキー取得
 - note on / off イベントキュー取得
@@ -50,7 +52,7 @@ msbuild msvc/XArkMidiEngine.sln /p:Configuration=Release /p:Platform=x64 /t:Rebu
 ```bash
 cmake -B build/cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build/cmake
-# Output: build/cmake/libXArkMidiEngine.so
+# Output: build/cmake/libXArkMidiEngine.so (macOS: libXArkMidiEngine.dylib)
 ```
 
 要件:
@@ -90,6 +92,7 @@ cmake --build build/cmake
   - `XAME_SOUNDBANK_SF2`
   - `XAME_SOUNDBANK_DLS`
 - `XAmeCompatibilityFlags`
+  - `XAME_COMPAT_NONE`
   - `XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER`
   - `XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION`
   - `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`
@@ -129,6 +132,17 @@ cmake --build build/cmake
   - 全音声のレンダリング完了後に非 0 を返します。
 - `XAmeDestroyEngine()`
   - エンジンを破棄します。
+
+### ループ制御 API
+
+- `XAmeSetLoop()`
+  - MIDI 全体のループを有効 / 無効にします。
+  - `loopCount` は初回再生後の追加ループ回数です。
+  - `enabled != 0` かつ `loopCount == 0` の場合は無限ループです。
+- `XAmeGetLoopEnabled()`
+  - ループが有効なら非 0 を返します。
+- `XAmeGetLoopCount()`
+  - 設定済みのループ回数を返します。
 
 ### チャンネル制御 / 状態取得 API
 
@@ -213,6 +227,9 @@ int main(void) {
 - `RenderAll()`
 - `RenderAllBytes()`
 - `IsFinished`
+- `LoopEnabled`
+- `LoopCount`
+- `SetLoop()`
 - `ChannelMuteMask`
 - `ChannelSoloMask`
 - `GetChannelProgram()`
@@ -238,6 +255,20 @@ using var engine = new XArkMidiEngine.Engine(
     44100,
     2);
 
+short[] pcm = engine.RenderAll();
+```
+
+有限ループ付きの例:
+
+```csharp
+using var engine = new XArkMidiEngine.Engine(
+    "example.mid",
+    "example.sf2",
+    XArkMidiEngine.SoundBankKind.Auto,
+    44100,
+    2);
+
+engine.SetLoop(enabled: true, loopCount: 2);
 short[] pcm = engine.RenderAll();
 ```
 
@@ -276,8 +307,16 @@ XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 
 - `tests/sf2_compliance.cpp`
   - synthetic SF2 を使って SF2 実装の互換性を検証します。
+- `tests/dump_midi_timeline.cpp`
+  - SMF / MIDI 2.0 Clip File のイベントタイムライン確認に使います。
 - `tests/dump_sf2_zone.cpp`
   - 読み込んだ SF2 に未対応 modulator がある場合、その件数を確認できます。
+- `tests/dump_dls_zone.cpp`
+  - DLS の zone / articulation 内容確認に使います。
+- `tests/analyze_wav_clipping.cpp` / `tests/compare_wav_diff.cpp`
+  - レンダリング結果のクリッピングや WAV 差分確認に使います。
+
+Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_track`、`dump_midi_window`、`dump_sf2_zone`、`dump_dls_zone`、`sf2_compliance`、WAV 解析ツールもビルドされます。不要な場合は `-DXAME_BUILD_TESTS=OFF` を指定してください。
 
 ## SF2 実装メモ
 
@@ -320,6 +359,7 @@ XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
 - `numChannels` は `1` または `2` のみ対応です。
 - Windows では UTF-16 API、Linux / macOS では UTF-8 API の利用を推奨します。
 - `XAmeRender()` の出力バッファは `numFrames * channelCount` サンプル以上必要です。
+- 無限ループを有効にした場合、`XAmeIsFinished()` は通常非 0 になりません。呼び出し側で停止条件を管理してください。
 - 作成失敗時やレンダリング失敗時の詳細は `XAmeGetLastError()` で取得できます。
 
 ## License
