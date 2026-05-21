@@ -31,6 +31,7 @@ public sealed class MainForm : Form
         Enabled = false,
     };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
+    private readonly Label _outputStageMeterLabel = new() { AutoSize = true, Text = "Out: --", Margin = new Padding(12, 6, 0, 0) };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
     private readonly GroupBox _createOptionsGroup = new() { Dock = DockStyle.Top, Text = "Engine Create Options", AutoSize = true };
@@ -170,6 +171,7 @@ public sealed class MainForm : Form
         controlPanel.Controls.Add(_loopCountUpDown);
         controlPanel.Controls.Add(new Label { AutoSize = true, Width = 20 });
         controlPanel.Controls.Add(_statusLabel);
+        controlPanel.Controls.Add(_outputStageMeterLabel);
 
         var seekPanel = new TableLayoutPanel {
             AutoSize = true,
@@ -408,6 +410,7 @@ public sealed class MainForm : Form
             _playButton.Enabled = true;
             _stopButton.Enabled = false;
             _statusLabel.Text = "Idle";
+            _outputStageMeterLabel.Text = "Out: --";
             UpdateCreateOptionsEnabledState();
             return;
         }
@@ -470,6 +473,7 @@ public sealed class MainForm : Form
             _keyboard.ClearTransientEvents();
             UpdateLampStyles();
             UpdateKeyboardLabel();
+            _outputStageMeterLabel.Text = "Out: --";
             RefreshSeekUi();
             return;
         }
@@ -496,7 +500,16 @@ public sealed class MainForm : Form
         UpdateLampStyles();
         UpdateKeyboardLabel();
         _statusLabel.Text = _player.IsFinished ? "Finished" : "Playing";
+        _outputStageMeterLabel.Text = FormatOutputStageMeter(_player.LatestOutputStageMeter);
         RefreshSeekUi();
+    }
+
+    private static string FormatOutputStageMeter(XArkMidiEngine.OutputStageMeter meter)
+    {
+        if (meter.ProcessedFrames == 0) {
+            return "Out: --";
+        }
+        return $"Out: {meter.Mode} in {meter.InputPeak:0.000} out {meter.OutputPeak:0.000} dg {meter.DensityGain:0.000} pg {meter.PeakGain:0.000}";
     }
 
     private async Task CommitSeekAsync()
@@ -772,6 +785,7 @@ public sealed class WaveOutPlayer : IDisposable
     private Exception? _playbackException;
     private WavDumpWriter? _dumpWriter;
     private ulong _lengthFramesEstimate;
+    private XArkMidiEngine.OutputStageMeter _latestOutputStageMeter;
 
     public event EventHandler? PlaybackStopped;
 
@@ -786,6 +800,15 @@ public sealed class WaveOutPlayer : IDisposable
     }
 
     public bool IsFinished => _engine?.IsFinished ?? true;
+    public XArkMidiEngine.OutputStageMeter LatestOutputStageMeter
+    {
+        get {
+            lock (_engineLock) {
+                return _latestOutputStageMeter;
+            }
+        }
+    }
+
     public double CurrentPositionSeconds
     {
         get {
@@ -967,6 +990,7 @@ public sealed class WaveOutPlayer : IDisposable
                             continue;
                         }
                         written = _engine.Render(buffer.Samples, FramesPerBuffer);
+                        _latestOutputStageMeter = _engine.GetOutputStageMeter();
                     }
 
                     if (written == 0) {
@@ -1038,6 +1062,7 @@ public sealed class WaveOutPlayer : IDisposable
         _pendingLoopEnabled = false;
         _pendingLoopCount = 0;
         _lengthFramesEstimate = 0;
+        _latestOutputStageMeter = default;
         Interlocked.Exchange(ref _pendingMaskDirty, 0);
         Interlocked.Exchange(ref _pendingLoopDirty, 0);
     }

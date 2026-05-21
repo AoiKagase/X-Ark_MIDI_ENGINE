@@ -52,6 +52,7 @@ public:
     bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
     u64 GetCurrentFramePosition() const;
     u64 GetLengthFramesEstimate() const;
+    OutputStage::Meter GetOutputStageMeter() const { return outputStage_.GetMeter(); }
 
     const std::string& ErrorMessage() const { return errorMsg_; }
 

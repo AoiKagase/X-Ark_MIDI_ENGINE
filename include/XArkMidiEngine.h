@@ -103,6 +103,22 @@ typedef struct XAmeChannelKeyEvent_ {
     unsigned short reserved2;
 } XAmeChannelKeyEvent;
 
+/* Meter values captured during the most recent render call. 直近のレンダリング呼び出しで取得した出力段メーター値です。 */
+typedef struct XAmeOutputStageMeter_ {
+    /* Output stage mode: 0=Standard, 1=Natural, 2=Warm, 3=Loud. 出力段モードです。 */
+    unsigned int mode;
+    /* Peak level before the output stage drive in normalized float units. 出力段ドライブ前の正規化ピーク値です。 */
+    float inputPeak;
+    /* Peak level after output stage processing in normalized float units. 出力段処理後の正規化ピーク値です。 */
+    float outputPeak;
+    /* Current density follower gain. Lower values indicate sustained dense material is being eased. 現在の密度フォロワーゲインです。 */
+    float densityGain;
+    /* Current linked peak-shaper gain. Lower values indicate peak shaping is active. 現在のリンク済みピーク整形ゲインです。 */
+    float peakGain;
+    /* Number of frames measured in the most recent render call. 直近のレンダリング呼び出しで測定したフレーム数です。 */
+    unsigned int processedFrames;
+} XAmeOutputStageMeter;
+
 /* Opaque engine handle returned by the create functions. 生成関数が返す不透明なエンジンハンドルです。 */
 typedef struct XAmeEngine_* XAmeEngine;
 
@@ -260,6 +276,8 @@ XAME_API int XAmePopChannelKeyEvent(XAmeEngine engine, XAmeChannelKeyEvent* outE
 XAME_API unsigned long long XAmeGetCurrentFramePosition(XAmeEngine engine);
 /* Get the estimated song length in frames, excluding tail effects. エフェクトテールを除く概算の曲長フレーム数を取得します。 */
 XAME_API unsigned long long XAmeGetLengthFramesEstimate(XAmeEngine engine);
+/* Get output-stage meter values from the most recent render call. 直近のレンダリング呼び出しの出力段メーター値を取得します。 */
+XAME_API XAmeResult XAmeGetOutputStageMeter(XAmeEngine engine, XAmeOutputStageMeter* outMeter);
 
 /* Return non-zero once all audio has been rendered. 全音声のレンダリング完了後に非 0 を返します。 */
 XAME_API int XAmeIsFinished(XAmeEngine engine);

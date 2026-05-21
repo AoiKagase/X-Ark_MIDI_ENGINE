@@ -440,6 +440,43 @@ unsigned long long XAmeGetLengthFramesEstimate(XAmeEngine engine) {
     return static_cast<unsigned long long>(engine->synthesizer.GetLengthFramesEstimate());
 }
 
+XAmeResult XAmeGetOutputStageMeter(XAmeEngine engine, XAmeOutputStageMeter* outMeter) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    if (!outMeter) {
+        SetError("Invalid argument");
+        return XAME_ERR_INVALID_ARG;
+    }
+
+    const OutputStage::Meter meter = engine->synthesizer.GetOutputStageMeter();
+    unsigned int mode = 0;
+    switch (meter.mode) {
+    case OutputStage::Mode::EnhancedNatural:
+        mode = 1;
+        break;
+    case OutputStage::Mode::EnhancedWarm:
+        mode = 2;
+        break;
+    case OutputStage::Mode::EnhancedLoud:
+        mode = 3;
+        break;
+    case OutputStage::Mode::Standard:
+    default:
+        mode = 0;
+        break;
+    }
+
+    outMeter->mode = mode;
+    outMeter->inputPeak = meter.inputPeak;
+    outMeter->outputPeak = meter.outputPeak;
+    outMeter->densityGain = meter.densityGain;
+    outMeter->peakGain = meter.peakGain;
+    outMeter->processedFrames = meter.processedFrames;
+    return XAME_OK;
+}
+
 int XAmeIsFinished(XAmeEngine engine) {
     if (!engine || !engine->initialized) return 1;
     return engine->synthesizer.IsFinished() ? 1 : 0;

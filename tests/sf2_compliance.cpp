@@ -1215,6 +1215,34 @@ namespace {
             "Standard output stage should preserve the legacy limiter path on the right lane");
     }
 
+    void TestOutputStageMeterTracksRenderBlock() {
+        OutputStage stage;
+        stage.SetMode(OutputStage::Mode::EnhancedWarm);
+        stage.BeginMeterBlock();
+
+        f32 quietL = 0.20f;
+        f32 quietR = -0.20f;
+        stage.Process(quietL, quietR, 1.0f);
+
+        f32 hotL = 0.40f;
+        f32 hotR = 1.20f;
+        stage.Process(hotL, hotR, 1.0f);
+
+        const OutputStage::Meter meter = stage.GetMeter();
+        Require(meter.mode == OutputStage::Mode::EnhancedWarm,
+            "Output stage meter should report the active preset");
+        Require(meter.processedFrames == 2,
+            "Output stage meter should count processed samples in the current block");
+        Require(meter.inputPeak > 1.19f && meter.inputPeak < 1.21f,
+            "Output stage meter should track pre-stage input peak");
+        Require(meter.outputPeak > 0.0f && meter.outputPeak < 1.0f,
+            "Output stage meter should track constrained output peak");
+        Require(meter.densityGain > 0.0f && meter.densityGain <= 1.0f,
+            "Output stage meter should expose density gain");
+        Require(meter.peakGain > 0.0f && meter.peakGain <= 1.0f,
+            "Output stage meter should expose linked peak gain");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -2942,6 +2970,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEnhancedOutputStageAdaptsToDensePassages);
     RUN_TEST(TestOutputStagePresetsHaveDistinctDrive);
     RUN_TEST(TestOutputStageStandardMatchesLimiterPath);
+    RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);

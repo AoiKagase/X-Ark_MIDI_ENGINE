@@ -58,24 +58,46 @@ public:
         EnhancedLoud,
     };
 
+    struct Meter {
+        Mode mode = Mode::Standard;
+        f32 inputPeak = 0.0f;
+        f32 outputPeak = 0.0f;
+        f32 densityGain = 1.0f;
+        f32 peakGain = 1.0f;
+        u32 processedFrames = 0;
+    };
+
     void SetMode(Mode mode) { mode_ = mode; }
     Mode GetMode() const { return mode_; }
     void Reset() {
         smoothGain_ = 1.0f;
         densityEnergy_ = 0.0f;
         densityGain_ = 1.0f;
+        BeginMeterBlock();
+    }
+
+    void BeginMeterBlock() {
+        meter_ = {};
+        meter_.mode = mode_;
+        meter_.densityGain = densityGain_;
+        meter_.peakGain = smoothGain_;
     }
 
     void Process(f32& sampleL, f32& sampleR, f32 inputGain) {
+        const f32 inputPeak = std::max(std::abs(sampleL * inputGain), std::abs(sampleR * inputGain));
         if (mode_ != Mode::Standard) {
             ProcessEnhanced(sampleL, sampleR, inputGain, ParamsForMode(mode_));
+            UpdateMeter(inputPeak, sampleL, sampleR);
             return;
         }
 
         sampleL *= inputGain;
         sampleR *= inputGain;
         limiter_.Process(sampleL, sampleR);
+        UpdateMeter(inputPeak, sampleL, sampleR);
     }
+
+    Meter GetMeter() const { return meter_; }
 
 private:
     struct Params {
@@ -213,11 +235,21 @@ private:
         OutputLimiter::ApplySoftLimit(sampleL, sampleR, params.finalCeiling, params.finalLimit);
     }
 
+    void UpdateMeter(f32 inputPeak, f32 sampleL, f32 sampleR) {
+        meter_.mode = mode_;
+        meter_.inputPeak = std::max(meter_.inputPeak, inputPeak);
+        meter_.outputPeak = std::max(meter_.outputPeak, std::max(std::abs(sampleL), std::abs(sampleR)));
+        meter_.densityGain = densityGain_;
+        meter_.peakGain = smoothGain_;
+        ++meter_.processedFrames;
+    }
+
     Mode mode_ = Mode::Standard;
     OutputLimiter limiter_;
     f32 smoothGain_ = 1.0f;
     f32 densityEnergy_ = 0.0f;
     f32 densityGain_ = 1.0f;
+    Meter meter_;
 };
 
 } // namespace XArkMidi

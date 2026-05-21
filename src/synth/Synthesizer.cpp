@@ -409,6 +409,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
 }
 
 u32 Synthesizer::Render(i16* buf, u32 numFrames) {
+    outputStage_.BeginMeterBlock();
     if (finished_ || !soundBank_) {
         return 0;
     }

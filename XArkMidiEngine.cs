@@ -140,6 +140,33 @@ public static class XArkMidiEngine
         public ushort Reserved2;
     }
 
+    /// <summary>
+    /// Output stage preset reported by the native output-stage meter.
+    /// ネイティブ出力段メーターが返す出力段プリセットです。
+    /// </summary>
+    public enum OutputStageMode : uint
+    {
+        Standard = 0,
+        Natural = 1,
+        Warm = 2,
+        Loud = 3,
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    /// <summary>
+    /// Meter values captured during the most recent render call.
+    /// 直近のレンダリング呼び出しで取得した出力段メーター値です。
+    /// </summary>
+    public struct OutputStageMeter
+    {
+        public OutputStageMode Mode;
+        public float InputPeak;
+        public float OutputPeak;
+        public float DensityGain;
+        public float PeakGain;
+        public uint ProcessedFrames;
+    }
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern XAmeResult XAmeCreateEngineFromPathsUtf8(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string midiPath,
@@ -219,6 +246,9 @@ public static class XArkMidiEngine
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern ulong XAmeGetLengthFramesEstimate(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeGetOutputStageMeter(IntPtr engine, out OutputStageMeter outMeter);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int XAmeIsFinished(IntPtr engine);
@@ -557,6 +587,19 @@ public static class XArkMidiEngine
                 ThrowIfDisposed();
                 return XAmeGetLengthFramesEstimate(_handle);
             }
+        }
+
+        /// <summary>
+        /// Get output-stage meter values from the most recent render call.
+        /// 直近のレンダリング呼び出しの出力段メーター値を取得します。
+        /// </summary>
+        public OutputStageMeter GetOutputStageMeter()
+        {
+            ThrowIfDisposed();
+            var result = XAmeGetOutputStageMeter(_handle, out var meter);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+            return meter;
         }
 
         /// <summary>
