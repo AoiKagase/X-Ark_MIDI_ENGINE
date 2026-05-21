@@ -16,8 +16,8 @@ public sealed class MainForm : Form
 {
     private const int ChannelCount = 16;
     private const int KeyMaskWordCount = 4;
-    private readonly TextBox _midiPathTextBox = new() { Width = 520 };
-    private readonly TextBox _soundFontPathTextBox = new() { Width = 520 };
+    private readonly TextBox _midiPathTextBox = new() { Dock = DockStyle.Fill };
+    private readonly TextBox _soundFontPathTextBox = new() { Dock = DockStyle.Fill };
     private readonly Button _browseMidiButton = new() { Text = "Open MIDI..." };
     private readonly Button _browseSoundFontButton = new() { Text = "Open Bank..." };
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         Enabled = false,
     };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
-    private readonly OutputStageMeterControl _outputStageMeter = new() { Width = 390, Height = 46, Margin = new Padding(12, 0, 0, 0) };
+    private readonly OutputStageMeterControl _outputStageMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(340, 46), Margin = new Padding(8, 0, 0, 0) };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
     private readonly GroupBox _createOptionsGroup = new() { Dock = DockStyle.Top, Text = "Engine Create Options", AutoSize = true };
@@ -133,6 +133,7 @@ public sealed class MainForm : Form
             RowCount = 7,
             Padding = new Padding(12),
         };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -145,37 +146,48 @@ public sealed class MainForm : Form
             AutoSize = true,
             ColumnCount = 3,
             RowCount = 2,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
         };
         filePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         filePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filePanel.Controls.Add(new Label { AutoSize = true, Text = "MIDI", Anchor = AnchorStyles.Left }, 0, 0);
+        filePanel.Controls.Add(CreateFieldLabel("MIDI"), 0, 0);
         filePanel.Controls.Add(_midiPathTextBox, 1, 0);
         filePanel.Controls.Add(_browseMidiButton, 2, 0);
-        filePanel.Controls.Add(new Label { AutoSize = true, Text = "Bank", Anchor = AnchorStyles.Left }, 0, 1);
+        filePanel.Controls.Add(CreateFieldLabel("Bank"), 0, 1);
         filePanel.Controls.Add(_soundFontPathTextBox, 1, 1);
         filePanel.Controls.Add(_browseSoundFontButton, 2, 1);
 
-        var controlPanel = new FlowLayoutPanel {
+        var playbackControls = new FlowLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(0, 8, 0, 0),
             WrapContents = false,
         };
-        controlPanel.Controls.Add(_playButton);
-        controlPanel.Controls.Add(_stopButton);
-        controlPanel.Controls.Add(new Label { AutoSize = true, Width = 12 });
-        controlPanel.Controls.Add(_loopEnabledCheckBox);
-        controlPanel.Controls.Add(new Label { AutoSize = true, Text = "Count", Anchor = AnchorStyles.Left, Margin = new Padding(8, 6, 0, 0) });
-        controlPanel.Controls.Add(_loopCountUpDown);
-        controlPanel.Controls.Add(new Label { AutoSize = true, Width = 20 });
-        controlPanel.Controls.Add(_statusLabel);
-        controlPanel.Controls.Add(_outputStageMeter);
+        playbackControls.Controls.Add(_playButton);
+        playbackControls.Controls.Add(_stopButton);
+        playbackControls.Controls.Add(new Label { AutoSize = true, Width = 12 });
+        playbackControls.Controls.Add(_loopEnabledCheckBox);
+        playbackControls.Controls.Add(CreateInlineLabel("Count"));
+        playbackControls.Controls.Add(_loopCountUpDown);
+        playbackControls.Controls.Add(new Label { AutoSize = true, Width = 20 });
+        playbackControls.Controls.Add(_statusLabel);
+
+        var controlPanel = new TableLayoutPanel {
+            AutoSize = true,
+            ColumnCount = 2,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 4, 0, 2),
+        };
+        controlPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        controlPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        controlPanel.Controls.Add(playbackControls, 0, 0);
+        controlPanel.Controls.Add(_outputStageMeter, 1, 0);
 
         var seekPanel = new TableLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             ColumnCount = 2,
         };
         seekPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -200,7 +212,7 @@ public sealed class MainForm : Form
     {
         var layout = new TableLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 4,
             Padding = new Padding(8),
@@ -210,21 +222,21 @@ public sealed class MainForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        layout.Controls.Add(new Label { AutoSize = true, Text = "Max sample bytes", Anchor = AnchorStyles.Left }, 0, 0);
+        layout.Controls.Add(CreateFieldLabel("Max sample bytes"), 0, 0);
         layout.Controls.Add(_maxSampleDataBytesUpDown, 1, 0);
-        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 0);
+        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 0);
 
-        layout.Controls.Add(new Label { AutoSize = true, Text = "Max SF2 pdta entries", Anchor = AnchorStyles.Left }, 0, 1);
+        layout.Controls.Add(CreateFieldLabel("Max SF2 pdta entries"), 0, 1);
         layout.Controls.Add(_maxSf2PdtaEntriesUpDown, 1, 1);
-        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 1);
+        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 1);
 
-        layout.Controls.Add(new Label { AutoSize = true, Text = "Max DLS pool entries", Anchor = AnchorStyles.Left }, 0, 2);
+        layout.Controls.Add(CreateFieldLabel("Max DLS pool entries"), 0, 2);
         layout.Controls.Add(_maxDlsPoolTableEntriesUpDown, 1, 2);
-        layout.Controls.Add(new Label { AutoSize = true, Text = "0 = default", Anchor = AnchorStyles.Left }, 2, 2);
+        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 2);
 
         var flagsPanel = new FlowLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             Margin = new Padding(0, 6, 0, 0),
@@ -233,16 +245,49 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
         flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
-        flagsPanel.Controls.Add(new Label { AutoSize = true, Text = "Output stage", Anchor = AnchorStyles.Left, Margin = new Padding(8, 6, 0, 0) });
+        flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
-        layout.Controls.Add(new Label { AutoSize = true, Text = "Compatibility", Anchor = AnchorStyles.Left }, 0, 3);
+        layout.Controls.Add(CreateFieldLabel("Compatibility"), 0, 3);
         layout.Controls.Add(flagsPanel, 1, 3);
         layout.SetColumnSpan(flagsPanel, 3);
 
         _createOptionsGroup.Controls.Add(layout);
         ConfigureCreateOptionToolTips();
         UpdateCreateOptionsEnabledState();
+    }
+
+    private static Label CreateFieldLabel(string text)
+    {
+        return new Label {
+            AutoSize = true,
+            Text = text,
+            Anchor = AnchorStyles.Left | AnchorStyles.Top,
+            TextAlign = ContentAlignment.TopLeft,
+            Margin = new Padding(0, 6, 8, 0),
+        };
+    }
+
+    private static Label CreateHintLabel(string text)
+    {
+        return new Label {
+            AutoSize = true,
+            Text = text,
+            Anchor = AnchorStyles.Left | AnchorStyles.Top,
+            TextAlign = ContentAlignment.TopLeft,
+            Margin = new Padding(8, 6, 8, 0),
+        };
+    }
+
+    private static Label CreateInlineLabel(string text)
+    {
+        return new Label {
+            AutoSize = true,
+            Text = text,
+            Anchor = AnchorStyles.Left | AnchorStyles.Top,
+            TextAlign = ContentAlignment.TopLeft,
+            Margin = new Padding(8, 6, 2, 0),
+        };
     }
 
     private void ConfigureCreateOptionToolTips()
@@ -303,7 +348,8 @@ public sealed class MainForm : Form
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
             DataPropertyName = nameof(ChannelRow.ProgramName),
             HeaderText = "Program Name",
-            Width = 360,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            MinimumWidth = 260,
             ReadOnly = true,
         });
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
