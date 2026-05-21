@@ -1262,6 +1262,9 @@ namespace {
         effects.ResetState();
         Require(!effects.HasAudibleTail(1.0e-4f),
             "Post-mix effects reset should clear delay-line tails");
+        const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
+            "Post-mix effects reset should clear reverb damping state");
     }
 
     void TestPostMixEffectsProcessesChorusSend() {

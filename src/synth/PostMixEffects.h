@@ -58,6 +58,8 @@ public:
         reverbDiffusionIndexR1_ = 0;
         reverbDiffusionIndexL2_ = 0;
         reverbDiffusionIndexR2_ = 0;
+        reverbDampL_ = 0.0f;
+        reverbDampR_ = 0.0f;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -166,6 +168,7 @@ private:
     static constexpr f32 kChorusToReverb = 0.30f;
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
+    static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
     static constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
@@ -243,8 +246,10 @@ private:
             reverbDelayR_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
             reverbDelayL_[(reverbIndex_ >= reverbTap3_) ? (reverbIndex_ - reverbTap3_) : (reverbIndex_ + size - reverbTap3_)] * 0.18f +
             reverbDelayL_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
-        reverbDelayL_[reverbIndex_] = reverbInL + reverbWetR * (kReverbFeedback * gsReverbFeedbackScale_);
-        reverbDelayR_[reverbIndex_] = reverbInR + reverbWetL * (kReverbFeedback * gsReverbFeedbackScale_);
+        reverbDampL_ += (reverbWetL - reverbDampL_) * kReverbDamping;
+        reverbDampR_ += (reverbWetR - reverbDampR_) * kReverbDamping;
+        reverbDelayL_[reverbIndex_] = reverbInL + reverbDampR_ * (kReverbFeedback * gsReverbFeedbackScale_);
+        reverbDelayR_[reverbIndex_] = reverbInR + reverbDampL_ * (kReverbFeedback * gsReverbFeedbackScale_);
         ++reverbIndex_;
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
@@ -278,6 +283,8 @@ private:
     size_t reverbDiffusionIndexR1_ = 0;
     size_t reverbDiffusionIndexL2_ = 0;
     size_t reverbDiffusionIndexR2_ = 0;
+    f32 reverbDampL_ = 0.0f;
+    f32 reverbDampR_ = 0.0f;
     size_t reverbTap1_ = 0;
     size_t reverbTap2_ = 0;
     size_t reverbTap3_ = 0;
