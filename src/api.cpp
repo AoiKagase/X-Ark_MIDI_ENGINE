@@ -80,6 +80,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS) != 0;
         compatOptions.applySf2ChannelDefaults =
             (flags & XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS) != 0;
+        compatOptions.enableEnhancedOutputStage =
+            (flags & XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE) != 0;
     }
     return compatOptions;
 }
@@ -288,6 +290,43 @@ XAmeResult XAmeRender(
     u32 written = engine->synthesizer.Render(reinterpret_cast<i16*>(outBuffer), numFrames);
     if (outWritten) *outWritten = written;
     return XAME_OK;
+}
+
+XAmeResult XAmeReset(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    try {
+        engine->synthesizer.Reset();
+        return XAME_OK;
+    } catch (const std::exception& e) {
+        SetError(std::string("Unhandled exception during reset: ") + e.what());
+        return XAME_ERR_NOT_INIT;
+    } catch (...) {
+        SetError("Unhandled unknown exception during reset");
+        return XAME_ERR_NOT_INIT;
+    }
+}
+
+XAmeResult XAmeSeekFrames(XAmeEngine engine, unsigned long long framePosition) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    try {
+        engine->synthesizer.SeekFrames(static_cast<u64>(framePosition));
+        return XAME_OK;
+    } catch (const std::bad_alloc&) {
+        SetError("Out of memory");
+        return XAME_ERR_OUT_OF_MEM;
+    } catch (const std::exception& e) {
+        SetError(std::string("Unhandled exception during seek: ") + e.what());
+        return XAME_ERR_NOT_INIT;
+    } catch (...) {
+        SetError("Unhandled unknown exception during seek");
+        return XAME_ERR_NOT_INIT;
+    }
 }
 
 XAmeResult XAmeSetChannelMuteMask(XAmeEngine engine, unsigned int channelMask) {

@@ -70,6 +70,10 @@ public sealed class MainForm : Form
         AutoSize = true,
         Text = "Apply SF2 channel default modulators",
     };
+    private readonly CheckBox _enableEnhancedOutputStageCheckBox = new() {
+        AutoSize = true,
+        Text = "Enhanced output stage",
+    };
     private readonly DataGridView _channelGrid = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
     private readonly BindingList<ChannelRow> _channels = new();
@@ -227,6 +231,7 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
         flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
+        flagsPanel.Controls.Add(_enableEnhancedOutputStageCheckBox);
 
         layout.Controls.Add(new Label { AutoSize = true, Text = "Compatibility", Anchor = AnchorStyles.Left }, 0, 3);
         layout.Controls.Add(flagsPanel, 1, 3);
@@ -253,6 +258,8 @@ public sealed class MainForm : Form
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
+        _optionToolTip.SetToolTip(_enableEnhancedOutputStageCheckBox,
+            "合成後の出力段でヘッドルーム、軽いソフトニー、最終保護リミットを使います。音割れと潰れ感の比較用です。");
     }
 
     private void ConfigureGrid()
@@ -510,8 +517,7 @@ public sealed class MainForm : Form
         _seekRestartInFlight = true;
         try {
             _statusLabel.Text = "Seeking";
-            StopPlayback();
-            await StartPlaybackAsync(targetSeconds);
+            await player.SeekSecondsAsync(targetSeconds);
         } finally {
             _seekRestartInFlight = false;
             RefreshSeekUi();
@@ -563,6 +569,9 @@ public sealed class MainForm : Form
         }
         if (_applySf2ChannelDefaultModulatorsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
+        }
+        if (_enableEnhancedOutputStageCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
         }
         options.CompatibilityFlags = flags;
         return options;
@@ -750,6 +759,7 @@ public sealed class WaveOutPlayer : IDisposable
     private uint _pendingLoopCount;
     private int _pendingMaskDirty;
     private int _pendingLoopDirty;
+    private int _suppressPlaybackStopped;
     private Exception? _playbackException;
     private WavDumpWriter? _dumpWriter;
     private ulong _lengthFramesEstimate;
@@ -837,6 +847,41 @@ public sealed class WaveOutPlayer : IDisposable
         _pendingLoopEnabled = enabled;
         _pendingLoopCount = loopCount;
         Interlocked.Exchange(ref _pendingLoopDirty, 1);
+    }
+
+    public async Task SeekSecondsAsync(double seconds)
+    {
+        var playTask = _playTask;
+        if (playTask is null) {
+            return;
+        }
+
+        Interlocked.Exchange(ref _suppressPlaybackStopped, 1);
+        try {
+            _cts?.Cancel();
+            if (_waveOut != IntPtr.Zero) {
+                NativeMethods.waveOutReset(_waveOut);
+            }
+            await playTask;
+
+            var playbackException = ConsumePlaybackException();
+            if (playbackException is not null) {
+                throw playbackException;
+            }
+
+            _cts?.Dispose();
+            _cts = null;
+            _playTask = null;
+
+            lock (_engineLock) {
+                _engine?.SeekSeconds(seconds);
+            }
+
+            _cts = new CancellationTokenSource();
+            _playTask = Task.Run(() => PlaybackLoop(_cts.Token));
+        } finally {
+            Interlocked.Exchange(ref _suppressPlaybackStopped, 0);
+        }
     }
 
     public ChannelSnapshot GetChannelSnapshot()
@@ -939,9 +984,11 @@ public sealed class WaveOutPlayer : IDisposable
         } catch (Exception ex) {
             _playbackException = ex;
         } finally {
-            _dumpWriter?.Dispose();
-            _dumpWriter = null;
-            PlaybackStopped?.Invoke(this, EventArgs.Empty);
+            if (Interlocked.CompareExchange(ref _suppressPlaybackStopped, 0, 0) == 0) {
+                _dumpWriter?.Dispose();
+                _dumpWriter = null;
+                PlaybackStopped?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
@@ -999,19 +1046,8 @@ public sealed class WaveOutPlayer : IDisposable
             DetectSoundBankKind(_soundFontPath), SampleRate, NumChannels,
             _createOptions);
         _lengthFramesEstimate = engine.LengthFramesEstimate;
-        if (_startFramePosition == 0) {
-            return engine;
-        }
-
-        var discardBuffer = new short[FramesPerBuffer * NumChannels];
-        ulong remaining = _startFramePosition;
-        while (remaining > 0 && !engine.IsFinished) {
-            var requestFrames = (uint)Math.Min((ulong)FramesPerBuffer, remaining);
-            var written = engine.Render(discardBuffer, requestFrames);
-            if (written == 0) {
-                break;
-            }
-            remaining -= written;
+        if (_startFramePosition != 0) {
+            engine.SeekFrames(_startFramePosition);
         }
         return engine;
     }

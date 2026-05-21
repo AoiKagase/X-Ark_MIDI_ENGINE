@@ -61,6 +61,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS = 1u << 2,
     /* Apply the SF2 implicit CC7/CC10/CC11 default modulators instead of treating them as global channel controls. SF2 の暗黙 CC7/CC10/CC11 default modulator を有効化し、グローバルなチャンネル音量・パン処理の代わりに使用します。 */
     XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS = 1u << 3,
+    /* Enable the experimental post-mix output stage for extra headroom and smoother loudness. 実験的な post-mix 出力段を有効化し、ヘッドルームと滑らかな音量感を調整します。 */
+    XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE = 1u << 4,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */
@@ -203,6 +205,21 @@ XAME_API XAmeResult XAmeRender(
     unsigned int   numFrames,
     unsigned int*  outWritten
 );
+
+/*
+ * Reset playback to the beginning while keeping loaded MIDI/sound bank and user options.
+ * 読み込み済み MIDI / サウンドバンクとユーザー設定を保持したまま、再生位置を先頭へ戻します。
+ */
+XAME_API XAmeResult XAmeReset(XAmeEngine engine);
+
+/*
+ * Seek to an output frame position by resetting and rendering internally up to that frame.
+ * 指定した出力フレーム位置まで、内部でリセット後に空レンダリングして移動します。
+ *
+ * framePosition uses the same output-frame unit as XAmeGetCurrentFramePosition().
+ * framePosition は XAmeGetCurrentFramePosition() と同じ出力フレーム単位です。
+ */
+XAME_API XAmeResult XAmeSeekFrames(XAmeEngine engine, unsigned long long framePosition);
 
 /*
  * Enable or disable whole-MIDI looping.

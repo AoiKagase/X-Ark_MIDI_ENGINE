@@ -1107,6 +1107,67 @@ namespace {
             "Limiter should keep both lanes on the same linked gain curve");
     }
 
+    void TestEnhancedOutputStageAddsQuietLoudness() {
+        OutputStage stage;
+        stage.SetMode(OutputStage::Mode::Enhanced);
+
+        f32 sampleL = 0.20f;
+        f32 sampleR = -0.20f;
+        stage.Process(sampleL, sampleR, 1.0f);
+
+        Require(sampleL > 0.20f && sampleL < 0.30f,
+            "Enhanced output stage should add modest loudness below the saturation knee");
+        Require(sampleR < -0.20f && sampleR > -0.30f,
+            "Enhanced output stage should apply the same modest loudness to the opposite lane");
+    }
+
+    void TestEnhancedOutputStageUsesLinkedPeakShaping() {
+        OutputStage stage;
+        stage.SetMode(OutputStage::Mode::Enhanced);
+
+        f32 sampleL = 0.40f;
+        f32 sampleR = 1.40f;
+        stage.Process(sampleL, sampleR, 1.0f);
+
+        Require(std::fabs(sampleL) < std::fabs(sampleR),
+            "Enhanced output stage should preserve the relative hot stereo lane");
+        Require(std::fabs(sampleR) < 1.0f,
+            "Enhanced output stage should constrain hot samples before PCM conversion");
+        const f32 expectedInputRatio = 0.40f / 1.40f;
+        const f32 actualRatio = sampleL / sampleR;
+        Require(std::fabs(actualRatio - expectedInputRatio) < 0.02f,
+            "Enhanced output stage should keep linked stereo gain close to the input ratio");
+    }
+
+    void TestEnhancedOutputStageAdaptsToDensePassages() {
+        OutputStage stage;
+        stage.SetMode(OutputStage::Mode::Enhanced);
+
+        f32 firstL = 0.85f;
+        f32 firstR = -0.85f;
+        stage.Process(firstL, firstR, 1.0f);
+
+        f32 lastL = 0.85f;
+        f32 lastR = -0.85f;
+        for (int i = 0; i < 512; ++i) {
+            lastL = 0.85f;
+            lastR = -0.85f;
+            stage.Process(lastL, lastR, 1.0f);
+        }
+
+        Require(std::fabs(lastL) <= std::fabs(firstL),
+            "Enhanced output stage should ease sustained dense passages instead of driving them harder");
+        Require(std::fabs(lastL) < 1.0f && std::fabs(lastR) < 1.0f,
+            "Enhanced output stage should keep sustained dense passages below full scale");
+
+        stage.Reset();
+        f32 resetL = 0.20f;
+        f32 resetR = -0.20f;
+        stage.Process(resetL, resetR, 1.0f);
+        Require(resetL > 0.20f && resetL < 0.30f,
+            "Enhanced output stage reset should clear dense-passage gain state");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -2829,6 +2890,9 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEffectsSendMixPolicy);
     RUN_TEST(TestOutputLimiterAvoidsCrossSampleDucking);
     RUN_TEST(TestOutputLimiterUsesLinkedStereoGain);
+    RUN_TEST(TestEnhancedOutputStageAddsQuietLoudness);
+    RUN_TEST(TestEnhancedOutputStageUsesLinkedPeakShaping);
+    RUN_TEST(TestEnhancedOutputStageAdaptsToDensePassages);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);

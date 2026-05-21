@@ -14,17 +14,18 @@
 namespace XArkMidi {
 
 namespace {
-constexpr f32 kChorusFeedback = 0.15f;
-constexpr f32 kChorusWetMix = 0.28f;
-constexpr f32 kChorusToReverb = 0.20f;
-constexpr f32 kReverbFeedback = 0.50f;
-constexpr f32 kReverbWetMix = 0.80f;   // 0.65→0.80: リバーブリターンを増量
-constexpr f32 kMasterReverbSend = 0.20f; // 0.12→0.20: ドライ→リバーブへの送り増量
+constexpr f32 kChorusFeedback = 0.22f;
+constexpr f32 kChorusWetMix = 0.45f;
+constexpr f32 kChorusToReverb = 0.30f;
+constexpr f32 kReverbFeedback = 0.58f;
+constexpr f32 kReverbWetMix = 0.95f;
+constexpr f32 kMasterReverbSend = 0.28f;
 constexpr f32 kMixGainSmooth = 0.0025f;
-constexpr f32 kMasterOutputGain = 1.00f; // リバーブ増量分を考慮して dry を抑制
+constexpr f32 kMasterOutputGain = 0.90f;
 constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
 constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
+constexpr u32 kSeekDiscardChunkFrames = 4096;
 constexpr const char* kProgramDebugLogPath = "./diagnostics/program_focus.log";
 constexpr const char* kProgramSummaryLogPath = "./diagnostics/program_summary.log";
 
@@ -334,6 +335,10 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
                         u32 sampleRate, u32 numChannels,
                         const SynthCompatOptions& compatOptions) {
     compatOptions_    = compatOptions;
+    outputStage_.SetMode(compatOptions_.enableEnhancedOutputStage
+        ? OutputStage::Mode::Enhanced
+        : OutputStage::Mode::Standard);
+    outputStage_.Reset();
     midi_             = midi;
     soundBank_        = soundBank;
     sampleRate_       = sampleRate;
@@ -354,6 +359,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     dcBlockPrevInR_   = 0.0f;
     dcBlockPrevOutL_  = 0.0f;
     dcBlockPrevOutR_  = 0.0f;
+    outputStage_.Reset();
     channelMuteMask_.store(0, std::memory_order_relaxed);
     channelSoloMask_.store(0, std::memory_order_relaxed);
     for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
@@ -549,11 +555,10 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             f32 outL = dryL + wetL;
             f32 outR = dryR + wetR;
             mixGainCurrent_ += (targetMixGain - mixGainCurrent_) * kMixGainSmooth;
-            outL *= mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
-            outR *= mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
+            const f32 outputGain = mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
             outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_);
             outR = ApplyDcBlock(outR, dcBlockPrevInR_, dcBlockPrevOutR_);
-            outputLimiter_.Process(outL, outR);
+            outputStage_.Process(outL, outR, outputGain);
 
             if (stereo) {
                 buf[(frame + i) * 2    ] = ClampToI16(outL * 32767.0f);
@@ -589,6 +594,32 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
 
 bool Synthesizer::IsFinished() const {
     return finished_;
+}
+
+void Synthesizer::Reset() {
+    ResetPlaybackState(true);
+    sequencer_.Reset();
+    ConfigureSequencerLoopRange();
+}
+
+void Synthesizer::SeekFrames(u64 framePosition) {
+    Reset();
+    if (framePosition == 0 || !soundBank_) {
+        return;
+    }
+
+    std::vector<i16> discardBuffer(
+        static_cast<size_t>(kSeekDiscardChunkFrames) * static_cast<size_t>(numChannels_));
+    u64 remaining = framePosition;
+    while (remaining > 0 && !IsFinished()) {
+        const u32 requestFrames = static_cast<u32>(
+            std::min<u64>(remaining, kSeekDiscardChunkFrames));
+        const u32 written = Render(discardBuffer.data(), requestFrames);
+        if (written == 0) {
+            break;
+        }
+        remaining -= written;
+    }
 }
 
 void Synthesizer::SetLoop(bool enabled, u32 loopCount) {
@@ -657,7 +688,7 @@ bool Synthesizer::TryRestartLoop() {
     }
 
     ++completedLoops_;
-    ResetPlaybackStateForLoop();
+    ResetPlaybackState(false);
     if (sequencer_.HasLoopRange()) {
         ApplyEventsBeforeTick(sequencer_.LoopStartTick());
         sequencer_.ResetToLoopStart();
@@ -669,7 +700,12 @@ bool Synthesizer::TryRestartLoop() {
     return true;
 }
 
-void Synthesizer::ResetPlaybackStateForLoop() {
+void Synthesizer::ResetPlaybackState(bool resetLoopProgress) {
+    finished_ = false;
+    seqEndNotified_ = false;
+    if (resetLoopProgress) {
+        completedLoops_ = 0;
+    }
     for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
         voicePool_.AllSoundOff(static_cast<u8>(ch));
         channels_[ch].Reset();
@@ -680,6 +716,10 @@ void Synthesizer::ResetPlaybackStateForLoop() {
         for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
             channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
         }
+    }
+    {
+        std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
+        channelKeyEvents_.clear();
     }
     ResetGsEffectState();
     std::fill(reverbDelayL_.begin(), reverbDelayL_.end(), 0.0f);

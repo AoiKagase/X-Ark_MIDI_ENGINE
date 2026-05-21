@@ -7,6 +7,7 @@
 #pragma once
 #include "VoicePool.h"
 #include "Channel.h"
+#include "OutputStage.h"
 #include "../midi/MidiSequencer.h"
 #include "../soundbank/SoundBank.h"
 #include <atomic>
@@ -16,33 +17,6 @@
 #include <vector>
 
 namespace XArkMidi {
-
-class OutputLimiter {
-public:
-    OutputLimiter() = default;
-
-    void Process(f32& sampleL, f32& sampleR) {
-        if (!std::isfinite(sampleL)) {
-            sampleL = 0.0f;
-        }
-        if (!std::isfinite(sampleR)) {
-            sampleR = 0.0f;
-        }
-
-        constexpr f32 kCeiling = 0.98f;
-        constexpr f32 kLimit = 0.999f;
-        const f32 absPeak = std::max(std::abs(sampleL), std::abs(sampleR));
-        if (absPeak <= kCeiling) {
-            return;
-        }
-
-        const f32 over = (absPeak - kCeiling) / (kLimit - kCeiling);
-        const f32 shapedPeak = kCeiling + (kLimit - kCeiling) * std::tanh(over);
-        const f32 gain = shapedPeak / absPeak;
-        sampleL *= gain;
-        sampleR *= gain;
-    }
-};
 
 class Synthesizer {
 public:
@@ -63,6 +37,8 @@ public:
     u32 Render(i16* buf, u32 numFrames);
 
     bool IsFinished() const;
+    void Reset();
+    void SeekFrames(u64 framePosition);
     void SetLoop(bool enabled, u32 loopCount);
     bool GetLoopEnabled() const { return loopEnabled_; }
     u32 GetLoopCount() const { return loopCount_; }
@@ -136,7 +112,7 @@ private:
     std::vector<f32> chorusBlockL_;
     std::vector<f32> chorusBlockR_;
     std::vector<ResolvedZone> zoneScratch_;
-    OutputLimiter outputLimiter_;
+    OutputStage outputStage_;
     std::atomic<u32> channelMuteMask_{0};
     std::atomic<u32> channelSoloMask_{0};
     std::array<std::atomic<u8>, MIDI_CHANNEL_COUNT> channelProgramView_{};
@@ -162,7 +138,7 @@ private:
     bool HasAudibleEffectTail() const;
     void ResetGsEffectState();
     bool TryRestartLoop();
-    void ResetPlaybackStateForLoop();
+    void ResetPlaybackState(bool resetLoopProgress);
     void ConfigureSequencerLoopRange();
     void ApplyEventsBeforeTick(u32 tick);
     static bool ShouldApplyBeforeLoopStart(const MidiEvent& ev);
