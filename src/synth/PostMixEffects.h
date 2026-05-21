@@ -28,6 +28,10 @@ public:
         reverbTap2_ = DelaySamples(37.1f) % reverbSize;
         reverbTap3_ = DelaySamples(41.1f) % reverbSize;
         reverbTap4_ = DelaySamples(43.7f) % reverbSize;
+        reverbDiffusionL1_.assign(DelaySamples(5.1f), 0.0f);
+        reverbDiffusionR1_.assign(DelaySamples(6.3f), 0.0f);
+        reverbDiffusionL2_.assign(DelaySamples(11.7f), 0.0f);
+        reverbDiffusionR2_.assign(DelaySamples(13.1f), 0.0f);
 
         const size_t chorusSize = DelaySamples(32.0f);
         chorusDelayL_.assign(chorusSize, 0.0f);
@@ -43,9 +47,17 @@ public:
         ResetGsState();
         std::fill(reverbDelayL_.begin(), reverbDelayL_.end(), 0.0f);
         std::fill(reverbDelayR_.begin(), reverbDelayR_.end(), 0.0f);
+        std::fill(reverbDiffusionL1_.begin(), reverbDiffusionL1_.end(), 0.0f);
+        std::fill(reverbDiffusionR1_.begin(), reverbDiffusionR1_.end(), 0.0f);
+        std::fill(reverbDiffusionL2_.begin(), reverbDiffusionL2_.end(), 0.0f);
+        std::fill(reverbDiffusionR2_.begin(), reverbDiffusionR2_.end(), 0.0f);
         std::fill(chorusDelayL_.begin(), chorusDelayL_.end(), 0.0f);
         std::fill(chorusDelayR_.begin(), chorusDelayR_.end(), 0.0f);
         reverbIndex_ = 0;
+        reverbDiffusionIndexL1_ = 0;
+        reverbDiffusionIndexR1_ = 0;
+        reverbDiffusionIndexL2_ = 0;
+        reverbDiffusionIndexR2_ = 0;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -143,6 +155,8 @@ public:
         };
 
         return hasAudibleSample(reverbDelayL_) || hasAudibleSample(reverbDelayR_) ||
+               hasAudibleSample(reverbDiffusionL1_) || hasAudibleSample(reverbDiffusionR1_) ||
+               hasAudibleSample(reverbDiffusionL2_) || hasAudibleSample(reverbDiffusionR2_) ||
                hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_);
     }
 
@@ -215,6 +229,10 @@ private:
 
     WetPair ProcessReverb(f32 reverbInL, f32 reverbInR) {
         const size_t size = reverbDelayL_.size();
+        reverbInL = ProcessAllpass(reverbDiffusionL1_, reverbDiffusionIndexL1_, reverbInL, 0.62f);
+        reverbInR = ProcessAllpass(reverbDiffusionR1_, reverbDiffusionIndexR1_, reverbInR, 0.60f);
+        reverbInL = ProcessAllpass(reverbDiffusionL2_, reverbDiffusionIndexL2_, reverbInL, 0.50f);
+        reverbInR = ProcessAllpass(reverbDiffusionR2_, reverbDiffusionIndexR2_, reverbInR, 0.48f);
         const f32 reverbWetL =
             reverbDelayL_[(reverbIndex_ >= reverbTap1_) ? (reverbIndex_ - reverbTap1_) : (reverbIndex_ + size - reverbTap1_)] * 0.30f +
             reverbDelayL_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
@@ -234,10 +252,32 @@ private:
         return { reverbWetL, reverbWetR };
     }
 
+    static f32 ProcessAllpass(std::vector<f32>& delay, size_t& index, f32 input, f32 feedback) {
+        if (delay.empty()) {
+            return input;
+        }
+        const f32 delayed = delay[index];
+        const f32 output = delayed - input;
+        delay[index] = input + delayed * feedback;
+        ++index;
+        if (index == delay.size()) {
+            index = 0;
+        }
+        return output;
+    }
+
     u32 sampleRate_ = 44100;
     std::vector<f32> reverbDelayL_;
     std::vector<f32> reverbDelayR_;
+    std::vector<f32> reverbDiffusionL1_;
+    std::vector<f32> reverbDiffusionR1_;
+    std::vector<f32> reverbDiffusionL2_;
+    std::vector<f32> reverbDiffusionR2_;
     size_t reverbIndex_ = 0;
+    size_t reverbDiffusionIndexL1_ = 0;
+    size_t reverbDiffusionIndexR1_ = 0;
+    size_t reverbDiffusionIndexL2_ = 0;
+    size_t reverbDiffusionIndexR2_ = 0;
     size_t reverbTap1_ = 0;
     size_t reverbTap2_ = 0;
     size_t reverbTap3_ = 0;

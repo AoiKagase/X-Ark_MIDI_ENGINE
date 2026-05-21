@@ -1283,6 +1283,30 @@ namespace {
             "Post-mix effects should reject unknown GS effect parameters");
     }
 
+    void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int wetFrameCount = 0;
+        double wetEnergyL = 0.0;
+        double wetEnergyR = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            const f32 frameWet = std::fabs(out.wetL) + std::fabs(out.wetR);
+            if (frameWet > 1.0e-7f) {
+                ++wetFrameCount;
+            }
+            wetEnergyL += std::fabs(out.wetL);
+            wetEnergyR += std::fabs(out.wetR);
+        }
+
+        Require(wetFrameCount > 24,
+            "Post-mix reverb diffusion should create a dense enough tail after an impulse");
+        Require(wetEnergyL > 0.0 && wetEnergyR > 0.0,
+            "Post-mix reverb diffusion should produce stereo wet energy");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3013,6 +3037,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
+    RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
