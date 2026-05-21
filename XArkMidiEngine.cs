@@ -74,6 +74,8 @@ public static class XArkMidiEngine
         EnableEnhancedOutputStage = 1 << 4,
         /// <summary>Use the natural preset for the enhanced output stage. If unset, enhanced output uses the louder preset. enhanced output stage の Natural プリセットを使います。未指定時は音量感寄りのプリセットです。</summary>
         EnhancedOutputStageNatural = 1 << 5,
+        /// <summary>Use the warm preset for the enhanced output stage. Natural takes precedence if both preset flags are set. enhanced output stage の Warm プリセットを使います。Natural と同時指定された場合は Natural を優先します。</summary>
+        EnhancedOutputStageWarm = 1 << 6,
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -54,6 +54,7 @@ public:
     enum class Mode {
         Standard,
         EnhancedNatural,
+        EnhancedWarm,
         EnhancedLoud,
     };
 
@@ -128,8 +129,34 @@ private:
         0.999f,  // finalLimit
     };
 
+    static constexpr Params kWarmParams{
+        0.86f,   // internalHeadroom
+        1.38f,   // loudnessDrive
+        0.60f,   // densityTarget
+        0.78f,   // densityGainFloor
+        0.012f,  // densityAttack
+        0.00050f,// densityRelease
+        0.74f,   // saturationKneeStart
+        1.10f,   // saturationCeiling
+        0.85f,   // peakKneeStart
+        0.988f,  // peakCeiling
+        0.40f,   // peakAttack
+        0.0013f, // peakRelease
+        0.986f,  // finalCeiling
+        0.999f,  // finalLimit
+    };
+
     static constexpr const Params& ParamsForMode(Mode mode) {
-        return (mode == Mode::EnhancedNatural) ? kNaturalParams : kLoudParams;
+        switch (mode) {
+        case Mode::EnhancedNatural:
+            return kNaturalParams;
+        case Mode::EnhancedWarm:
+            return kWarmParams;
+        case Mode::EnhancedLoud:
+        case Mode::Standard:
+        default:
+            return kLoudParams;
+        }
     }
 
     static f32 ShapePeak(f32 peak, f32 kneeStart, f32 ceiling) {

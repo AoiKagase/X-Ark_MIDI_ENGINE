@@ -259,10 +259,10 @@ public sealed class MainForm : Form
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
-        _outputStageComboBox.Items.AddRange(new object[] { "Standard", "Natural", "Loud" });
+        _outputStageComboBox.Items.AddRange(new object[] { "Standard", "Natural", "Warm", "Loud" });
         _outputStageComboBox.SelectedIndex = 0;
         _optionToolTip.SetToolTip(_outputStageComboBox,
-            "合成後の出力段です。Natural は控えめ、Loud は音量感寄りです。停止後の次回再生から反映されます。");
+            "合成後の出力段です。Natural は控えめ、Warm は耳当たり重視、Loud は音量感寄りです。停止後の次回再生から反映されます。");
     }
 
     private void ConfigureGrid()
@@ -577,6 +577,9 @@ public sealed class MainForm : Form
             flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
             flags |= XArkMidiEngine.CompatibilityFlags.EnhancedOutputStageNatural;
         } else if (_outputStageComboBox.SelectedIndex == 2) {
+            flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
+            flags |= XArkMidiEngine.CompatibilityFlags.EnhancedOutputStageWarm;
+        } else if (_outputStageComboBox.SelectedIndex == 3) {
             flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
         }
         options.CompatibilityFlags = flags;

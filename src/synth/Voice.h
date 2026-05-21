@@ -20,6 +20,7 @@ struct SynthCompatOptions {
     bool enableSoftPedal = true;
     bool enableEnhancedOutputStage = false;
     bool useNaturalOutputStage = false;
+    bool useWarmOutputStage = false;
 };
 
 struct SpecialVoiceRoute {

@@ -84,6 +84,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE) != 0;
         compatOptions.useNaturalOutputStage =
             (flags & XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL) != 0;
+        compatOptions.useWarmOutputStage =
+            (flags & XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM) != 0;
     }
     return compatOptions;
 }

@@ -65,6 +65,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE = 1u << 4,
     /* Use the natural preset for the enhanced output stage. If unset, enhanced output uses the louder preset. enhanced output stage の Natural プリセットを使います。未指定時は音量感寄りのプリセットです。 */
     XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL = 1u << 5,
+    /* Use the warm preset for the enhanced output stage. Natural takes precedence if both preset flags are set. enhanced output stage の Warm プリセットを使います。Natural と同時指定された場合は Natural を優先します。 */
+    XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM = 1u << 6,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */

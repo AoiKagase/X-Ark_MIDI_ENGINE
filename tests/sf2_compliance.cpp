@@ -1168,6 +1168,53 @@ namespace {
             "Enhanced output stage reset should clear dense-passage gain state");
     }
 
+    void TestOutputStagePresetsHaveDistinctDrive() {
+        OutputStage natural;
+        natural.SetMode(OutputStage::Mode::EnhancedNatural);
+        f32 naturalL = 0.25f;
+        f32 naturalR = -0.25f;
+        natural.Process(naturalL, naturalR, 1.0f);
+
+        OutputStage warm;
+        warm.SetMode(OutputStage::Mode::EnhancedWarm);
+        f32 warmL = 0.25f;
+        f32 warmR = -0.25f;
+        warm.Process(warmL, warmR, 1.0f);
+
+        OutputStage loud;
+        loud.SetMode(OutputStage::Mode::EnhancedLoud);
+        f32 loudL = 0.25f;
+        f32 loudR = -0.25f;
+        loud.Process(loudL, loudR, 1.0f);
+
+        Require(warmL > naturalL,
+            "Warm output stage preset should drive quiet material harder than Natural");
+        Require(loudL > warmL,
+            "Loud output stage preset should drive quiet material harder than Warm");
+        Require(loudL > naturalL,
+            "Loud output stage preset should drive quiet material harder than Natural");
+        Require(std::fabs(warmR) > std::fabs(naturalR) && std::fabs(loudR) > std::fabs(warmR),
+            "Output stage preset drive should increase on both stereo lanes");
+    }
+
+    void TestOutputStageStandardMatchesLimiterPath() {
+        OutputStage stage;
+        stage.SetMode(OutputStage::Mode::Standard);
+        f32 stageL = 0.49f;
+        f32 stageR = 1.40f;
+        stage.Process(stageL, stageR, 1.0f);
+
+        OutputLimiter limiter;
+        f32 limiterL = 0.49f;
+        f32 limiterR = 1.40f;
+        limiter.Process(limiterL, limiterR);
+
+        Require(std::fabs(stageL - limiterL) < 1.0e-6f,
+            "Standard output stage should preserve the legacy limiter path on the left lane");
+        Require(std::fabs(stageR - limiterR) < 1.0e-6f,
+            "Standard output stage should preserve the legacy limiter path on the right lane");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -2893,6 +2940,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEnhancedOutputStageAddsQuietLoudness);
     RUN_TEST(TestEnhancedOutputStageUsesLinkedPeakShaping);
     RUN_TEST(TestEnhancedOutputStageAdaptsToDensePassages);
+    RUN_TEST(TestOutputStagePresetsHaveDistinctDrive);
+    RUN_TEST(TestOutputStageStandardMatchesLimiterPath);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
