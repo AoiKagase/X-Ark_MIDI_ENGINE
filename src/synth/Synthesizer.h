@@ -8,6 +8,7 @@
 #include "VoicePool.h"
 #include "Channel.h"
 #include "OutputStage.h"
+#include "PostMixEffects.h"
 #include "../midi/MidiSequencer.h"
 #include "../soundbank/SoundBank.h"
 #include <atomic>
@@ -74,34 +75,9 @@ private:
     u32             completedLoops_  = 0;
     std::string     errorMsg_;
 
-    std::vector<f32> reverbDelayL_;
-    std::vector<f32> reverbDelayR_;
-    size_t           reverbIndex_ = 0;
-    size_t           reverbTap1_ = 0;
-    size_t           reverbTap2_ = 0;
-    size_t           reverbTap3_ = 0;
-    size_t           reverbTap4_ = 0;
-    std::vector<f32> chorusDelayL_;
-    std::vector<f32> chorusDelayR_;
-    size_t           chorusIndex_ = 0;
-    size_t           chorusBaseTapL_ = 0;
-    size_t           chorusBaseTapR_ = 0;
-    size_t           chorusDepthTapL_ = 0;
-    size_t           chorusDepthTapR_ = 0;
-    f32              chorusSin_ = 0.0f;
-    f32              chorusCos_ = 1.0f;
     f32              mixGainCurrent_ = 1.0f;
     f32              masterVolume_ = 1.0f;
     f32              normGain_ = 1.0f;     // サンプルPCM正規化の補正ゲイン
-    f32              gsReverbWetScale_ = 1.0f;
-    f32              gsReverbFeedbackScale_ = 1.0f;
-    f32              gsMasterReverbSendScale_ = 1.0f;
-    f32              gsChorusWetScale_ = 1.0f;
-    f32              gsChorusFeedbackScale_ = 1.0f;
-    f32              gsChorusToReverbScale_ = 1.0f;
-    f32              gsChorusDelayScale_ = 1.0f;
-    f32              gsChorusDepthScale_ = 1.0f;
-    f32              gsChorusRateScale_ = 1.0f;
     f32              dcBlockPrevInL_ = 0.0f;
     f32              dcBlockPrevInR_ = 0.0f;
     f32              dcBlockPrevOutL_ = 0.0f;
@@ -113,6 +89,7 @@ private:
     std::vector<f32> chorusBlockL_;
     std::vector<f32> chorusBlockR_;
     std::vector<ResolvedZone> zoneScratch_;
+    PostMixEffects postMixEffects_;
     OutputStage outputStage_;
     std::atomic<u32> channelMuteMask_{0};
     std::atomic<u32> channelSoloMask_{0};
@@ -137,7 +114,6 @@ private:
     void HandlePerNoteManagement(u8 ch, u8 key, u8 flags);
     void RefreshSf2ControllersForChannel(u8 ch);
     bool HasAudibleEffectTail() const;
-    void ResetGsEffectState();
     bool TryRestartLoop();
     void ResetPlaybackState(bool resetLoopProgress);
     void ConfigureSequencerLoopRange();

@@ -14,16 +14,8 @@
 namespace XArkMidi {
 
 namespace {
-constexpr f32 kChorusFeedback = 0.22f;
-constexpr f32 kChorusWetMix = 0.45f;
-constexpr f32 kChorusToReverb = 0.30f;
-constexpr f32 kReverbFeedback = 0.58f;
-constexpr f32 kReverbWetMix = 0.95f;
-constexpr f32 kMasterReverbSend = 0.28f;
 constexpr f32 kMixGainSmooth = 0.0025f;
 constexpr f32 kMasterOutputGain = 0.90f;
-constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
-constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
 constexpr u32 kSeekDiscardChunkFrames = 4096;
 constexpr const char* kProgramDebugLogPath = "./diagnostics/program_focus.log";
@@ -310,18 +302,6 @@ f32 ApplyDcBlock(f32 input, f32& prevIn, f32& prevOut) {
     return output;
 }
 
-size_t DelaySamples(u32 sampleRate, f32 ms) {
-    return std::max<size_t>(1, static_cast<size_t>(sampleRate * (ms / 1000.0f)));
-}
-
-f32 NormalizeGs7Bit(u8 value) {
-    return static_cast<f32>(value) / 127.0f;
-}
-
-f32 Lerp(f32 a, f32 b, f32 t) {
-    return a + (b - a) * t;
-}
-
 u32 ResolveAudibleChannelMask(u32 muteMask, u32 soloMask) {
     const u32 mask16 = 0xFFFFu;
     const u32 effectiveMuteMask = muteMask & mask16;
@@ -352,13 +332,8 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     seqEndNotified_   = false;
     completedLoops_   = 0;
     errorMsg_.clear();
-    reverbIndex_      = 0;
-    chorusIndex_      = 0;
-    chorusSin_        = 0.0f;
-    chorusCos_        = 1.0f;
     mixGainCurrent_   = 1.0f;
     masterVolume_     = 1.0f;
-    ResetGsEffectState();
     dcBlockPrevInL_   = 0.0f;
     dcBlockPrevInR_   = 0.0f;
     dcBlockPrevOutL_  = 0.0f;
@@ -375,21 +350,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
         }
     }
     ResetProgramDebugLog();
-
-    const size_t reverbSize = DelaySamples(sampleRate, 97.0f);
-    reverbDelayL_.assign(reverbSize, 0.0f);
-    reverbDelayR_.assign(reverbSize, 0.0f);
-    reverbTap1_ = DelaySamples(sampleRate, 29.7f) % reverbSize;
-    reverbTap2_ = DelaySamples(sampleRate, 37.1f) % reverbSize;
-    reverbTap3_ = DelaySamples(sampleRate, 41.1f) % reverbSize;
-    reverbTap4_ = DelaySamples(sampleRate, 43.7f) % reverbSize;
-    const size_t chorusSize = DelaySamples(sampleRate, 32.0f);
-    chorusDelayL_.assign(chorusSize, 0.0f);
-    chorusDelayR_.assign(chorusSize, 0.0f);
-    chorusBaseTapL_ = DelaySamples(sampleRate, 2.0f);
-    chorusBaseTapR_ = DelaySamples(sampleRate, 3.0f);
-    chorusDepthTapL_ = DelaySamples(sampleRate, 0.7f);
-    chorusDepthTapR_ = DelaySamples(sampleRate, 0.8f);
+    postMixEffects_.Init(sampleRate);
     zoneScratch_.clear();
     zoneScratch_.reserve(16);
 
@@ -477,88 +438,18 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             channelActiveNoteCountView_[ch].store(activeRootCounts[ch], std::memory_order_relaxed);
         }
         const f32 targetMixGain = ComputeMixGain(activeVoices);
-        const f32 effectiveChorusFeedback = kChorusFeedback * gsChorusFeedbackScale_;
-        const f32 effectiveChorusWetMix = kChorusWetMix * gsChorusWetScale_;
-        const f32 effectiveChorusToReverb = kChorusToReverb * gsChorusToReverbScale_;
-        const f32 effectiveReverbFeedback = kReverbFeedback * gsReverbFeedbackScale_;
-        const f32 effectiveReverbWetMix = kReverbWetMix * gsReverbWetScale_;
-        const f32 effectiveMasterReverbSend = kMasterReverbSend * gsMasterReverbSendScale_;
-        const f32 phaseStepAngle =
-            std::atan2(kChorusPhaseStepSin, kChorusPhaseStepCos) * gsChorusRateScale_;
-        const f32 phaseStepSin = std::sin(phaseStepAngle);
-        const f32 phaseStepCos = std::cos(phaseStepAngle);
         const bool stereo = (numChannels_ == 2);
 
         for (u32 i = 0; i < blockFrames; ++i) {
             f32 dryL = dryBlockL_[i];
             f32 dryR = dryBlockR_[i];
-            const f32 masterReverbSend = effectiveMasterReverbSend;
-            f32 reverbInL = reverbBlockL_[i] + dryL * masterReverbSend;
-            f32 reverbInR = reverbBlockR_[i] + dryR * masterReverbSend;
-            f32 chorusInL = chorusBlockL_[i];
-            f32 chorusInR = chorusBlockR_[i];
-            f32 wetL = 0.0f, wetR = 0.0f;
+            const auto effects = postMixEffects_.ProcessSample(
+                dryL, dryR,
+                reverbBlockL_[i], reverbBlockR_[i],
+                chorusBlockL_[i], chorusBlockR_[i]);
 
-            if (!chorusDelayL_.empty()) {
-                const size_t size = chorusDelayL_.size();
-                const f32 baseTapL = static_cast<f32>(chorusBaseTapL_) * gsChorusDelayScale_;
-                const f32 baseTapR = static_cast<f32>(chorusBaseTapR_) * gsChorusDelayScale_;
-                const f32 depthTapL = static_cast<f32>(chorusDepthTapL_) * gsChorusDepthScale_;
-                const f32 depthTapR = static_cast<f32>(chorusDepthTapR_) * gsChorusDepthScale_;
-                // 線形補間でコーラスタップを読む: 整数切り捨てによる離散ジャンプを除去し
-                // ピッチ変動の滑らかさを改善する
-                const f32 fTapL = std::max(1.0f, baseTapL + (chorusSin_ + 1.0f) * 0.5f * depthTapL);
-                const f32 fTapR = std::max(1.0f, baseTapR + (chorusCos_ + 1.0f) * 0.5f * depthTapR);
-                const size_t iTapL = static_cast<size_t>(fTapL);
-                const size_t iTapR = static_cast<size_t>(fTapR);
-                const f32 fracL = fTapL - static_cast<f32>(iTapL);
-                const f32 fracR = fTapR - static_cast<f32>(iTapR);
-                const size_t wL0 = iTapL % size;
-                const size_t wL1 = (iTapL + 1) % size;
-                const size_t wR0 = iTapR % size;
-                const size_t wR1 = (iTapR + 1) % size;
-                const size_t idxL0 = (chorusIndex_ >= wL0) ? (chorusIndex_ - wL0) : (chorusIndex_ + size - wL0);
-                const size_t idxL1 = (chorusIndex_ >= wL1) ? (chorusIndex_ - wL1) : (chorusIndex_ + size - wL1);
-                const size_t idxR0 = (chorusIndex_ >= wR0) ? (chorusIndex_ - wR0) : (chorusIndex_ + size - wR0);
-                const size_t idxR1 = (chorusIndex_ >= wR1) ? (chorusIndex_ - wR1) : (chorusIndex_ + size - wR1);
-                const f32 chorusWetL = chorusDelayL_[idxL0] * (1.0f - fracL) + chorusDelayL_[idxL1] * fracL;
-                const f32 chorusWetR = chorusDelayR_[idxR0] * (1.0f - fracR) + chorusDelayR_[idxR1] * fracR;
-                chorusDelayL_[chorusIndex_] = chorusInL + chorusWetR * effectiveChorusFeedback;
-                chorusDelayR_[chorusIndex_] = chorusInR + chorusWetL * effectiveChorusFeedback;
-                ++chorusIndex_;
-                if (chorusIndex_ == size) chorusIndex_ = 0;
-                const f32 nextSin = chorusSin_ * phaseStepCos + chorusCos_ * phaseStepSin;
-                const f32 nextCos = chorusCos_ * phaseStepCos - chorusSin_ * phaseStepSin;
-                chorusSin_ = nextSin;
-                chorusCos_ = nextCos;
-                wetL += chorusWetL * effectiveChorusWetMix;
-                wetR += chorusWetR * effectiveChorusWetMix;
-                reverbInL += chorusWetL * effectiveChorusToReverb;
-                reverbInR += chorusWetR * effectiveChorusToReverb;
-            }
-
-            if (!reverbDelayL_.empty()) {
-                const size_t size = reverbDelayL_.size();
-                const f32 reverbWetL =
-                    reverbDelayL_[(reverbIndex_ >= reverbTap1_) ? (reverbIndex_ - reverbTap1_) : (reverbIndex_ + size - reverbTap1_)] * 0.30f +
-                    reverbDelayL_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
-                    reverbDelayR_[(reverbIndex_ >= reverbTap3_) ? (reverbIndex_ - reverbTap3_) : (reverbIndex_ + size - reverbTap3_)] * 0.18f +
-                    reverbDelayR_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
-                const f32 reverbWetR =
-                    reverbDelayR_[(reverbIndex_ >= reverbTap1_) ? (reverbIndex_ - reverbTap1_) : (reverbIndex_ + size - reverbTap1_)] * 0.30f +
-                    reverbDelayR_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
-                    reverbDelayL_[(reverbIndex_ >= reverbTap3_) ? (reverbIndex_ - reverbTap3_) : (reverbIndex_ + size - reverbTap3_)] * 0.18f +
-                    reverbDelayL_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
-                reverbDelayL_[reverbIndex_] = reverbInL + reverbWetR * effectiveReverbFeedback;
-                reverbDelayR_[reverbIndex_] = reverbInR + reverbWetL * effectiveReverbFeedback;
-                ++reverbIndex_;
-                if (reverbIndex_ == size) reverbIndex_ = 0;
-                wetL += reverbWetL * effectiveReverbWetMix;
-                wetR += reverbWetR * effectiveReverbWetMix;
-            }
-
-            f32 outL = dryL + wetL;
-            f32 outR = dryR + wetR;
+            f32 outL = dryL + effects.wetL;
+            f32 outR = dryR + effects.wetR;
             mixGainCurrent_ += (targetMixGain - mixGainCurrent_) * kMixGainSmooth;
             const f32 outputGain = mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
             outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_);
@@ -726,15 +617,7 @@ void Synthesizer::ResetPlaybackState(bool resetLoopProgress) {
         std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
         channelKeyEvents_.clear();
     }
-    ResetGsEffectState();
-    std::fill(reverbDelayL_.begin(), reverbDelayL_.end(), 0.0f);
-    std::fill(reverbDelayR_.begin(), reverbDelayR_.end(), 0.0f);
-    std::fill(chorusDelayL_.begin(), chorusDelayL_.end(), 0.0f);
-    std::fill(chorusDelayR_.begin(), chorusDelayR_.end(), 0.0f);
-    reverbIndex_ = 0;
-    chorusIndex_ = 0;
-    chorusSin_ = 0.0f;
-    chorusCos_ = 1.0f;
+    postMixEffects_.ResetState();
     mixGainCurrent_ = 1.0f;
     masterVolume_ = 1.0f;
     dcBlockPrevInL_ = 0.0f;
@@ -796,29 +679,7 @@ void Synthesizer::ApplyEventsBeforeTick(u32 tick) {
 }
 
 bool Synthesizer::HasAudibleEffectTail() const {
-    const auto hasAudibleSample = [](const std::vector<f32>& buffer) {
-        for (f32 sample : buffer) {
-            if (std::fabs(sample) >= kEffectTailThreshold) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    return hasAudibleSample(reverbDelayL_) || hasAudibleSample(reverbDelayR_) ||
-           hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_);
-}
-
-void Synthesizer::ResetGsEffectState() {
-    gsReverbWetScale_ = 1.0f;
-    gsReverbFeedbackScale_ = 1.0f;
-    gsMasterReverbSendScale_ = 1.0f;
-    gsChorusWetScale_ = 1.0f;
-    gsChorusFeedbackScale_ = 1.0f;
-    gsChorusToReverbScale_ = 1.0f;
-    gsChorusDelayScale_ = 1.0f;
-    gsChorusDepthScale_ = 1.0f;
-    gsChorusRateScale_ = 1.0f;
+    return postMixEffects_.HasAudibleTail(kEffectTailThreshold);
 }
 
 void Synthesizer::PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity) {
@@ -1336,7 +1197,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
             ApplyCurrentPitchToChannel(voicePool_, static_cast<u8>(ch), channels_[ch]);
         }
         masterVolume_ = 1.0f;
-        ResetGsEffectState();
+        postMixEffects_.ResetGsState();
     };
 
     if (data.size() >= 4 && data[0] == 0x7E && data[2] == 0x09) {
@@ -1397,52 +1258,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
     if (data.size() >= 8 &&
         data[0] == 0x41 && data[2] == 0x42 && data[3] == 0x12 &&
         data[4] == 0x40 && data[5] == 0x01) {
-        const u8 param = data[6];
-        const u8 value = data[7];
-        const f32 t = NormalizeGs7Bit(value);
-        switch (param) {
-        case 0x05: // Reverb Macro
-            gsReverbWetScale_ = Lerp(0.75f, 1.45f, t);
-            gsReverbFeedbackScale_ = Lerp(0.80f, 1.35f, t);
-            break;
-        case 0x08: // Reverb Level
-            gsReverbWetScale_ = Lerp(0.20f, 1.85f, t);
-            break;
-        case 0x09: // Reverb Time
-            gsReverbFeedbackScale_ = Lerp(0.70f, 1.70f, t);
-            break;
-        case 0x0A: // Reverb Feedback
-            gsMasterReverbSendScale_ = Lerp(0.70f, 1.35f, t);
-            break;
-        case 0x0C: // Reverb Predelay
-            gsMasterReverbSendScale_ = Lerp(0.85f, 1.20f, t);
-            break;
-        case 0x0D: // Chorus Macro
-            gsChorusWetScale_ = Lerp(0.80f, 1.50f, t);
-            gsChorusFeedbackScale_ = Lerp(0.80f, 1.30f, t);
-            gsChorusDepthScale_ = Lerp(0.85f, 1.30f, t);
-            break;
-        case 0x0F: // Chorus Level
-            gsChorusWetScale_ = Lerp(0.20f, 1.80f, t);
-            break;
-        case 0x10: // Chorus Feedback
-            gsChorusFeedbackScale_ = Lerp(0.60f, 1.80f, t);
-            break;
-        case 0x11: // Chorus Delay
-            gsChorusDelayScale_ = Lerp(0.65f, 1.60f, t);
-            break;
-        case 0x12: // Chorus Rate
-            gsChorusRateScale_ = Lerp(0.60f, 1.80f, t);
-            break;
-        case 0x13: // Chorus Depth
-            gsChorusDepthScale_ = Lerp(0.55f, 1.85f, t);
-            break;
-        case 0x14: // Chorus send to reverb
-            gsChorusToReverbScale_ = Lerp(0.00f, 2.00f, t);
-            break;
-        default:
-            break;
-        }
+        postMixEffects_.ApplyGsParameter(data[6], data[7]);
         return;
     }
 

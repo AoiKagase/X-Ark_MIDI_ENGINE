@@ -1243,6 +1243,46 @@ namespace {
             "Output stage meter should expose linked peak gain");
     }
 
+    void TestPostMixEffectsProducesAndResetsTail() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double wetEnergy = 0.0;
+        for (int i = 0; i < 6000; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            wetEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+        }
+
+        Require(wetEnergy > 0.0,
+            "Post-mix effects should produce a reverb tail from the master reverb send");
+        Require(effects.HasAudibleTail(1.0e-4f),
+            "Post-mix effects should report an audible tail after an impulse");
+
+        effects.ResetState();
+        Require(!effects.HasAudibleTail(1.0e-4f),
+            "Post-mix effects reset should clear delay-line tails");
+    }
+
+    void TestPostMixEffectsProcessesChorusSend() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double wetEnergy = 0.0;
+        for (int i = 0; i < 2000; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            wetEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+        }
+
+        Require(wetEnergy > 0.0,
+            "Post-mix effects should produce chorus output from the chorus send bus");
+        Require(effects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level parameter");
+        Require(!effects.ApplyGsParameter(0x7F, 64),
+            "Post-mix effects should reject unknown GS effect parameters");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -2971,6 +3011,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestOutputStagePresetsHaveDistinctDrive);
     RUN_TEST(TestOutputStageStandardMatchesLimiterPath);
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
+    RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
+    RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
