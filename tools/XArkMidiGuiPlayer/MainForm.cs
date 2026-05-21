@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         Enabled = false,
     };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
-    private readonly Label _outputStageMeterLabel = new() { AutoSize = true, Text = "Out: --", Margin = new Padding(12, 6, 0, 0) };
+    private readonly OutputStageMeterControl _outputStageMeter = new() { Width = 390, Height = 46, Margin = new Padding(12, 0, 0, 0) };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
     private readonly GroupBox _createOptionsGroup = new() { Dock = DockStyle.Top, Text = "Engine Create Options", AutoSize = true };
@@ -171,7 +171,7 @@ public sealed class MainForm : Form
         controlPanel.Controls.Add(_loopCountUpDown);
         controlPanel.Controls.Add(new Label { AutoSize = true, Width = 20 });
         controlPanel.Controls.Add(_statusLabel);
-        controlPanel.Controls.Add(_outputStageMeterLabel);
+        controlPanel.Controls.Add(_outputStageMeter);
 
         var seekPanel = new TableLayoutPanel {
             AutoSize = true,
@@ -410,7 +410,7 @@ public sealed class MainForm : Form
             _playButton.Enabled = true;
             _stopButton.Enabled = false;
             _statusLabel.Text = "Idle";
-            _outputStageMeterLabel.Text = "Out: --";
+            _outputStageMeter.Clear();
             UpdateCreateOptionsEnabledState();
             return;
         }
@@ -473,7 +473,7 @@ public sealed class MainForm : Form
             _keyboard.ClearTransientEvents();
             UpdateLampStyles();
             UpdateKeyboardLabel();
-            _outputStageMeterLabel.Text = "Out: --";
+            _outputStageMeter.Clear();
             RefreshSeekUi();
             return;
         }
@@ -500,16 +500,8 @@ public sealed class MainForm : Form
         UpdateLampStyles();
         UpdateKeyboardLabel();
         _statusLabel.Text = _player.IsFinished ? "Finished" : "Playing";
-        _outputStageMeterLabel.Text = FormatOutputStageMeter(_player.LatestOutputStageMeter);
+        _outputStageMeter.Meter = _player.LatestOutputStageMeter;
         RefreshSeekUi();
-    }
-
-    private static string FormatOutputStageMeter(XArkMidiEngine.OutputStageMeter meter)
-    {
-        if (meter.ProcessedFrames == 0) {
-            return "Out: --";
-        }
-        return $"Out: {meter.Mode} in {meter.InputPeak:0.000} out {meter.OutputPeak:0.000} dg {meter.DensityGain:0.000} pg {meter.PeakGain:0.000}";
     }
 
     private async Task CommitSeekAsync()
@@ -1215,6 +1207,102 @@ public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes
             result[i] = new uint[4];
         }
         return result;
+    }
+}
+
+internal sealed class OutputStageMeterControl : Control
+{
+    private XArkMidiEngine.OutputStageMeter _meter;
+
+    public OutputStageMeterControl()
+    {
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+        BackColor = SystemColors.Control;
+        Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
+    }
+
+    public XArkMidiEngine.OutputStageMeter Meter
+    {
+        get => _meter;
+        set
+        {
+            _meter = value;
+            Invalidate();
+        }
+    }
+
+    public void Clear()
+    {
+        Meter = default;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.Clear(BackColor);
+
+        using var textBrush = new SolidBrush(ForeColor);
+        if (_meter.ProcessedFrames == 0) {
+            e.Graphics.DrawString("Out: --", Font, textBrush, 0, 14);
+            return;
+        }
+
+        e.Graphics.DrawString($"Out: {_meter.Mode}", Font, textBrush, 0, 2);
+
+        const int labelWidth = 34;
+        const int barHeight = 7;
+        const int gapX = 12;
+        const int rowGap = 16;
+        const int leftX = 74;
+        const int topY = 3;
+        int barWidth = Math.Max(36, (ClientSize.Width - leftX - gapX - labelWidth * 2) / 2);
+
+        DrawBar(e.Graphics, "In", _meter.InputPeak, 1.20f, leftX, topY, barWidth, barHeight, PeakColor(_meter.InputPeak));
+        DrawBar(e.Graphics, "Out", _meter.OutputPeak, 1.00f, leftX + barWidth + gapX + labelWidth, topY, barWidth, barHeight, PeakColor(_meter.OutputPeak));
+        DrawBar(e.Graphics, "Dense", _meter.DensityGain, 1.00f, leftX, topY + rowGap, barWidth, barHeight, GainColor(_meter.DensityGain));
+        DrawBar(e.Graphics, "Peak", _meter.PeakGain, 1.00f, leftX + barWidth + gapX + labelWidth, topY + rowGap, barWidth, barHeight, GainColor(_meter.PeakGain));
+    }
+
+    private void DrawBar(Graphics graphics, string label, float value, float scale, int x, int y, int width, int height, Color fillColor)
+    {
+        using var textBrush = new SolidBrush(ForeColor);
+        graphics.DrawString(label, Font, textBrush, x - 38, y - 4);
+
+        var frame = new Rectangle(x, y, width, height);
+        using var backBrush = new SolidBrush(Color.FromArgb(230, 230, 230));
+        using var borderPen = new Pen(Color.FromArgb(150, 150, 150));
+        graphics.FillRectangle(backBrush, frame);
+        graphics.DrawRectangle(borderPen, frame);
+
+        float normalized = scale <= 0.0f ? 0.0f : Math.Clamp(value / scale, 0.0f, 1.0f);
+        int fillWidth = Math.Clamp((int)Math.Round((width - 2) * normalized), 0, width - 2);
+        if (fillWidth > 0) {
+            using var fillBrush = new SolidBrush(fillColor);
+            graphics.FillRectangle(fillBrush, x + 1, y + 1, fillWidth, Math.Max(1, height - 2));
+        }
+    }
+
+    private static Color PeakColor(float value)
+    {
+        if (value >= 0.98f) {
+            return Color.FromArgb(214, 70, 56);
+        }
+        if (value >= 0.85f) {
+            return Color.FromArgb(226, 156, 48);
+        }
+        return Color.FromArgb(64, 150, 94);
+    }
+
+    private static Color GainColor(float value)
+    {
+        if (value <= 0.80f) {
+            return Color.FromArgb(76, 128, 200);
+        }
+        if (value <= 0.94f) {
+            return Color.FromArgb(84, 158, 168);
+        }
+        return Color.FromArgb(120, 172, 88);
     }
 }
 
