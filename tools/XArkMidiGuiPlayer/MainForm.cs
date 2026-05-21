@@ -990,7 +990,11 @@ public sealed class WaveOutPlayer : IDisposable
                             continue;
                         }
                         written = _engine.Render(buffer.Samples, FramesPerBuffer);
-                        _latestOutputStageMeter = _engine.GetOutputStageMeter();
+                        if (_engine.TryGetOutputStageMeter(out var meter)) {
+                            _latestOutputStageMeter = meter;
+                        } else {
+                            _latestOutputStageMeter = default;
+                        }
                     }
 
                     if (written == 0) {

@@ -603,6 +603,22 @@ public static class XArkMidiEngine
         }
 
         /// <summary>
+        /// Try to get output-stage meter values from the most recent render call.
+        /// 直近のレンダリング呼び出しの出力段メーター値の取得を試みます。
+        /// </summary>
+        public bool TryGetOutputStageMeter(out OutputStageMeter meter)
+        {
+            ThrowIfDisposed();
+            try {
+                var result = XAmeGetOutputStageMeter(_handle, out meter);
+                return result == XAmeResult.OK;
+            } catch (EntryPointNotFoundException) {
+                meter = default;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Render the full MIDI stream into a newly allocated sample array.
         /// MIDI 全体を新規確保したサンプル配列へレンダリングします。
         /// </summary>
