@@ -1109,7 +1109,7 @@ namespace {
 
     void TestEnhancedOutputStageAddsQuietLoudness() {
         OutputStage stage;
-        stage.SetMode(OutputStage::Mode::Enhanced);
+        stage.SetMode(OutputStage::Mode::EnhancedLoud);
 
         f32 sampleL = 0.20f;
         f32 sampleR = -0.20f;
@@ -1123,7 +1123,7 @@ namespace {
 
     void TestEnhancedOutputStageUsesLinkedPeakShaping() {
         OutputStage stage;
-        stage.SetMode(OutputStage::Mode::Enhanced);
+        stage.SetMode(OutputStage::Mode::EnhancedLoud);
 
         f32 sampleL = 0.40f;
         f32 sampleR = 1.40f;
@@ -1141,7 +1141,7 @@ namespace {
 
     void TestEnhancedOutputStageAdaptsToDensePassages() {
         OutputStage stage;
-        stage.SetMode(OutputStage::Mode::Enhanced);
+        stage.SetMode(OutputStage::Mode::EnhancedLoud);
 
         f32 firstL = 0.85f;
         f32 firstR = -0.85f;

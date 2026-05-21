@@ -53,7 +53,8 @@ class OutputStage {
 public:
     enum class Mode {
         Standard,
-        Enhanced,
+        EnhancedNatural,
+        EnhancedLoud,
     };
 
     void SetMode(Mode mode) { mode_ = mode; }
@@ -65,8 +66,8 @@ public:
     }
 
     void Process(f32& sampleL, f32& sampleR, f32 inputGain) {
-        if (mode_ == Mode::Enhanced) {
-            ProcessEnhanced(sampleL, sampleR, inputGain);
+        if (mode_ != Mode::Standard) {
+            ProcessEnhanced(sampleL, sampleR, inputGain, ParamsForMode(mode_));
             return;
         }
 
@@ -76,6 +77,61 @@ public:
     }
 
 private:
+    struct Params {
+        f32 internalHeadroom;
+        f32 loudnessDrive;
+        f32 densityTarget;
+        f32 densityGainFloor;
+        f32 densityAttack;
+        f32 densityRelease;
+        f32 saturationKneeStart;
+        f32 saturationCeiling;
+        f32 peakKneeStart;
+        f32 peakCeiling;
+        f32 peakAttack;
+        f32 peakRelease;
+        f32 finalCeiling;
+        f32 finalLimit;
+    };
+
+    static constexpr Params kNaturalParams{
+        0.88f,   // internalHeadroom
+        1.30f,   // loudnessDrive
+        0.62f,   // densityTarget
+        0.82f,   // densityGainFloor
+        0.010f,  // densityAttack
+        0.00055f,// densityRelease
+        0.78f,   // saturationKneeStart
+        1.08f,   // saturationCeiling
+        0.88f,   // peakKneeStart
+        0.990f,  // peakCeiling
+        0.35f,   // peakAttack
+        0.0014f, // peakRelease
+        0.988f,  // finalCeiling
+        0.999f,  // finalLimit
+    };
+
+    static constexpr Params kLoudParams{
+        0.84f,   // internalHeadroom
+        1.48f,   // loudnessDrive
+        0.58f,   // densityTarget
+        0.74f,   // densityGainFloor
+        0.015f,  // densityAttack
+        0.00045f,// densityRelease
+        0.72f,   // saturationKneeStart
+        1.12f,   // saturationCeiling
+        0.82f,   // peakKneeStart
+        0.985f,  // peakCeiling
+        0.45f,   // peakAttack
+        0.0012f, // peakRelease
+        0.985f,  // finalCeiling
+        0.999f,  // finalLimit
+    };
+
+    static constexpr const Params& ParamsForMode(Mode mode) {
+        return (mode == Mode::EnhancedNatural) ? kNaturalParams : kLoudParams;
+    }
+
     static f32 ShapePeak(f32 peak, f32 kneeStart, f32 ceiling) {
         if (peak <= kneeStart) {
             return peak;
@@ -95,52 +151,39 @@ private:
         sampleR *= gain;
     }
 
-    void ProcessEnhanced(f32& sampleL, f32& sampleR, f32 inputGain) {
-        constexpr f32 kInternalHeadroom = 0.84f;
-        constexpr f32 kLoudnessDrive = 1.48f;
-        constexpr f32 kDensityTarget = 0.58f;
-        constexpr f32 kDensityGainFloor = 0.74f;
-        constexpr f32 kDensityAttack = 0.015f;
-        constexpr f32 kDensityRelease = 0.00045f;
-        constexpr f32 kSaturationKneeStart = 0.72f;
-        constexpr f32 kSaturationCeiling = 1.12f;
-        constexpr f32 kPeakKneeStart = 0.82f;
-        constexpr f32 kPeakCeiling = 0.985f;
-        constexpr f32 kAttack = 0.45f;
-        constexpr f32 kRelease = 0.0012f;
-
-        sampleL *= inputGain * kInternalHeadroom * kLoudnessDrive;
-        sampleR *= inputGain * kInternalHeadroom * kLoudnessDrive;
+    void ProcessEnhanced(f32& sampleL, f32& sampleR, const f32 inputGain, const Params& params) {
+        sampleL *= inputGain * params.internalHeadroom * params.loudnessDrive;
+        sampleR *= inputGain * params.internalHeadroom * params.loudnessDrive;
         OutputLimiter::Sanitize(sampleL, sampleR);
 
         const f32 energy = 0.5f * (sampleL * sampleL + sampleR * sampleR);
-        const f32 densityCoeff = (energy > densityEnergy_) ? kDensityAttack : kDensityRelease;
+        const f32 densityCoeff = (energy > densityEnergy_) ? params.densityAttack : params.densityRelease;
         densityEnergy_ += (energy - densityEnergy_) * densityCoeff;
         const f32 density = std::sqrt(std::max(0.0f, densityEnergy_));
         f32 targetDensityGain = 1.0f;
-        if (density > kDensityTarget) {
-            targetDensityGain = std::clamp(kDensityTarget / density, kDensityGainFloor, 1.0f);
+        if (density > params.densityTarget) {
+            targetDensityGain = std::clamp(params.densityTarget / density, params.densityGainFloor, 1.0f);
         }
-        const f32 gainCoeff = (targetDensityGain < densityGain_) ? kDensityAttack : kDensityRelease;
+        const f32 gainCoeff = (targetDensityGain < densityGain_) ? params.densityAttack : params.densityRelease;
         densityGain_ += (targetDensityGain - densityGain_) * gainCoeff;
         sampleL *= densityGain_;
         sampleR *= densityGain_;
 
-        ApplyLinkedCurve(sampleL, sampleR, kSaturationKneeStart, kSaturationCeiling);
+        ApplyLinkedCurve(sampleL, sampleR, params.saturationKneeStart, params.saturationCeiling);
 
         const f32 peak = std::max(std::abs(sampleL), std::abs(sampleR));
-        if (peak > kPeakKneeStart) {
-            const f32 shapedPeak = ShapePeak(peak, kPeakKneeStart, kPeakCeiling);
+        if (peak > params.peakKneeStart) {
+            const f32 shapedPeak = ShapePeak(peak, params.peakKneeStart, params.peakCeiling);
             const f32 targetGain = shapedPeak / peak;
-            const f32 coeff = (targetGain < smoothGain_) ? kAttack : kRelease;
+            const f32 coeff = (targetGain < smoothGain_) ? params.peakAttack : params.peakRelease;
             smoothGain_ += (targetGain - smoothGain_) * coeff;
         } else {
-            smoothGain_ += (1.0f - smoothGain_) * kRelease;
+            smoothGain_ += (1.0f - smoothGain_) * params.peakRelease;
         }
 
         sampleL *= smoothGain_;
         sampleR *= smoothGain_;
-        OutputLimiter::ApplySoftLimit(sampleL, sampleR, 0.985f, 0.999f);
+        OutputLimiter::ApplySoftLimit(sampleL, sampleR, params.finalCeiling, params.finalLimit);
     }
 
     Mode mode_ = Mode::Standard;
