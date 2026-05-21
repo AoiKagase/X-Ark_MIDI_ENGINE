@@ -19,6 +19,7 @@ struct SynthCompatOptions {
     bool applySf2ChannelDefaults = false;
     bool enableSoftPedal = true;
     bool enableEnhancedOutputStage = false;
+    bool useNaturalOutputStage = false;
 };
 
 struct SpecialVoiceRoute {

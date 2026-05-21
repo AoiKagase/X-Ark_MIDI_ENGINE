@@ -82,6 +82,8 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS) != 0;
         compatOptions.enableEnhancedOutputStage =
             (flags & XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE) != 0;
+        compatOptions.useNaturalOutputStage =
+            (flags & XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL) != 0;
     }
     return compatOptions;
 }

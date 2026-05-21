@@ -72,6 +72,8 @@ public static class XArkMidiEngine
         ApplySf2ChannelDefaultModulators = 1 << 3,
         /// <summary>Enable the experimental post-mix output stage for extra headroom and smoother loudness. 実験的な post-mix 出力段を有効化し、ヘッドルームと滑らかな音量感を調整します。</summary>
         EnableEnhancedOutputStage = 1 << 4,
+        /// <summary>Use the natural preset for the enhanced output stage. If unset, enhanced output uses the louder preset. enhanced output stage の Natural プリセットを使います。未指定時は音量感寄りのプリセットです。</summary>
+        EnhancedOutputStageNatural = 1 << 5,
     }
 
     [StructLayout(LayoutKind.Sequential)]

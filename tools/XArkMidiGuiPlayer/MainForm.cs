@@ -70,9 +70,9 @@ public sealed class MainForm : Form
         AutoSize = true,
         Text = "Apply SF2 channel default modulators",
     };
-    private readonly CheckBox _enableEnhancedOutputStageCheckBox = new() {
-        AutoSize = true,
-        Text = "Enhanced output stage",
+    private readonly ComboBox _outputStageComboBox = new() {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Width = 140,
     };
     private readonly DataGridView _channelGrid = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
@@ -231,7 +231,8 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
         flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
-        flagsPanel.Controls.Add(_enableEnhancedOutputStageCheckBox);
+        flagsPanel.Controls.Add(new Label { AutoSize = true, Text = "Output stage", Anchor = AnchorStyles.Left, Margin = new Padding(8, 6, 0, 0) });
+        flagsPanel.Controls.Add(_outputStageComboBox);
 
         layout.Controls.Add(new Label { AutoSize = true, Text = "Compatibility", Anchor = AnchorStyles.Left }, 0, 3);
         layout.Controls.Add(flagsPanel, 1, 3);
@@ -258,8 +259,10 @@ public sealed class MainForm : Form
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
-        _optionToolTip.SetToolTip(_enableEnhancedOutputStageCheckBox,
-            "合成後の出力段でヘッドルーム、軽いソフトニー、最終保護リミットを使います。音割れと潰れ感の比較用です。");
+        _outputStageComboBox.Items.AddRange(new object[] { "Standard", "Natural", "Loud" });
+        _outputStageComboBox.SelectedIndex = 0;
+        _optionToolTip.SetToolTip(_outputStageComboBox,
+            "合成後の出力段です。Natural は控えめ、Loud は音量感寄りです。停止後の次回再生から反映されます。");
     }
 
     private void ConfigureGrid()
@@ -570,7 +573,10 @@ public sealed class MainForm : Form
         if (_applySf2ChannelDefaultModulatorsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
         }
-        if (_enableEnhancedOutputStageCheckBox.Checked) {
+        if (_outputStageComboBox.SelectedIndex == 1) {
+            flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
+            flags |= XArkMidiEngine.CompatibilityFlags.EnhancedOutputStageNatural;
+        } else if (_outputStageComboBox.SelectedIndex == 2) {
             flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;
         }
         options.CompatibilityFlags = flags;

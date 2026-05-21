@@ -63,6 +63,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS = 1u << 3,
     /* Enable the experimental post-mix output stage for extra headroom and smoother loudness. 実験的な post-mix 出力段を有効化し、ヘッドルームと滑らかな音量感を調整します。 */
     XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE = 1u << 4,
+    /* Use the natural preset for the enhanced output stage. If unset, enhanced output uses the louder preset. enhanced output stage の Natural プリセットを使います。未指定時は音量感寄りのプリセットです。 */
+    XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL = 1u << 5,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */

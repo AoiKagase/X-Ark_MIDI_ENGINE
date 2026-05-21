@@ -336,7 +336,9 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
                         const SynthCompatOptions& compatOptions) {
     compatOptions_    = compatOptions;
     outputStage_.SetMode(compatOptions_.enableEnhancedOutputStage
-        ? OutputStage::Mode::EnhancedLoud
+        ? (compatOptions_.useNaturalOutputStage
+            ? OutputStage::Mode::EnhancedNatural
+            : OutputStage::Mode::EnhancedLoud)
         : OutputStage::Mode::Standard);
     outputStage_.Reset();
     midi_             = midi;
