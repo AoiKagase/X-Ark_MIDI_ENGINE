@@ -57,6 +57,10 @@ public:
 
     void ResetState() {
         ResetGsState();
+        ResetAudioState();
+    }
+
+    void ResetAudioState() {
         std::fill(reverbDelayL_.begin(), reverbDelayL_.end(), 0.0f);
         std::fill(reverbDelayR_.begin(), reverbDelayR_.end(), 0.0f);
         std::fill(reverbPreDelayL_.begin(), reverbPreDelayL_.end(), 0.0f);

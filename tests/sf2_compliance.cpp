@@ -1291,6 +1291,35 @@ namespace {
             "Post-mix effects reset should clear chorus damping state");
     }
 
+    void TestPostMixEffectsAudioResetPreservesGsState() {
+        PostMixEffects fullResetEffects;
+        fullResetEffects.Init(44100);
+        Require(fullResetEffects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level before full reset");
+        fullResetEffects.ResetState();
+
+        PostMixEffects audioResetEffects;
+        audioResetEffects.Init(44100);
+        Require(audioResetEffects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level before audio reset");
+        audioResetEffects.ResetAudioState();
+
+        double fullResetEnergy = 0.0;
+        double audioResetEnergy = 0.0;
+        for (int i = 0; i < 2000; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto fullOut =
+                fullResetEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            const auto audioOut =
+                audioResetEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            fullResetEnergy += std::fabs(fullOut.wetL) + std::fabs(fullOut.wetR);
+            audioResetEnergy += std::fabs(audioOut.wetL) + std::fabs(audioOut.wetR);
+        }
+
+        Require(audioResetEnergy > fullResetEnergy,
+            "Post-mix audio reset should clear buffers while preserving GS effect scales");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3410,6 +3439,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
+    RUN_TEST(TestPostMixEffectsAudioResetPreservesGsState);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
