@@ -151,11 +151,11 @@ public:
     Output ProcessSample(f32 dryL, f32 dryR, f32 reverbSendL, f32 reverbSendR,
                          f32 chorusSendL, f32 chorusSendR) {
         Output output{};
-        f32 reverbInL = reverbSendL + dryL * (kMasterReverbSend * gsMasterReverbSendScale_);
-        f32 reverbInR = reverbSendR + dryR * (kMasterReverbSend * gsMasterReverbSendScale_);
+        f32 reverbInL = ShapeEffectInput(reverbSendL + dryL * (kMasterReverbSend * gsMasterReverbSendScale_));
+        f32 reverbInR = ShapeEffectInput(reverbSendR + dryR * (kMasterReverbSend * gsMasterReverbSendScale_));
 
         if (!chorusDelayL_.empty()) {
-            const auto chorusWet = ProcessChorus(chorusSendL, chorusSendR);
+            const auto chorusWet = ProcessChorus(ShapeEffectInput(chorusSendL), ShapeEffectInput(chorusSendR));
             output.wetL += chorusWet.wetL * (kChorusWetMix * gsChorusWetScale_);
             output.wetR += chorusWet.wetR * (kChorusWetMix * gsChorusWetScale_);
             reverbInL += chorusWet.wetL * (kChorusToReverb * gsChorusToReverbScale_);
@@ -207,6 +207,7 @@ private:
     static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnShape = 0.18f;
+    static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
     static constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
@@ -230,6 +231,10 @@ private:
 
     static f32 ShapeWetReturn(f32 sample) {
         return sample / (1.0f + std::fabs(sample) * kWetReturnShape);
+    }
+
+    static f32 ShapeEffectInput(f32 sample) {
+        return sample / (1.0f + std::fabs(sample) * kEffectInputShape);
     }
 
     static WetPair ApplyWetReturnWidth(f32 wetL, f32 wetR) {

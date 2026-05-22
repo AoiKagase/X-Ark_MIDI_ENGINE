@@ -1374,6 +1374,36 @@ namespace {
             "Post-mix feedback clamp should avoid runaway late tails");
     }
 
+    void TestPostMixEffectsInputShapeSoftensExtremeSends() {
+        PostMixEffects normalEffects;
+        normalEffects.Init(44100);
+        PostMixEffects extremeEffects;
+        extremeEffects.Init(44100);
+
+        double normalPeak = 0.0;
+        double extremePeak = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 normalSend = (i == 0) ? 1.0f : 0.0f;
+            const auto normalOut =
+                normalEffects.ProcessSample(0.0f, 0.0f, normalSend, normalSend, normalSend, normalSend);
+            normalPeak = std::max<double>(normalPeak,
+                std::max(std::fabs(normalOut.wetL), std::fabs(normalOut.wetR)));
+
+            const f32 extremeSend = (i == 0) ? 32.0f : 0.0f;
+            const auto extremeOut =
+                extremeEffects.ProcessSample(0.0f, 0.0f, extremeSend, extremeSend, extremeSend, extremeSend);
+            extremePeak = std::max<double>(extremePeak,
+                std::max(std::fabs(extremeOut.wetL), std::fabs(extremeOut.wetR)));
+        }
+
+        Require(normalPeak > 0.0,
+            "Post-mix effect input shaping should preserve normal effect sends");
+        Require(extremePeak > normalPeak,
+            "Post-mix effect input shaping should still respond to stronger sends");
+        Require(extremePeak < normalPeak * 16.0,
+            "Post-mix effect input shaping should soften extreme send levels before the tank");
+    }
+
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3251,6 +3281,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
+    RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
