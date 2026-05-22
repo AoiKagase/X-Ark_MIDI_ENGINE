@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cwctype>
 #include <exception>
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -451,6 +452,100 @@ float XAmeGetChannelChorusSend(XAmeEngine engine, unsigned int channel) {
         return 0.0f;
     }
     return engine->synthesizer.GetChannelChorusSend(channel);
+}
+
+XAmeResult XAmeSetSf2EffectSendScale(XAmeEngine engine, float reverbScale, float chorusScale) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    if (!std::isfinite(reverbScale) || !std::isfinite(chorusScale)) {
+        SetError("SF2 effect send scales must be finite");
+        return XAME_ERR_INVALID_ARG;
+    }
+    engine->synthesizer.SetSf2EffectSendScale(reverbScale, chorusScale);
+    return XAME_OK;
+}
+
+float XAmeGetSf2ReverbSendScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetSf2ReverbSendScale();
+}
+
+float XAmeGetSf2ChorusSendScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetSf2ChorusSendScale();
+}
+
+XAmeResult XAmeSetEffectMixScale(XAmeEngine engine, float reverbReturnScale, float chorusReturnScale,
+                                 float masterReverbSendScale, float chorusToReverbScale) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    if (!std::isfinite(reverbReturnScale) || !std::isfinite(chorusReturnScale) ||
+        !std::isfinite(masterReverbSendScale) || !std::isfinite(chorusToReverbScale)) {
+        SetError("Effect mix scales must be finite");
+        return XAME_ERR_INVALID_ARG;
+    }
+    engine->synthesizer.SetEffectMixScale(
+        reverbReturnScale,
+        chorusReturnScale,
+        masterReverbSendScale,
+        chorusToReverbScale);
+    return XAME_OK;
+}
+
+float XAmeGetReverbReturnScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetReverbReturnScale();
+}
+
+float XAmeGetChorusReturnScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetChorusReturnScale();
+}
+
+float XAmeGetMasterReverbSendScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetMasterReverbSendScale();
+}
+
+float XAmeGetChorusToReverbScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetChorusToReverbScale();
+}
+
+XAmeResult XAmeSetOutputGainScale(XAmeEngine engine, float scale) {
+    if (!engine || !engine->initialized) {
+        SetError("Engine not initialized");
+        return XAME_ERR_NOT_INIT;
+    }
+    if (!std::isfinite(scale)) {
+        SetError("Output gain scale must be finite");
+        return XAME_ERR_INVALID_ARG;
+    }
+    engine->synthesizer.SetOutputGainScale(scale);
+    return XAME_OK;
+}
+
+float XAmeGetOutputGainScale(XAmeEngine engine) {
+    if (!engine || !engine->initialized) {
+        return 1.0f;
+    }
+    return engine->synthesizer.GetOutputGainScale();
 }
 
 unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex) {

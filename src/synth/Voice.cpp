@@ -669,8 +669,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     channelGainR = 1.0f;
     channelReverbSend = 0.0f;
     channelChorusSend = 0.0f;
-    reverbSend = presetReverbSend;
-    chorusSend = presetChorusSend;
+    RefreshEffectSends();
     RefreshOutputGains();
 }
 
@@ -722,12 +721,7 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
             channelGainL = volumeFactor * panGainL;
             channelGainR = volumeFactor * panGainR;
         }
-        reverbSend = compatOptions.multiplySf2MidiEffectsSends
-            ? std::clamp(presetReverbSend * channelReverbSend, 0.0f, 1.0f)
-            : presetReverbSend;
-        chorusSend = compatOptions.multiplySf2MidiEffectsSends
-            ? std::clamp(presetChorusSend * channelChorusSend, 0.0f, 1.0f)
-            : presetChorusSend;
+        RefreshEffectSends();
     } else {
         // 32-bit pan を正規化: 0→-1.0(左全振り), 0xFFFFFFFF→+1.0(右全振り), center≈0.0
         f32 channelPan = static_cast<f32>(pan32) / 4294967295.0f * 2.0f - 1.0f;
@@ -743,10 +737,35 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
     RefreshOutputGains();
 }
 
+void Voice::SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale) {
+    compatOptions.sf2ReverbSendScale = std::clamp(reverbScale, 0.0f, 4.0f);
+    compatOptions.sf2ChorusSendScale = std::clamp(chorusScale, 0.0f, 4.0f);
+    if (soundBankKind == SoundBankKind::Sf2) {
+        RefreshEffectSends();
+        RefreshOutputGains();
+    }
+}
+
 void Voice::ApplyPan(f32 pan) {
     pan = std::clamp(pan, -1.0f, 1.0f);
     baseGainL = std::sqrt(0.5f * (1.0f - pan));
     baseGainR = std::sqrt(0.5f * (1.0f + pan));
+}
+
+void Voice::RefreshEffectSends() {
+    if (soundBankKind == SoundBankKind::Sf2) {
+        const f32 baseReverbSend = compatOptions.multiplySf2MidiEffectsSends
+            ? presetReverbSend * channelReverbSend
+            : presetReverbSend;
+        const f32 baseChorusSend = compatOptions.multiplySf2MidiEffectsSends
+            ? presetChorusSend * channelChorusSend
+            : presetChorusSend;
+        reverbSend = std::clamp(baseReverbSend * compatOptions.sf2ReverbSendScale, 0.0f, 1.0f);
+        chorusSend = std::clamp(baseChorusSend * compatOptions.sf2ChorusSendScale, 0.0f, 1.0f);
+    } else {
+        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
+        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
+    }
 }
 
 void Voice::RefreshOutputGains() {

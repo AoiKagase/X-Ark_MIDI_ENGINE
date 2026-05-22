@@ -1094,6 +1094,9 @@ namespace {
         Require(std::fabs(sf2.channelGainR - 0.75f) < 1.0e-4f, "Default SF2 mode should keep channel volume in the mixer");
         Require(std::fabs(sf2.reverbSend - 0.25f) < 1.0e-4f, "SF2 channel reverb send should come from modulators by default");
         Require(std::fabs(sf2.chorusSend - 0.4f) < 1.0e-4f, "SF2 channel chorus send should come from modulators by default");
+        sf2.SetSf2EffectSendScale(0.5f, 1.5f);
+        Require(std::fabs(sf2.reverbSend - 0.125f) < 1.0e-4f, "SF2 reverb send scale should attenuate preset send");
+        Require(std::fabs(sf2.chorusSend - 0.6f) < 1.0e-4f, "SF2 chorus send scale should boost preset send");
 
         Voice sf2Center;
         sf2Center.soundBankKind = SoundBankKind::Sf2;
@@ -1114,6 +1117,9 @@ namespace {
         Require(std::fabs(sf2Compat.channelGainR - 1.0f) < 1.0e-4f, "Strict SF2 channel defaults should bypass post-mix channel volume on the right lane");
         Require(std::fabs(sf2Compat.reverbSend - 0.125f) < 1.0e-4f, "SF2 compatibility mode should multiply reverb sends");
         Require(std::fabs(sf2Compat.chorusSend - 0.1f) < 1.0e-4f, "SF2 compatibility mode should multiply chorus sends");
+        sf2Compat.SetSf2EffectSendScale(2.0f, 0.5f);
+        Require(std::fabs(sf2Compat.reverbSend - 0.25f) < 1.0e-4f, "SF2 reverb send scale should apply after compatibility multiplication");
+        Require(std::fabs(sf2Compat.chorusSend - 0.05f) < 1.0e-4f, "SF2 chorus send scale should apply after compatibility multiplication");
 
         Voice dls;
         dls.soundBankKind = SoundBankKind::Dls;
@@ -1123,6 +1129,9 @@ namespace {
         Require(dls.channelGainR > dls.channelGainL, "Non-SF2 channel pan should still affect the output mix");
         Require(std::fabs(dls.reverbSend - 0.75f) < 1.0e-4f, "Non-SF2 send policy should still sum sends");
         Require(std::fabs(dls.chorusSend - 0.65f) < 1.0e-4f, "Non-SF2 chorus policy should still sum sends");
+        dls.SetSf2EffectSendScale(0.0f, 0.0f);
+        Require(std::fabs(dls.reverbSend - 0.75f) < 1.0e-4f, "SF2 send scale should not affect non-SF2 reverb sends");
+        Require(std::fabs(dls.chorusSend - 0.65f) < 1.0e-4f, "SF2 send scale should not affect non-SF2 chorus sends");
     }
 
     void TestOutputLimiterAvoidsCrossSampleDucking() {
@@ -1399,6 +1408,39 @@ namespace {
         const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
         Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
             "Post-mix effects reset should clear chorus damping state");
+    }
+
+    void TestPostMixEffectsUserMixScales() {
+        PostMixEffects effects;
+        effects.Init(44100);
+        effects.SetMixScales(0.0f, 0.0f, 0.0f, 0.0f);
+        Require(effects.GetReverbReturnScale() == 0.0f,
+            "Post-mix effects should expose the user reverb return scale");
+        Require(effects.GetChorusReturnScale() == 0.0f,
+            "Post-mix effects should expose the user chorus return scale");
+        Require(effects.GetMasterReverbSendScale() == 0.0f,
+            "Post-mix effects should expose the user master reverb send scale");
+        Require(effects.GetChorusToReverbScale() == 0.0f,
+            "Post-mix effects should expose the user chorus-to-reverb scale");
+
+        double wetEnergy = 0.0;
+        for (int i = 0; i < 6000; ++i) {
+            const f32 impulse = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(impulse, impulse, impulse, impulse, impulse, impulse);
+            wetEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+        }
+        Require(wetEnergy == 0.0,
+            "Zero user mix scales should mute internal effect returns");
+
+        effects.SetMixScales(8.0f, -1.0f, 2.0f, 3.0f);
+        Require(effects.GetReverbReturnScale() == 4.0f,
+            "Post-mix effects should clamp high user reverb return scale");
+        Require(effects.GetChorusReturnScale() == 0.0f,
+            "Post-mix effects should clamp low user chorus return scale");
+        Require(effects.GetMasterReverbSendScale() == 2.0f,
+            "Post-mix effects should preserve valid master reverb send scale");
+        Require(effects.GetChorusToReverbScale() == 3.0f,
+            "Post-mix effects should preserve valid chorus-to-reverb scale");
     }
 
     void TestPostMixEffectsAudioResetPreservesGsState() {
@@ -4106,6 +4148,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
+    RUN_TEST(TestPostMixEffectsUserMixScales);
     RUN_TEST(TestPostMixEffectsAudioResetPreservesGsState);
     RUN_TEST(TestPostMixEffectsGsWetChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusToReverbChangesAreSmoothed);

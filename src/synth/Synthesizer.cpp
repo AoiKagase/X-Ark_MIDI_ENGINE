@@ -476,7 +476,7 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             f32 outL = dryL + effects.wetL;
             f32 outR = dryR + effects.wetR;
             mixGainCurrent_ += (targetMixGain - mixGainCurrent_) * kMixGainSmooth;
-            const f32 outputGain = mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
+            const f32 outputGain = mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_ * outputGainScale_;
             outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_, dcBlockPole_);
             outR = ApplyDcBlock(outR, dcBlockPrevInR_, dcBlockPrevOutR_, dcBlockPole_);
             outputStage_.Process(outL, outR, outputGain);
@@ -631,6 +631,27 @@ f32 Synthesizer::GetChannelChorusSend(u32 channel) const {
     }
     const u32 send32 = channelChorusSend32View_[channel].load(std::memory_order_relaxed);
     return NormalizeU32(send32);
+}
+
+void Synthesizer::SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale) {
+    compatOptions_.sf2ReverbSendScale = std::clamp(reverbScale, 0.0f, 4.0f);
+    compatOptions_.sf2ChorusSendScale = std::clamp(chorusScale, 0.0f, 4.0f);
+    voicePool_.SetSf2EffectSendScale(
+        compatOptions_.sf2ReverbSendScale,
+        compatOptions_.sf2ChorusSendScale);
+}
+
+void Synthesizer::SetEffectMixScale(f32 reverbReturnScale, f32 chorusReturnScale,
+                                    f32 masterReverbSendScale, f32 chorusToReverbScale) {
+    postMixEffects_.SetMixScales(
+        reverbReturnScale,
+        chorusReturnScale,
+        masterReverbSendScale,
+        chorusToReverbScale);
+}
+
+void Synthesizer::SetOutputGainScale(f32 scale) {
+    outputGainScale_ = std::clamp(scale, 0.0f, 4.0f);
 }
 
 bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {

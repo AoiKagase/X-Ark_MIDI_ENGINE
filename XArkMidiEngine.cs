@@ -259,6 +259,44 @@ public static class XArkMidiEngine
     private static extern float XAmeGetChannelChorusSend(IntPtr engine, uint channel);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetSf2EffectSendScale(
+        IntPtr engine,
+        float reverbScale,
+        float chorusScale);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetSf2ReverbSendScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetSf2ChorusSendScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetEffectMixScale(
+        IntPtr engine,
+        float reverbReturnScale,
+        float chorusReturnScale,
+        float masterReverbSendScale,
+        float chorusToReverbScale);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetReverbReturnScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChorusReturnScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetMasterReverbSendScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChorusToReverbScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern XAmeResult XAmeSetOutputGainScale(IntPtr engine, float scale);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetOutputGainScale(IntPtr engine);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern uint XAmeGetChannelActiveKeyMaskWord(IntPtr engine, uint channel, uint wordIndex);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -633,6 +671,126 @@ public static class XArkMidiEngine
         {
             ThrowIfDisposed();
             return XAmeGetChannelChorusSend(_handle, channel);
+        }
+
+        /// <summary>
+        /// Set global SF2 preset/modulator effect send scales. 1.0 keeps bank-authored sends unchanged.
+        /// SF2 の preset/modulator 由来エフェクト send 倍率を設定します。1.0 でバンク指定値を維持します。
+        /// </summary>
+        public void SetSf2EffectSendScale(float reverbScale, float chorusScale)
+        {
+            ThrowIfDisposed();
+            if (!float.IsFinite(reverbScale))
+                throw new ArgumentOutOfRangeException(nameof(reverbScale), "Must be finite");
+            if (!float.IsFinite(chorusScale))
+                throw new ArgumentOutOfRangeException(nameof(chorusScale), "Must be finite");
+            var result = XAmeSetSf2EffectSendScale(_handle, reverbScale, chorusScale);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+        }
+
+        /// <summary>
+        /// Gets the current global SF2 reverb send scale.
+        /// 現在の SF2 リバーブ send 倍率を取得します。
+        /// </summary>
+        public float Sf2ReverbSendScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetSf2ReverbSendScale(_handle);
+            }
+        }
+
+        /// <summary>
+        /// Gets the current global SF2 chorus send scale.
+        /// 現在の SF2 コーラス send 倍率を取得します。
+        /// </summary>
+        public float Sf2ChorusSendScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetSf2ChorusSendScale(_handle);
+            }
+        }
+
+        /// <summary>
+        /// Set internal effect mix scales. 1.0 keeps the engine defaults unchanged.
+        /// 内部エフェクトのミックス倍率を設定します。1.0 で既定値を維持します。
+        /// </summary>
+        public void SetEffectMixScale(float reverbReturnScale, float chorusReturnScale,
+                                      float masterReverbSendScale, float chorusToReverbScale)
+        {
+            ThrowIfDisposed();
+            if (!float.IsFinite(reverbReturnScale))
+                throw new ArgumentOutOfRangeException(nameof(reverbReturnScale), "Must be finite");
+            if (!float.IsFinite(chorusReturnScale))
+                throw new ArgumentOutOfRangeException(nameof(chorusReturnScale), "Must be finite");
+            if (!float.IsFinite(masterReverbSendScale))
+                throw new ArgumentOutOfRangeException(nameof(masterReverbSendScale), "Must be finite");
+            if (!float.IsFinite(chorusToReverbScale))
+                throw new ArgumentOutOfRangeException(nameof(chorusToReverbScale), "Must be finite");
+            var result = XAmeSetEffectMixScale(
+                _handle,
+                reverbReturnScale,
+                chorusReturnScale,
+                masterReverbSendScale,
+                chorusToReverbScale);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+        }
+
+        public float ReverbReturnScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetReverbReturnScale(_handle);
+            }
+        }
+
+        public float ChorusReturnScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetChorusReturnScale(_handle);
+            }
+        }
+
+        public float MasterReverbSendScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetMasterReverbSendScale(_handle);
+            }
+        }
+
+        public float ChorusToReverbScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetChorusToReverbScale(_handle);
+            }
+        }
+
+        /// <summary>
+        /// Set final output gain scale. 1.0 keeps the engine default unchanged.
+        /// 最終出力ゲイン倍率を設定します。1.0 で既定値を維持します。
+        /// </summary>
+        public void SetOutputGainScale(float scale)
+        {
+            ThrowIfDisposed();
+            if (!float.IsFinite(scale))
+                throw new ArgumentOutOfRangeException(nameof(scale), "Must be finite");
+            var result = XAmeSetOutputGainScale(_handle, scale);
+            if (result != XAmeResult.OK)
+                throw new XArkMidiException(result, GetLastError());
+        }
+
+        public float OutputGainScale
+        {
+            get {
+                ThrowIfDisposed();
+                return XAmeGetOutputGainScale(_handle);
+            }
         }
 
         /// <summary>

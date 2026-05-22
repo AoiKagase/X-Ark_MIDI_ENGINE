@@ -22,6 +22,8 @@ struct SynthCompatOptions {
     bool useNaturalOutputStage = false;
     bool useWarmOutputStage = false;
     bool disableInternalEffects = false;
+    f32 sf2ReverbSendScale = 1.0f;
+    f32 sf2ChorusSendScale = 1.0f;
 };
 
 struct SpecialVoiceRoute {
@@ -200,6 +202,7 @@ public:
     }
 
     void UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
+    void SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale);
 
     // NoteOff で Release フェーズへ移行
     void NoteOff();
@@ -225,6 +228,7 @@ private:
     void ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey);
     void ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey);
     void ApplyPan(f32 pan);
+    void RefreshEffectSends();
     void RefreshOutputGains();
 };
 

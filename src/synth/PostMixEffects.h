@@ -120,6 +120,10 @@ public:
         gsChorusDelayCurrent_ = gsChorusDelayScale_;
         gsChorusDepthCurrent_ = gsChorusDepthScale_;
         gsChorusRateCurrent_ = gsChorusRateScale_;
+        userReverbReturnCurrent_ = userReverbReturnScale_;
+        userChorusReturnCurrent_ = userChorusReturnScale_;
+        userMasterReverbSendCurrent_ = userMasterReverbSendScale_;
+        userChorusToReverbCurrent_ = userChorusToReverbScale_;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -142,6 +146,23 @@ public:
         gsChorusDepthScale_ = 1.0f;
         gsChorusRateScale_ = 1.0f;
     }
+
+    void SetMixScales(f32 reverbReturnScale, f32 chorusReturnScale,
+                      f32 masterReverbSendScale, f32 chorusToReverbScale) {
+        userReverbReturnScale_ = Clamp(reverbReturnScale, 0.0f, 4.0f);
+        userChorusReturnScale_ = Clamp(chorusReturnScale, 0.0f, 4.0f);
+        userMasterReverbSendScale_ = Clamp(masterReverbSendScale, 0.0f, 4.0f);
+        userChorusToReverbScale_ = Clamp(chorusToReverbScale, 0.0f, 4.0f);
+        userReverbReturnCurrent_ = userReverbReturnScale_;
+        userChorusReturnCurrent_ = userChorusReturnScale_;
+        userMasterReverbSendCurrent_ = userMasterReverbSendScale_;
+        userChorusToReverbCurrent_ = userChorusToReverbScale_;
+    }
+
+    f32 GetReverbReturnScale() const { return userReverbReturnScale_; }
+    f32 GetChorusReturnScale() const { return userChorusReturnScale_; }
+    f32 GetMasterReverbSendScale() const { return userMasterReverbSendScale_; }
+    f32 GetChorusToReverbScale() const { return userChorusToReverbScale_; }
 
     bool ApplyGsParameter(u8 param, u8 value) {
         const f32 t = NormalizeGs7Bit(value);
@@ -194,24 +215,30 @@ public:
                          f32 chorusSendL, f32 chorusSendR) {
         Output output{};
         const f32 masterReverbSendScale =
-            SmoothScale(gsMasterReverbSendCurrent_, gsMasterReverbSendScale_);
+            SmoothScale(gsMasterReverbSendCurrent_, gsMasterReverbSendScale_) *
+            SmoothScale(userMasterReverbSendCurrent_, userMasterReverbSendScale_);
         f32 reverbInL = ShapeEffectInput(reverbSendL + dryL * (kMasterReverbSend * masterReverbSendScale));
         f32 reverbInR = ShapeEffectInput(reverbSendR + dryR * (kMasterReverbSend * masterReverbSendScale));
 
         if (!chorusDelayL_.empty()) {
             const auto chorusWet = ProcessChorus(ShapeEffectInput(chorusSendL), ShapeEffectInput(chorusSendR));
-            const f32 chorusWetScale = SmoothScale(gsChorusWetCurrent_, gsChorusWetScale_);
+            const f32 chorusWetScale =
+                SmoothScale(gsChorusWetCurrent_, gsChorusWetScale_) *
+                SmoothScale(userChorusReturnCurrent_, userChorusReturnScale_);
             output.wetL += chorusWet.wetL * (kChorusWetMix * chorusWetScale);
             output.wetR += chorusWet.wetR * (kChorusWetMix * chorusWetScale);
             const f32 chorusToReverbScale =
-                SmoothScale(gsChorusToReverbCurrent_, gsChorusToReverbScale_);
+                SmoothScale(gsChorusToReverbCurrent_, gsChorusToReverbScale_) *
+                SmoothScale(userChorusToReverbCurrent_, userChorusToReverbScale_);
             reverbInL += chorusWet.wetL * (kChorusToReverb * chorusToReverbScale);
             reverbInR += chorusWet.wetR * (kChorusToReverb * chorusToReverbScale);
         }
 
         if (!reverbDelayL_.empty()) {
             const auto reverbWet = ProcessReverb(ShapeEffectInput(reverbInL), ShapeEffectInput(reverbInR));
-            const f32 reverbWetScale = SmoothScale(gsReverbWetCurrent_, gsReverbWetScale_);
+            const f32 reverbWetScale =
+                SmoothScale(gsReverbWetCurrent_, gsReverbWetScale_) *
+                SmoothScale(userReverbReturnCurrent_, userReverbReturnScale_);
             output.wetL += reverbWet.wetL * (kReverbWetMix * reverbWetScale);
             output.wetR += reverbWet.wetR * (kReverbWetMix * reverbWetScale);
         }
@@ -255,7 +282,11 @@ public:
                HasPendingScale(gsChorusToReverbCurrent_, gsChorusToReverbScale_, threshold) ||
                HasPendingScale(gsChorusDelayCurrent_, gsChorusDelayScale_, threshold) ||
                HasPendingScale(gsChorusDepthCurrent_, gsChorusDepthScale_, threshold) ||
-               HasPendingScale(gsChorusRateCurrent_, gsChorusRateScale_, threshold);
+               HasPendingScale(gsChorusRateCurrent_, gsChorusRateScale_, threshold) ||
+               HasPendingScale(userReverbReturnCurrent_, userReverbReturnScale_, threshold) ||
+               HasPendingScale(userChorusReturnCurrent_, userChorusReturnScale_, threshold) ||
+               HasPendingScale(userMasterReverbSendCurrent_, userMasterReverbSendScale_, threshold) ||
+               HasPendingScale(userChorusToReverbCurrent_, userChorusToReverbScale_, threshold);
     }
 
 private:
@@ -603,6 +634,14 @@ private:
     f32 gsChorusDepthCurrent_ = 1.0f;
     f32 gsChorusRateScale_ = 1.0f;
     f32 gsChorusRateCurrent_ = 1.0f;
+    f32 userReverbReturnScale_ = 1.0f;
+    f32 userReverbReturnCurrent_ = 1.0f;
+    f32 userChorusReturnScale_ = 1.0f;
+    f32 userChorusReturnCurrent_ = 1.0f;
+    f32 userMasterReverbSendScale_ = 1.0f;
+    f32 userMasterReverbSendCurrent_ = 1.0f;
+    f32 userChorusToReverbScale_ = 1.0f;
+    f32 userChorusToReverbCurrent_ = 1.0f;
 };
 
 } // namespace XArkMidi

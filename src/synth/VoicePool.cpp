@@ -1481,6 +1481,18 @@ void VoicePool::UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 re
     }
 }
 
+void VoicePool::SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale) {
+    for (u16 i = 0; i < activeCount_; ++i) {
+        auto& v = voices_[activeIndices_[i]];
+        v.SetSf2EffectSendScale(reverbScale, chorusScale);
+        if (v.HasLinkedVoice()) {
+            auto& linked = voices_[v.linkedVoiceIndex];
+            linked.SetSf2EffectSendScale(reverbScale, chorusScale);
+            SynchronizeAggregatedLinkedVoice(v, linked);
+        }
+    }
+}
+
 void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
                                       f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
     std::vector<ResolvedZone> zones;

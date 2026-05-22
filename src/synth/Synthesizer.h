@@ -57,6 +57,17 @@ public:
     f32 GetChannelPan(u32 channel) const;
     f32 GetChannelReverbSend(u32 channel) const;
     f32 GetChannelChorusSend(u32 channel) const;
+    void SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale);
+    f32 GetSf2ReverbSendScale() const { return compatOptions_.sf2ReverbSendScale; }
+    f32 GetSf2ChorusSendScale() const { return compatOptions_.sf2ChorusSendScale; }
+    void SetEffectMixScale(f32 reverbReturnScale, f32 chorusReturnScale,
+                           f32 masterReverbSendScale, f32 chorusToReverbScale);
+    f32 GetReverbReturnScale() const { return postMixEffects_.GetReverbReturnScale(); }
+    f32 GetChorusReturnScale() const { return postMixEffects_.GetChorusReturnScale(); }
+    f32 GetMasterReverbSendScale() const { return postMixEffects_.GetMasterReverbSendScale(); }
+    f32 GetChorusToReverbScale() const { return postMixEffects_.GetChorusToReverbScale(); }
+    void SetOutputGainScale(f32 scale);
+    f32 GetOutputGainScale() const { return outputGainScale_; }
     bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
     u64 GetCurrentFramePosition() const;
     u64 GetLengthFramesEstimate() const;
@@ -84,6 +95,7 @@ private:
 
     f32              mixGainCurrent_ = 1.0f;
     f32              masterVolume_ = 1.0f;
+    f32              outputGainScale_ = 1.0f;
     f32              normGain_ = 1.0f;     // サンプルPCM正規化の補正ゲイン
     f32              dcBlockPrevInL_ = 0.0f;
     f32              dcBlockPrevInR_ = 0.0f;

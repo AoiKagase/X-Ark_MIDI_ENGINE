@@ -284,6 +284,26 @@ XAME_API float XAmeGetChannelPan(XAmeEngine engine, unsigned int channel);
 XAME_API float XAmeGetChannelReverbSend(XAmeEngine engine, unsigned int channel);
 /* Get the current channel chorus send controller value normalized to 0..1. 指定チャンネルの現在のコーラスセンド値を 0..1 で取得します。 */
 XAME_API float XAmeGetChannelChorusSend(XAmeEngine engine, unsigned int channel);
+/* Set global SF2 preset/modulator effect send scales. 1.0 keeps bank-authored sends unchanged. SF2 の preset/modulator 由来エフェクト send 倍率を設定します。1.0 でバンク指定値を維持します。 */
+XAME_API XAmeResult XAmeSetSf2EffectSendScale(XAmeEngine engine, float reverbScale, float chorusScale);
+/* Get the current global SF2 reverb send scale. 現在の SF2 リバーブ send 倍率を取得します。 */
+XAME_API float XAmeGetSf2ReverbSendScale(XAmeEngine engine);
+/* Get the current global SF2 chorus send scale. 現在の SF2 コーラス send 倍率を取得します。 */
+XAME_API float XAmeGetSf2ChorusSendScale(XAmeEngine engine);
+/* Set internal effect mix scales. 1.0 keeps the engine defaults unchanged. 内部エフェクトのミックス倍率を設定します。1.0 で既定値を維持します。 */
+XAME_API XAmeResult XAmeSetEffectMixScale(XAmeEngine engine, float reverbReturnScale, float chorusReturnScale, float masterReverbSendScale, float chorusToReverbScale);
+/* Get the current internal reverb return scale. 現在の内部リバーブ return 倍率を取得します。 */
+XAME_API float XAmeGetReverbReturnScale(XAmeEngine engine);
+/* Get the current internal chorus return scale. 現在の内部コーラス return 倍率を取得します。 */
+XAME_API float XAmeGetChorusReturnScale(XAmeEngine engine);
+/* Get the current dry-to-reverb master send scale. 現在のドライ音からリバーブへの master send 倍率を取得します。 */
+XAME_API float XAmeGetMasterReverbSendScale(XAmeEngine engine);
+/* Get the current chorus-to-reverb scale. 現在のコーラスからリバーブへの send 倍率を取得します。 */
+XAME_API float XAmeGetChorusToReverbScale(XAmeEngine engine);
+/* Set final output gain scale. 1.0 keeps the engine default unchanged. 最終出力ゲイン倍率を設定します。1.0 で既定値を維持します。 */
+XAME_API XAmeResult XAmeSetOutputGainScale(XAmeEngine engine, float scale);
+/* Get the current final output gain scale. 現在の最終出力ゲイン倍率を取得します。 */
+XAME_API float XAmeGetOutputGainScale(XAmeEngine engine);
 /* Get one 32-bit word of the active key bitset for a MIDI channel. アクティブキーのビットセット 32bit 分を取得します。 */
 XAME_API unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex);
 /* Pop the oldest queued channel key event. Returns non-zero if an event was written to outEvent. 最も古いキーイベントを取り出します。 */

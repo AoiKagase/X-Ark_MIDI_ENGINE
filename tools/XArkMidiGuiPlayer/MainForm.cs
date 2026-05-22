@@ -17,6 +17,7 @@ public sealed class MainForm : Form
 {
     private const int ChannelCount = 16;
     private const int KeyMaskWordCount = 4;
+    private const decimal Sf2SendScaleDefaultPercent = 100m;
     private readonly TextBox _midiPathTextBox = new() { Dock = DockStyle.Fill };
     private readonly TextBox _soundFontPathTextBox = new() { Dock = DockStyle.Fill };
     private readonly Button _browseMidiButton = new() { Text = "Open MIDI..." };
@@ -24,6 +25,7 @@ public sealed class MainForm : Form
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
     private readonly Button _stopButton = new() { Text = "Stop", Width = 90, Enabled = false };
     private readonly Button _exportWavButton = new() { Text = "Export WAV...", Width = 110 };
+    private readonly Button _effectsOptionsButton = new() { Text = "Effects...", Width = 90 };
     private readonly CheckBox _loopEnabledCheckBox = new() { AutoSize = true, Text = "Loop" };
     private readonly NumericUpDown _loopCountUpDown = new() {
         Width = 80,
@@ -78,6 +80,55 @@ public sealed class MainForm : Form
         Text = "Internal effects",
         Checked = true,
     };
+    private readonly NumericUpDown _sf2ReverbSendScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _sf2ChorusSendScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _reverbReturnScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _chorusReturnScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _masterReverbSendScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _chorusToReverbScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
+    private readonly NumericUpDown _outputGainScaleUpDown = new() {
+        Width = 64,
+        Minimum = 0,
+        Maximum = 200,
+        Value = Sf2SendScaleDefaultPercent,
+        Increment = 5,
+    };
     private readonly ComboBox _outputStageComboBox = new() {
         DropDownStyle = ComboBoxStyle.DropDownList,
         Width = 140,
@@ -100,6 +151,8 @@ public sealed class MainForm : Form
     };
 
     private WaveOutPlayer? _player;
+    private Form? _effectsDialog;
+    private bool _closingEffectsDialog;
     private bool _suppressMaskEvents;
     private bool _suppressSeekEvents;
     private bool _seekDragActive;
@@ -133,6 +186,8 @@ public sealed class MainForm : Form
     {
         _uiTimer.Stop();
         StopPlayback();
+        _closingEffectsDialog = true;
+        _effectsDialog?.Close();
         base.OnFormClosing(e);
     }
 
@@ -180,6 +235,7 @@ public sealed class MainForm : Form
         playbackControls.Controls.Add(_playButton);
         playbackControls.Controls.Add(_stopButton);
         playbackControls.Controls.Add(_exportWavButton);
+        playbackControls.Controls.Add(_effectsOptionsButton);
         playbackControls.Controls.Add(new Label { AutoSize = true, Width = 12 });
         playbackControls.Controls.Add(_loopEnabledCheckBox);
         playbackControls.Controls.Add(CreateInlineLabel("Count"));
@@ -259,9 +315,7 @@ public sealed class MainForm : Form
         };
         flagsPanel.Controls.Add(_sf2ZeroLengthLoopRetriggerCheckBox);
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
-        flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
-        flagsPanel.Controls.Add(_internalEffectsCheckBox);
         flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
@@ -326,6 +380,8 @@ public sealed class MainForm : Form
             "SF2 の pdta エントリ数の上限です。異常に大きい SF2 を制限したい場合に使います。0 の場合は既定値です。");
         _optionToolTip.SetToolTip(_maxDlsPoolTableEntriesUpDown,
             "DLS の pool table エントリ数の上限です。0 の場合はエンジン既定値を使います。");
+        _optionToolTip.SetToolTip(_effectsOptionsButton,
+            "エフェクト関連の互換設定と SF2 send 倍率を開きます。SF2 send 倍率は再生中にも反映されます。");
         _optionToolTip.SetToolTip(_sf2ZeroLengthLoopRetriggerCheckBox,
             "長さ 0 の SF2 ループを一部互換実装のように再トリガーします。古い音源向けの互換動作です。");
         _optionToolTip.SetToolTip(_enableSf2SamplePitchCorrectionCheckBox,
@@ -336,6 +392,20 @@ public sealed class MainForm : Form
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,
             "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
+        _optionToolTip.SetToolTip(_sf2ReverbSendScaleUpDown,
+            "SF2 の preset/modulator 由来リバーブ send に掛ける倍率です。100 でバンク指定値、0 で SF2 リバーブ send を無効化します。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_sf2ChorusSendScaleUpDown,
+            "SF2 の preset/modulator 由来コーラス send に掛ける倍率です。100 でバンク指定値、0 で SF2 コーラス send を無効化します。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_reverbReturnScaleUpDown,
+            "内部リバーブの return 音量に掛ける倍率です。100 で既定値、0 で内部リバーブ return を無音にします。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_chorusReturnScaleUpDown,
+            "内部コーラスの return 音量に掛ける倍率です。100 で既定値、0 で内部コーラス return を無音にします。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_masterReverbSendScaleUpDown,
+            "ドライ音から内部リバーブへ送る master send の倍率です。100 で既定値、0 でドライ音由来の全体リバーブを無効化します。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_chorusToReverbScaleUpDown,
+            "内部コーラス return をリバーブへ送る量の倍率です。100 で既定値、0 でコーラスからリバーブへの回り込みを無効化します。再生中にも反映されます。");
+        _optionToolTip.SetToolTip(_outputGainScaleUpDown,
+            "最終出力ゲインに掛ける倍率です。100 で既定値、0 で無音、200 で 2 倍です。再生中にも反映されます。");
         _outputStageComboBox.Items.AddRange(new object[] { "Standard", "Natural", "Warm", "Loud" });
         _outputStageComboBox.SelectedIndex = 0;
         _optionToolTip.SetToolTip(_outputStageComboBox,
@@ -441,11 +511,19 @@ public sealed class MainForm : Form
         _playButton.Click += async (_, _) => await StartPlaybackAsync();
         _stopButton.Click += (_, _) => StopPlayback();
         _exportWavButton.Click += async (_, _) => await ExportWavAsync();
+        _effectsOptionsButton.Click += (_, _) => ShowEffectsOptionsDialog();
         _loopEnabledCheckBox.CheckedChanged += (_, _) => {
             _loopCountUpDown.Enabled = _loopEnabledCheckBox.Checked;
             ApplyLoopToPlayer();
         };
         _loopCountUpDown.ValueChanged += (_, _) => ApplyLoopToPlayer();
+        _sf2ReverbSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
+        _sf2ChorusSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
+        _reverbReturnScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
+        _chorusReturnScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
+        _masterReverbSendScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
+        _chorusToReverbScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
+        _outputGainScaleUpDown.ValueChanged += (_, _) => ApplyOutputGainScaleToPlayer();
         _uiTimer.Tick += (_, _) => RefreshUiState();
         _seekTrackBar.Scroll += (_, _) => RefreshSeekUi();
         _seekTrackBar.MouseDown += (_, _) => _seekDragActive = true;
@@ -472,6 +550,105 @@ public sealed class MainForm : Form
             }
         };
         _channelGrid.SelectionChanged += (_, _) => UpdateKeyboardLabel();
+    }
+
+    private void ShowEffectsOptionsDialog()
+    {
+        if (_effectsDialog is null || _effectsDialog.IsDisposed) {
+            _effectsDialog = CreateEffectsOptionsDialog();
+        }
+
+        UpdateCreateOptionsEnabledState();
+        if (_effectsDialog.Visible) {
+            _effectsDialog.Activate();
+            return;
+        }
+
+        _effectsDialog.StartPosition = FormStartPosition.Manual;
+        var location = _effectsOptionsButton.PointToScreen(new Point(0, _effectsOptionsButton.Height + 2));
+        _effectsDialog.Location = location;
+        _effectsDialog.Show(this);
+    }
+
+    private Form CreateEffectsOptionsDialog()
+    {
+        var dialog = new Form {
+            Text = "Effect Options",
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12),
+        };
+
+        var root = new TableLayoutPanel {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 3,
+            RowCount = 10,
+            Dock = DockStyle.Fill,
+        };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var flagsPanel = new FlowLayoutPanel {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 8),
+        };
+        flagsPanel.Controls.Add(_internalEffectsCheckBox);
+        flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
+
+        root.Controls.Add(flagsPanel, 0, 0);
+        root.SetColumnSpan(flagsPanel, 3);
+        root.Controls.Add(CreateCompactLabel("SF2 reverb send"), 0, 1);
+        root.Controls.Add(_sf2ReverbSendScaleUpDown, 1, 1);
+        root.Controls.Add(CreateCompactLabel("SF2 chorus send"), 0, 2);
+        root.Controls.Add(_sf2ChorusSendScaleUpDown, 1, 2);
+        root.Controls.Add(CreateHintLabel("%"), 2, 1);
+        root.Controls.Add(CreateHintLabel("%"), 2, 2);
+        root.Controls.Add(CreateCompactLabel("Reverb return"), 0, 3);
+        root.Controls.Add(_reverbReturnScaleUpDown, 1, 3);
+        root.Controls.Add(CreateHintLabel("%"), 2, 3);
+        root.Controls.Add(CreateCompactLabel("Chorus return"), 0, 4);
+        root.Controls.Add(_chorusReturnScaleUpDown, 1, 4);
+        root.Controls.Add(CreateHintLabel("%"), 2, 4);
+        root.Controls.Add(CreateCompactLabel("Master reverb send"), 0, 5);
+        root.Controls.Add(_masterReverbSendScaleUpDown, 1, 5);
+        root.Controls.Add(CreateHintLabel("%"), 2, 5);
+        root.Controls.Add(CreateCompactLabel("Chorus to reverb"), 0, 6);
+        root.Controls.Add(_chorusToReverbScaleUpDown, 1, 6);
+        root.Controls.Add(CreateHintLabel("%"), 2, 6);
+        root.Controls.Add(CreateCompactLabel("Output gain"), 0, 7);
+        root.Controls.Add(_outputGainScaleUpDown, 1, 7);
+        root.Controls.Add(CreateHintLabel("%"), 2, 7);
+
+        var buttonPanel = new FlowLayoutPanel {
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 10, 0, 0),
+        };
+        var closeButton = new Button { Text = "Close", Width = 90 };
+        closeButton.Click += (_, _) => dialog.Hide();
+        buttonPanel.Controls.Add(closeButton);
+
+        root.Controls.Add(buttonPanel, 0, 9);
+        root.SetColumnSpan(buttonPanel, 3);
+        dialog.Controls.Add(root);
+        dialog.FormClosing += (_, e) => {
+            if (!_closingEffectsDialog && e.CloseReason == CloseReason.UserClosing) {
+                e.Cancel = true;
+                dialog.Hide();
+            }
+        };
+        return dialog;
     }
 
     private void BrowseFile(OpenFileDialog dialog, TextBox textBox)
@@ -525,6 +702,13 @@ public sealed class MainForm : Form
         var soloMask = BuildSoloMaskFromRows();
         var loopEnabled = _loopEnabledCheckBox.Checked;
         var loopCount = DecimalToUInt32(_loopCountUpDown.Value);
+        var sf2ReverbSendScale = Sf2SendScaleFromPercent(_sf2ReverbSendScaleUpDown.Value);
+        var sf2ChorusSendScale = Sf2SendScaleFromPercent(_sf2ChorusSendScaleUpDown.Value);
+        var reverbReturnScale = EffectScaleFromPercent(_reverbReturnScaleUpDown.Value);
+        var chorusReturnScale = EffectScaleFromPercent(_chorusReturnScaleUpDown.Value);
+        var masterReverbSendScale = EffectScaleFromPercent(_masterReverbSendScaleUpDown.Value);
+        var chorusToReverbScale = EffectScaleFromPercent(_chorusToReverbScaleUpDown.Value);
+        var outputGainScale = EffectScaleFromPercent(_outputGainScaleUpDown.Value);
         var progress = new Progress<WavExportProgress>(p => {
             _statusLabel.Text = p.TotalSeconds > 0.0
                 ? $"Exporting {FormatPlaybackTime(p.CurrentSeconds)} / {FormatPlaybackTime(p.TotalSeconds)}"
@@ -544,6 +728,13 @@ public sealed class MainForm : Form
                 soloMask,
                 loopEnabled,
                 loopCount,
+                sf2ReverbSendScale,
+                sf2ChorusSendScale,
+                reverbReturnScale,
+                chorusReturnScale,
+                masterReverbSendScale,
+                chorusToReverbScale,
+                outputGainScale,
                 progress));
             _statusLabel.Text = "Exported WAV";
             MessageBox.Show(this, "WAV export completed.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -571,11 +762,25 @@ public sealed class MainForm : Form
         }
 
         try {
-            var player = new WaveOutPlayer(_midiPathTextBox.Text, _soundFontPathTextBox.Text, CreatePlayerOptions(), startPositionSeconds);
+            var player = new WaveOutPlayer(
+                _midiPathTextBox.Text,
+                _soundFontPathTextBox.Text,
+                CreatePlayerOptions(),
+                Sf2SendScaleFromPercent(_sf2ReverbSendScaleUpDown.Value),
+                Sf2SendScaleFromPercent(_sf2ChorusSendScaleUpDown.Value),
+                EffectScaleFromPercent(_reverbReturnScaleUpDown.Value),
+                EffectScaleFromPercent(_chorusReturnScaleUpDown.Value),
+                EffectScaleFromPercent(_masterReverbSendScaleUpDown.Value),
+                EffectScaleFromPercent(_chorusToReverbScaleUpDown.Value),
+                EffectScaleFromPercent(_outputGainScaleUpDown.Value),
+                startPositionSeconds);
             player.PlaybackStopped += OnPlaybackStopped;
             _player = player;
             ApplyMasksToPlayer();
             ApplyLoopToPlayer();
+            ApplySf2SendScalesToPlayer();
+            ApplyEffectMixScalesToPlayer();
+            ApplyOutputGainScaleToPlayer();
             _playButton.Enabled = false;
             _stopButton.Enabled = true;
             _statusLabel.Text = startPositionSeconds > 0.0 ? "Seeking" : "Playing";
@@ -666,6 +871,27 @@ public sealed class MainForm : Form
     private void ApplyLoopToPlayer()
     {
         _player?.SetLoop(_loopEnabledCheckBox.Checked, DecimalToUInt32(_loopCountUpDown.Value));
+    }
+
+    private void ApplySf2SendScalesToPlayer()
+    {
+        _player?.SetSf2EffectSendScale(
+            Sf2SendScaleFromPercent(_sf2ReverbSendScaleUpDown.Value),
+            Sf2SendScaleFromPercent(_sf2ChorusSendScaleUpDown.Value));
+    }
+
+    private void ApplyEffectMixScalesToPlayer()
+    {
+        _player?.SetEffectMixScale(
+            EffectScaleFromPercent(_reverbReturnScaleUpDown.Value),
+            EffectScaleFromPercent(_chorusReturnScaleUpDown.Value),
+            EffectScaleFromPercent(_masterReverbSendScaleUpDown.Value),
+            EffectScaleFromPercent(_chorusToReverbScaleUpDown.Value));
+    }
+
+    private void ApplyOutputGainScaleToPlayer()
+    {
+        _player?.SetOutputGainScale(EffectScaleFromPercent(_outputGainScaleUpDown.Value));
     }
 
     private void RefreshUiState()
@@ -825,7 +1051,24 @@ public sealed class MainForm : Form
     private void UpdateCreateOptionsEnabledState()
     {
         var idle = _player is null && !_exportInFlight;
-        _createOptionsGroup.Enabled = idle;
+        _createOptionsGroup.Enabled = !_exportInFlight;
+        _effectsOptionsButton.Enabled = !_exportInFlight;
+        _maxSampleDataBytesUpDown.Enabled = idle;
+        _maxSf2PdtaEntriesUpDown.Enabled = idle;
+        _maxDlsPoolTableEntriesUpDown.Enabled = idle;
+        _sf2ZeroLengthLoopRetriggerCheckBox.Enabled = idle;
+        _enableSf2SamplePitchCorrectionCheckBox.Enabled = idle;
+        _multiplySf2MidiEffectsSendsCheckBox.Enabled = idle;
+        _applySf2ChannelDefaultModulatorsCheckBox.Enabled = idle;
+        _internalEffectsCheckBox.Enabled = idle;
+        _outputStageComboBox.Enabled = idle;
+        _sf2ReverbSendScaleUpDown.Enabled = !_exportInFlight;
+        _sf2ChorusSendScaleUpDown.Enabled = !_exportInFlight;
+        _reverbReturnScaleUpDown.Enabled = !_exportInFlight;
+        _chorusReturnScaleUpDown.Enabled = !_exportInFlight;
+        _masterReverbSendScaleUpDown.Enabled = !_exportInFlight;
+        _chorusToReverbScaleUpDown.Enabled = !_exportInFlight;
+        _outputGainScaleUpDown.Enabled = !_exportInFlight;
         _exportWavButton.Enabled = idle;
     }
 
@@ -913,6 +1156,16 @@ public sealed class MainForm : Form
         return decimal.ToUInt64(decimal.Truncate(value));
     }
 
+    private static float Sf2SendScaleFromPercent(decimal percent)
+    {
+        return (float)(Math.Clamp(percent, 0m, 200m) / 100m);
+    }
+
+    private static float EffectScaleFromPercent(decimal percent)
+    {
+        return (float)(Math.Clamp(percent, 0m, 200m) / 100m);
+    }
+
     private static void RenderWavFile(
         string midiPath,
         string soundFontPath,
@@ -922,6 +1175,13 @@ public sealed class MainForm : Form
         uint soloMask,
         bool loopEnabled,
         uint loopCount,
+        float sf2ReverbSendScale,
+        float sf2ChorusSendScale,
+        float reverbReturnScale,
+        float chorusReturnScale,
+        float masterReverbSendScale,
+        float chorusToReverbScale,
+        float outputGainScale,
         IProgress<WavExportProgress>? progress)
     {
         using var engine = new XArkMidiEngine.Engine(
@@ -934,6 +1194,9 @@ public sealed class MainForm : Form
         engine.ChannelMuteMask = muteMask;
         engine.ChannelSoloMask = soloMask;
         engine.SetLoop(loopEnabled, loopCount);
+        engine.SetSf2EffectSendScale(sf2ReverbSendScale, sf2ChorusSendScale);
+        engine.SetEffectMixScale(reverbReturnScale, chorusReturnScale, masterReverbSendScale, chorusToReverbScale);
+        engine.SetOutputGainScale(outputGainScale);
 
         var estimatedFrames = engine.LengthFramesEstimate;
         if (loopEnabled) {
@@ -1057,6 +1320,13 @@ public sealed class WaveOutPlayer : IDisposable
     private readonly string _midiPath;
     private readonly string _soundFontPath;
     private readonly XArkMidiEngine.CreateOptions _createOptions;
+    private readonly float _initialSf2ReverbSendScale;
+    private readonly float _initialSf2ChorusSendScale;
+    private readonly float _initialReverbReturnScale;
+    private readonly float _initialChorusReturnScale;
+    private readonly float _initialMasterReverbSendScale;
+    private readonly float _initialChorusToReverbScale;
+    private readonly float _initialOutputGainScale;
     private readonly ulong _startFramePosition;
     private readonly List<WaveBuffer> _buffers = new();
     private readonly object _engineLock = new();
@@ -1068,8 +1338,18 @@ public sealed class WaveOutPlayer : IDisposable
     private uint _pendingSoloMask;
     private bool _pendingLoopEnabled;
     private uint _pendingLoopCount;
+    private float _pendingSf2ReverbSendScale;
+    private float _pendingSf2ChorusSendScale;
+    private float _pendingReverbReturnScale;
+    private float _pendingChorusReturnScale;
+    private float _pendingMasterReverbSendScale;
+    private float _pendingChorusToReverbScale;
+    private float _pendingOutputGainScale;
     private int _pendingMaskDirty;
     private int _pendingLoopDirty;
+    private int _pendingSf2SendScaleDirty;
+    private int _pendingEffectMixScaleDirty;
+    private int _pendingOutputGainScaleDirty;
     private int _suppressPlaybackStopped;
     private Exception? _playbackException;
     private WavDumpWriter? _dumpWriter;
@@ -1078,11 +1358,36 @@ public sealed class WaveOutPlayer : IDisposable
 
     public event EventHandler? PlaybackStopped;
 
-    public WaveOutPlayer(string midiPath, string soundFontPath, XArkMidiEngine.CreateOptions createOptions, double startPositionSeconds = 0.0)
+    public WaveOutPlayer(
+        string midiPath,
+        string soundFontPath,
+        XArkMidiEngine.CreateOptions createOptions,
+        float initialSf2ReverbSendScale,
+        float initialSf2ChorusSendScale,
+        float initialReverbReturnScale,
+        float initialChorusReturnScale,
+        float initialMasterReverbSendScale,
+        float initialChorusToReverbScale,
+        float initialOutputGainScale,
+        double startPositionSeconds = 0.0)
     {
         _midiPath = midiPath;
         _soundFontPath = soundFontPath;
         _createOptions = createOptions;
+        _initialSf2ReverbSendScale = initialSf2ReverbSendScale;
+        _initialSf2ChorusSendScale = initialSf2ChorusSendScale;
+        _initialReverbReturnScale = initialReverbReturnScale;
+        _initialChorusReturnScale = initialChorusReturnScale;
+        _initialMasterReverbSendScale = initialMasterReverbSendScale;
+        _initialChorusToReverbScale = initialChorusToReverbScale;
+        _initialOutputGainScale = initialOutputGainScale;
+        _pendingSf2ReverbSendScale = initialSf2ReverbSendScale;
+        _pendingSf2ChorusSendScale = initialSf2ChorusSendScale;
+        _pendingReverbReturnScale = initialReverbReturnScale;
+        _pendingChorusReturnScale = initialChorusReturnScale;
+        _pendingMasterReverbSendScale = initialMasterReverbSendScale;
+        _pendingChorusToReverbScale = initialChorusToReverbScale;
+        _pendingOutputGainScale = initialOutputGainScale;
         _startFramePosition = startPositionSeconds <= 0.0
             ? 0
             : (ulong)Math.Round(startPositionSeconds * SampleRate);
@@ -1168,6 +1473,35 @@ public sealed class WaveOutPlayer : IDisposable
         _pendingLoopEnabled = enabled;
         _pendingLoopCount = loopCount;
         Interlocked.Exchange(ref _pendingLoopDirty, 1);
+    }
+
+    public void SetSf2EffectSendScale(float reverbScale, float chorusScale)
+    {
+        lock (_engineLock) {
+            _pendingSf2ReverbSendScale = reverbScale;
+            _pendingSf2ChorusSendScale = chorusScale;
+            Interlocked.Exchange(ref _pendingSf2SendScaleDirty, 1);
+        }
+    }
+
+    public void SetEffectMixScale(float reverbReturnScale, float chorusReturnScale,
+                                  float masterReverbSendScale, float chorusToReverbScale)
+    {
+        lock (_engineLock) {
+            _pendingReverbReturnScale = reverbReturnScale;
+            _pendingChorusReturnScale = chorusReturnScale;
+            _pendingMasterReverbSendScale = masterReverbSendScale;
+            _pendingChorusToReverbScale = chorusToReverbScale;
+            Interlocked.Exchange(ref _pendingEffectMixScaleDirty, 1);
+        }
+    }
+
+    public void SetOutputGainScale(float scale)
+    {
+        lock (_engineLock) {
+            _pendingOutputGainScale = scale;
+            Interlocked.Exchange(ref _pendingOutputGainScaleDirty, 1);
+        }
     }
 
     public async Task SeekSecondsAsync(double seconds)
@@ -1295,6 +1629,19 @@ public sealed class WaveOutPlayer : IDisposable
                         if (Interlocked.Exchange(ref _pendingLoopDirty, 0) != 0) {
                             _engine.SetLoop(_pendingLoopEnabled, _pendingLoopCount);
                         }
+                        if (Interlocked.Exchange(ref _pendingSf2SendScaleDirty, 0) != 0) {
+                            _engine.SetSf2EffectSendScale(_pendingSf2ReverbSendScale, _pendingSf2ChorusSendScale);
+                        }
+                        if (Interlocked.Exchange(ref _pendingEffectMixScaleDirty, 0) != 0) {
+                            _engine.SetEffectMixScale(
+                                _pendingReverbReturnScale,
+                                _pendingChorusReturnScale,
+                                _pendingMasterReverbSendScale,
+                                _pendingChorusToReverbScale);
+                        }
+                        if (Interlocked.Exchange(ref _pendingOutputGainScaleDirty, 0) != 0) {
+                            _engine.SetOutputGainScale(_pendingOutputGainScale);
+                        }
                         if (_engine.IsFinished) {
                             playbackFinished = true;
                             continue;
@@ -1375,10 +1722,20 @@ public sealed class WaveOutPlayer : IDisposable
         _pendingSoloMask = 0;
         _pendingLoopEnabled = false;
         _pendingLoopCount = 0;
+        _pendingSf2ReverbSendScale = _initialSf2ReverbSendScale;
+        _pendingSf2ChorusSendScale = _initialSf2ChorusSendScale;
+        _pendingReverbReturnScale = _initialReverbReturnScale;
+        _pendingChorusReturnScale = _initialChorusReturnScale;
+        _pendingMasterReverbSendScale = _initialMasterReverbSendScale;
+        _pendingChorusToReverbScale = _initialChorusToReverbScale;
+        _pendingOutputGainScale = _initialOutputGainScale;
         _lengthFramesEstimate = 0;
         _latestOutputStageMeter = default;
         Interlocked.Exchange(ref _pendingMaskDirty, 0);
         Interlocked.Exchange(ref _pendingLoopDirty, 0);
+        Interlocked.Exchange(ref _pendingSf2SendScaleDirty, 0);
+        Interlocked.Exchange(ref _pendingEffectMixScaleDirty, 0);
+        Interlocked.Exchange(ref _pendingOutputGainScaleDirty, 0);
     }
 
     public Exception? ConsumePlaybackException()
@@ -1393,6 +1750,13 @@ public sealed class WaveOutPlayer : IDisposable
         var engine = new XArkMidiEngine.Engine(_midiPath, _soundFontPath,
             DetectSoundBankKind(_soundFontPath), SampleRate, NumChannels,
             _createOptions);
+        engine.SetSf2EffectSendScale(_initialSf2ReverbSendScale, _initialSf2ChorusSendScale);
+        engine.SetEffectMixScale(
+            _initialReverbReturnScale,
+            _initialChorusReturnScale,
+            _initialMasterReverbSendScale,
+            _initialChorusToReverbScale);
+        engine.SetOutputGainScale(_initialOutputGainScale);
         _lengthFramesEstimate = engine.LengthFramesEstimate;
         if (_startFramePosition != 0) {
             engine.SeekFrames(_startFramePosition);
