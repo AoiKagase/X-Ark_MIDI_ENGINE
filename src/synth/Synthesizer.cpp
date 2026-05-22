@@ -1197,7 +1197,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
             ApplyCurrentPitchToChannel(voicePool_, static_cast<u8>(ch), channels_[ch]);
         }
         masterVolume_ = 1.0f;
-        postMixEffects_.ResetGsState();
+        postMixEffects_.ResetState();
     };
 
     if (data.size() >= 4 && data[0] == 0x7E && data[2] == 0x09) {
