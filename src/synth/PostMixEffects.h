@@ -91,6 +91,9 @@ public:
         gsMasterReverbSendCurrent_ = gsMasterReverbSendScale_;
         gsChorusWetCurrent_ = gsChorusWetScale_;
         gsChorusToReverbCurrent_ = gsChorusToReverbScale_;
+        gsChorusDelayCurrent_ = gsChorusDelayScale_;
+        gsChorusDepthCurrent_ = gsChorusDepthScale_;
+        gsChorusRateCurrent_ = gsChorusRateScale_;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -297,18 +300,21 @@ private:
 
     WetPair ProcessChorus(f32 chorusInL, f32 chorusInR) {
         const size_t size = chorusDelayL_.size();
-        const f32 baseTapL = static_cast<f32>(chorusBaseTapL_) * gsChorusDelayScale_;
-        const f32 baseTapR = static_cast<f32>(chorusBaseTapR_) * gsChorusDelayScale_;
-        const f32 depthTapL = static_cast<f32>(chorusDepthTapL_) * gsChorusDepthScale_;
-        const f32 depthTapR = static_cast<f32>(chorusDepthTapR_) * gsChorusDepthScale_;
+        const f32 delayScale = SmoothScale(gsChorusDelayCurrent_, gsChorusDelayScale_);
+        const f32 depthScale = SmoothScale(gsChorusDepthCurrent_, gsChorusDepthScale_);
+        const f32 rateScale = SmoothScale(gsChorusRateCurrent_, gsChorusRateScale_);
+        const f32 baseTapL = static_cast<f32>(chorusBaseTapL_) * delayScale;
+        const f32 baseTapR = static_cast<f32>(chorusBaseTapR_) * delayScale;
+        const f32 depthTapL = static_cast<f32>(chorusDepthTapL_) * depthScale;
+        const f32 depthTapR = static_cast<f32>(chorusDepthTapR_) * depthScale;
         const f32 fTapL = std::max(1.0f, baseTapL + (chorusSin_ + 1.0f) * 0.5f * depthTapL);
         const f32 fTapR = std::max(1.0f, baseTapR + (chorusCos_ + 1.0f) * 0.5f * depthTapR);
         const f32 secondaryTapL =
-            static_cast<f32>(chorusSecondaryBaseTapL_) * gsChorusDelayScale_ +
-            (chorusCos_ + 1.0f) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapL_) * gsChorusDepthScale_;
+            static_cast<f32>(chorusSecondaryBaseTapL_) * delayScale +
+            (chorusCos_ + 1.0f) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapL_) * depthScale;
         const f32 secondaryTapR =
-            static_cast<f32>(chorusSecondaryBaseTapR_) * gsChorusDelayScale_ +
-            (1.0f - chorusSin_) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapR_) * gsChorusDepthScale_;
+            static_cast<f32>(chorusSecondaryBaseTapR_) * delayScale +
+            (1.0f - chorusSin_) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapR_) * depthScale;
         const f32 chorusWetL = ReadDelayInterpolated(chorusDelayL_, chorusIndex_, fTapL);
         const f32 chorusWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, fTapR);
         const f32 chorusSecondaryWetL = ReadDelayInterpolated(chorusDelayL_, chorusIndex_, secondaryTapL);
@@ -323,7 +329,7 @@ private:
             chorusIndex_ = 0;
         }
 
-        const f32 phaseStepAngle = chorusBasePhaseStep_ * gsChorusRateScale_;
+        const f32 phaseStepAngle = chorusBasePhaseStep_ * rateScale;
         const f32 phaseStepSin = std::sin(phaseStepAngle);
         const f32 phaseStepCos = std::cos(phaseStepAngle);
         const f32 nextSin = chorusSin_ * phaseStepCos + chorusCos_ * phaseStepSin;
@@ -493,8 +499,11 @@ private:
     f32 gsChorusToReverbScale_ = 1.0f;
     f32 gsChorusToReverbCurrent_ = 1.0f;
     f32 gsChorusDelayScale_ = 1.0f;
+    f32 gsChorusDelayCurrent_ = 1.0f;
     f32 gsChorusDepthScale_ = 1.0f;
+    f32 gsChorusDepthCurrent_ = 1.0f;
     f32 gsChorusRateScale_ = 1.0f;
+    f32 gsChorusRateCurrent_ = 1.0f;
 };
 
 } // namespace XArkMidi

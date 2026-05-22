@@ -1444,6 +1444,57 @@ namespace {
             "Post-mix master reverb send smoothing should continue moving toward the requested send");
     }
 
+    void TestPostMixEffectsChorusModulationChangesAreSmoothed() {
+        PostMixEffects smoothedEffects;
+        smoothedEffects.Init(44100);
+        Require(smoothedEffects.ApplyGsParameter(0x11, 127),
+            "Post-mix effects should accept high GS chorus delay before smoothing test");
+        Require(smoothedEffects.ApplyGsParameter(0x13, 127),
+            "Post-mix effects should accept high GS chorus depth before smoothing test");
+        Require(smoothedEffects.ApplyGsParameter(0x12, 127),
+            "Post-mix effects should accept high GS chorus rate before smoothing test");
+
+        PostMixEffects immediateEffects;
+        immediateEffects.Init(44100);
+        Require(immediateEffects.ApplyGsParameter(0x11, 127),
+            "Post-mix effects should accept high GS chorus delay before immediate reset");
+        Require(immediateEffects.ApplyGsParameter(0x13, 127),
+            "Post-mix effects should accept high GS chorus depth before immediate reset");
+        Require(immediateEffects.ApplyGsParameter(0x12, 127),
+            "Post-mix effects should accept high GS chorus rate before immediate reset");
+        immediateEffects.ResetAudioState();
+
+        int smoothedFirst = -1;
+        int immediateFirst = -1;
+        double smoothedLaterEnergy = 0.0;
+        for (int i = 0; i < 3600; ++i) {
+            const f32 send = (i == 0) ? 1.0f : 0.0f;
+            const auto smoothedOut =
+                smoothedEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, send, send);
+            const auto immediateOut =
+                immediateEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, send, send);
+
+            if (smoothedFirst < 0 &&
+                (std::fabs(smoothedOut.wetL) + std::fabs(smoothedOut.wetR)) > 1.0e-7f) {
+                smoothedFirst = i;
+            }
+            if (immediateFirst < 0 &&
+                (std::fabs(immediateOut.wetL) + std::fabs(immediateOut.wetR)) > 1.0e-7f) {
+                immediateFirst = i;
+            }
+            if (i > 2000) {
+                smoothedLaterEnergy += std::fabs(smoothedOut.wetL) + std::fabs(smoothedOut.wetR);
+            }
+        }
+
+        Require(smoothedFirst >= 0 && immediateFirst >= 0,
+            "Post-mix chorus modulation smoothing should preserve chorus output");
+        Require(smoothedFirst < immediateFirst,
+            "Post-mix chorus modulation smoothing should ease into longer chorus delay");
+        Require(smoothedLaterEnergy > 0.0,
+            "Post-mix chorus modulation smoothing should keep producing later chorus energy");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3567,6 +3618,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsGsWetChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusToReverbChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsMasterReverbSendChangesAreSmoothed);
+    RUN_TEST(TestPostMixEffectsChorusModulationChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
