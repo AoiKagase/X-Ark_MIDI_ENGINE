@@ -72,11 +72,17 @@
     <ClCompile Include="..\src\common\BinaryReader.cpp" />
     <ClCompile Include="..\src\common\CpuFeatures.cpp" />
     <ClCompile Include="..\src\common\FileUtil.cpp" />
+    <ClCompile Include="..\src\midi\MidiFile.cpp" />
+    <ClCompile Include="..\src\midi\MidiSequencer.cpp" />
+    <ClCompile Include="..\src\midi\MidiTrack.cpp" />
+    <ClCompile Include="..\src\midi2\Midi2File.cpp" />
+    <ClCompile Include="..\src\midi2\UmpDownConverter.cpp" />
     <ClCompile Include="..\src\sf2\Sf2File.cpp" />
     <ClCompile Include="..\src\synth\SimdKernels.cpp" />
     <ClCompile Include="..\src\synth\SimdKernelsAvx2.cpp">
       <AdditionalOptions>/arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="..\src\synth\Synthesizer.cpp" />
     <ClCompile Include="..\src\synth\Voice.cpp" />
     <ClCompile Include="..\src\synth\VoicePool.cpp" />
   </ItemGroup>
@@ -85,11 +91,20 @@
     <ClInclude Include="..\src\common\CpuFeatures.h" />
     <ClInclude Include="..\src\common\FileUtil.h" />
     <ClInclude Include="..\src\common\Types.h" />
+    <ClInclude Include="..\src\midi\MidiFile.h" />
+    <ClInclude Include="..\src\midi\MidiSequencer.h" />
+    <ClInclude Include="..\src\midi\MidiTrack.h" />
+    <ClInclude Include="..\src\midi2\Midi2File.h" />
+    <ClInclude Include="..\src\midi2\UmpDownConverter.h" />
     <ClInclude Include="..\src\sf2\Sf2File.h" />
     <ClInclude Include="..\src\sf2\Sf2Types.h" />
     <ClInclude Include="..\src\soundbank\SoundBank.h" />
+    <ClInclude Include="..\src\synth\Channel.h" />
     <ClInclude Include="..\src\synth\Interpolator.h" />
+    <ClInclude Include="..\src\synth\OutputStage.h" />
+    <ClInclude Include="..\src\synth\PostMixEffects.h" />
     <ClInclude Include="..\src\synth\SimdKernels.h" />
+    <ClInclude Include="..\src\synth\Synthesizer.h" />
     <ClInclude Include="..\src\synth\Voice.h" />
     <ClInclude Include="..\src\synth\VoicePool.h" />
   </ItemGroup>
