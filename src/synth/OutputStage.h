@@ -69,6 +69,10 @@ public:
 
     void SetMode(Mode mode) { mode_ = mode; }
     Mode GetMode() const { return mode_; }
+    void SetSampleRate(u32 sampleRate) {
+        const f32 effectiveSampleRate = static_cast<f32>(std::max<u32>(1, sampleRate));
+        coefficientScaleExponent_ = 44100.0f / effectiveSampleRate;
+    }
     void Reset() {
         smoothGain_ = 1.0f;
         densityEnergy_ = 0.0f;
@@ -181,6 +185,19 @@ private:
         }
     }
 
+    Params ScaleParamsForSampleRate(const Params& params) const {
+        Params scaled = params;
+        scaled.densityAttack = ScaleCoefficientAt44100(params.densityAttack);
+        scaled.densityRelease = ScaleCoefficientAt44100(params.densityRelease);
+        scaled.peakAttack = ScaleCoefficientAt44100(params.peakAttack);
+        scaled.peakRelease = ScaleCoefficientAt44100(params.peakRelease);
+        return scaled;
+    }
+
+    f32 ScaleCoefficientAt44100(f32 coefficient) const {
+        return 1.0f - std::pow(1.0f - coefficient, coefficientScaleExponent_);
+    }
+
     static f32 ShapePeak(f32 peak, f32 kneeStart, f32 ceiling) {
         if (peak <= kneeStart) {
             return peak;
@@ -201,19 +218,20 @@ private:
     }
 
     void ProcessEnhanced(f32& sampleL, f32& sampleR, const f32 inputGain, const Params& params) {
+        const Params scaledParams = ScaleParamsForSampleRate(params);
         sampleL *= inputGain * params.internalHeadroom * params.loudnessDrive;
         sampleR *= inputGain * params.internalHeadroom * params.loudnessDrive;
         OutputLimiter::Sanitize(sampleL, sampleR);
 
         const f32 energy = 0.5f * (sampleL * sampleL + sampleR * sampleR);
-        const f32 densityCoeff = (energy > densityEnergy_) ? params.densityAttack : params.densityRelease;
+        const f32 densityCoeff = (energy > densityEnergy_) ? scaledParams.densityAttack : scaledParams.densityRelease;
         densityEnergy_ += (energy - densityEnergy_) * densityCoeff;
         const f32 density = std::sqrt(std::max(0.0f, densityEnergy_));
         f32 targetDensityGain = 1.0f;
         if (density > params.densityTarget) {
             targetDensityGain = std::clamp(params.densityTarget / density, params.densityGainFloor, 1.0f);
         }
-        const f32 gainCoeff = (targetDensityGain < densityGain_) ? params.densityAttack : params.densityRelease;
+        const f32 gainCoeff = (targetDensityGain < densityGain_) ? scaledParams.densityAttack : scaledParams.densityRelease;
         densityGain_ += (targetDensityGain - densityGain_) * gainCoeff;
         sampleL *= densityGain_;
         sampleR *= densityGain_;
@@ -224,10 +242,10 @@ private:
         if (peak > params.peakKneeStart) {
             const f32 shapedPeak = ShapePeak(peak, params.peakKneeStart, params.peakCeiling);
             const f32 targetGain = shapedPeak / peak;
-            const f32 coeff = (targetGain < smoothGain_) ? params.peakAttack : params.peakRelease;
+            const f32 coeff = (targetGain < smoothGain_) ? scaledParams.peakAttack : scaledParams.peakRelease;
             smoothGain_ += (targetGain - smoothGain_) * coeff;
         } else {
-            smoothGain_ += (1.0f - smoothGain_) * params.peakRelease;
+            smoothGain_ += (1.0f - smoothGain_) * scaledParams.peakRelease;
         }
 
         sampleL *= smoothGain_;
@@ -246,6 +264,7 @@ private:
 
     Mode mode_ = Mode::Standard;
     OutputLimiter limiter_;
+    f32 coefficientScaleExponent_ = 1.0f;
     f32 smoothGain_ = 1.0f;
     f32 densityEnergy_ = 0.0f;
     f32 densityGain_ = 1.0f;

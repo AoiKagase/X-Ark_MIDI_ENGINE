@@ -1248,6 +1248,30 @@ namespace {
             "Output stage preset drive should increase on both stereo lanes");
     }
 
+    void TestOutputStageSmoothingScalesWithSampleRate() {
+        const auto measureMeter = [](u32 sampleRate) {
+            OutputStage stage;
+            stage.SetMode(OutputStage::Mode::EnhancedLoud);
+            stage.SetSampleRate(sampleRate);
+            stage.Reset();
+            const int totalFrames = static_cast<int>(sampleRate * 120u / 1000u);
+            for (int i = 0; i < totalFrames; ++i) {
+                f32 sampleL = 0.86f;
+                f32 sampleR = -0.86f;
+                stage.Process(sampleL, sampleR, 1.0f);
+            }
+            return stage.GetMeter();
+        };
+
+        const auto meter44100 = measureMeter(44100);
+        const auto meter48000 = measureMeter(48000);
+
+        Require(std::fabs(meter44100.densityGain - meter48000.densityGain) < 0.025f,
+            "Output stage density smoothing should keep similar time response across sample rates");
+        Require(std::fabs(meter44100.peakGain - meter48000.peakGain) < 0.025f,
+            "Output stage peak smoothing should keep similar time response across sample rates");
+    }
+
     void TestOutputStageStandardMatchesLimiterPath() {
         OutputStage stage;
         stage.SetMode(OutputStage::Mode::Standard);
@@ -4041,6 +4065,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEnhancedOutputStageUsesLinkedPeakShaping);
     RUN_TEST(TestEnhancedOutputStageAdaptsToDensePassages);
     RUN_TEST(TestOutputStagePresetsHaveDistinctDrive);
+    RUN_TEST(TestOutputStageSmoothingScalesWithSampleRate);
     RUN_TEST(TestOutputStageStandardMatchesLimiterPath);
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);

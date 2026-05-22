@@ -322,6 +322,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
                 ? OutputStage::Mode::EnhancedWarm
                 : OutputStage::Mode::EnhancedLoud))
         : OutputStage::Mode::Standard);
+    outputStage_.SetSampleRate(sampleRate);
     outputStage_.Reset();
     midi_             = midi;
     soundBank_        = soundBank;
