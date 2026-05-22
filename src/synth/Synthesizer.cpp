@@ -351,6 +351,9 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
         channelProgramView_[ch].store(0, std::memory_order_relaxed);
         channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
+        channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        channelReverbSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        channelChorusSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
         channelHeldKeyCounts_[ch].fill(0);
         for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
             channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
@@ -366,7 +369,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
         channels_[ch].Reset();
         channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
         channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
-        channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        PublishChannelControllerView(static_cast<u8>(ch));
     }
 
     if (!sequencer_.Init(midi, sampleRate)) {
@@ -382,6 +385,8 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     if (finished_ || !soundBank_) {
         for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
             channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+            channelReverbSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+            channelChorusSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
         }
         return 0;
     }
@@ -393,7 +398,7 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     chorusBlockR_.resize(numFrames);
 
     u32 frame = 0;
-    std::array<f32, MIDI_CHANNEL_COUNT> renderChannelPeaks{};
+    VoicePool::ChannelRenderPeaks renderChannelPeaks{};
     while (frame < numFrames) {
         if (sequencer_.IsAtLoopEnd()) {
             if (TryRestartLoop()) {
@@ -439,14 +444,16 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             channelMuteMask_.load(std::memory_order_relaxed),
             channelSoloMask_.load(std::memory_order_relaxed));
 
-        std::array<f32, MIDI_CHANNEL_COUNT> blockChannelPeaks{};
+        VoicePool::ChannelRenderPeaks blockChannelPeaks{};
         const int activeVoices = voicePool_.RenderBlock(
             dryBlockL_.data(), dryBlockR_.data(),
             reverbBlockL_.data(), reverbBlockR_.data(),
             chorusBlockL_.data(), chorusBlockR_.data(),
             blockFrames, audibleChannelMask, &blockChannelPeaks);
         for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
-            renderChannelPeaks[ch] = std::max(renderChannelPeaks[ch], blockChannelPeaks[ch]);
+            renderChannelPeaks.dry[ch] = std::max(renderChannelPeaks.dry[ch], blockChannelPeaks.dry[ch]);
+            renderChannelPeaks.reverbSend[ch] = std::max(renderChannelPeaks.reverbSend[ch], blockChannelPeaks.reverbSend[ch]);
+            renderChannelPeaks.chorusSend[ch] = std::max(renderChannelPeaks.chorusSend[ch], blockChannelPeaks.chorusSend[ch]);
         }
         std::array<u32, MIDI_CHANNEL_COUNT> activeRootCounts{};
         voicePool_.GetActiveRootNoteCountsPerChannel(activeRootCounts);
@@ -504,7 +511,9 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     }
 
     for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
-        channelAudioPeakView_[ch].store(renderChannelPeaks[ch], std::memory_order_relaxed);
+        channelAudioPeakView_[ch].store(renderChannelPeaks.dry[ch], std::memory_order_relaxed);
+        channelReverbSendPeakView_[ch].store(renderChannelPeaks.reverbSend[ch], std::memory_order_relaxed);
+        channelChorusSendPeakView_[ch].store(renderChannelPeaks.chorusSend[ch], std::memory_order_relaxed);
     }
 
     return numFrames;
@@ -578,6 +587,52 @@ f32 Synthesizer::GetChannelAudioPeak(u32 channel) const {
     return channelAudioPeakView_[channel].load(std::memory_order_relaxed);
 }
 
+f32 Synthesizer::GetChannelReverbSendPeak(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    return channelReverbSendPeakView_[channel].load(std::memory_order_relaxed);
+}
+
+f32 Synthesizer::GetChannelChorusSendPeak(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    return channelChorusSendPeakView_[channel].load(std::memory_order_relaxed);
+}
+
+f32 Synthesizer::GetChannelVolume(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    const u32 volume32 = channelVolume32View_[channel].load(std::memory_order_relaxed);
+    return NormalizeU32(volume32);
+}
+
+f32 Synthesizer::GetChannelPan(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.5f;
+    }
+    const u32 pan32 = channelPan32View_[channel].load(std::memory_order_relaxed);
+    return NormalizeU32(pan32);
+}
+
+f32 Synthesizer::GetChannelReverbSend(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    const u32 send32 = channelReverbSend32View_[channel].load(std::memory_order_relaxed);
+    return NormalizeU32(send32);
+}
+
+f32 Synthesizer::GetChannelChorusSend(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    const u32 send32 = channelChorusSend32View_[channel].load(std::memory_order_relaxed);
+    return NormalizeU32(send32);
+}
+
 bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {
     std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
     if (channelKeyEvents_.empty()) {
@@ -586,6 +641,22 @@ bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {
     eventOut = channelKeyEvents_.front();
     channelKeyEvents_.pop_front();
     return true;
+}
+
+void Synthesizer::PublishChannelControllerView(u8 ch) {
+    if (ch >= MIDI_CHANNEL_COUNT) {
+        return;
+    }
+    const ChannelState& state = channels_[ch];
+    channelVolume32View_[ch].store(state.volume32, std::memory_order_relaxed);
+    channelPan32View_[ch].store(state.pan32, std::memory_order_relaxed);
+    channelReverbSend32View_[ch].store(state.reverbSend32, std::memory_order_relaxed);
+    channelChorusSend32View_[ch].store(state.chorusSend32, std::memory_order_relaxed);
+}
+
+f32 Synthesizer::NormalizeU32(u32 value) {
+    constexpr f32 kMax = 4294967295.0f;
+    return static_cast<f32>(value) / kMax;
 }
 
 u64 Synthesizer::GetCurrentFramePosition() const {
@@ -638,6 +709,9 @@ void Synthesizer::ResetPlaybackState(bool resetLoopProgress) {
         channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
         channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
         channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        channelReverbSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        channelChorusSendPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        PublishChannelControllerView(static_cast<u8>(ch));
         channelHeldKeyCounts_[ch].fill(0);
         for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
             channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);
@@ -1163,6 +1237,7 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         RefreshSf2ControllersForChannel(ch);
         break;
     }
+    PublishChannelControllerView(ch);
 }
 
 void Synthesizer::HandleProgramChange(u8 ch, u8 program) {
@@ -1226,6 +1301,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
             channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
             ApplyChannelMix(voicePool_, static_cast<u8>(ch), channels_[ch]);
             ApplyCurrentPitchToChannel(voicePool_, static_cast<u8>(ch), channels_[ch]);
+            PublishChannelControllerView(static_cast<u8>(ch));
         }
         masterVolume_ = 1.0f;
         postMixEffects_.ResetState();

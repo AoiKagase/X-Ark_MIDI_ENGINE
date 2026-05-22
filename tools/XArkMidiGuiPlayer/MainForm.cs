@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -376,6 +377,30 @@ public sealed class MainForm : Form
             ReadOnly = true,
         });
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
+            DataPropertyName = nameof(ChannelRow.DryPeak),
+            HeaderText = "Dry",
+            Width = 58,
+            ReadOnly = true,
+        });
+        _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
+            DataPropertyName = nameof(ChannelRow.ReverbSendPeak),
+            HeaderText = "RvbPk",
+            Width = 58,
+            ReadOnly = true,
+        });
+        _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
+            DataPropertyName = nameof(ChannelRow.ChorusSendPeak),
+            HeaderText = "ChoPk",
+            Width = 58,
+            ReadOnly = true,
+        });
+        _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
+            DataPropertyName = nameof(ChannelRow.ControllerSummary),
+            HeaderText = "Vol Pan Rev Cho",
+            Width = 145,
+            ReadOnly = true,
+        });
+        _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
             DataPropertyName = nameof(ChannelRow.Lamp),
             HeaderText = "NoteOn",
             Width = 80,
@@ -622,6 +647,10 @@ public sealed class MainForm : Form
         if (_player is null) {
             for (int i = 0; i < ChannelCount; ++i) {
                 _channels[i].ActiveNotes = 0;
+                _channels[i].DryPeak = string.Empty;
+                _channels[i].ReverbSendPeak = string.Empty;
+                _channels[i].ChorusSendPeak = string.Empty;
+                _channels[i].ControllerSummary = string.Empty;
                 _channels[i].Lamp = string.Empty;
             }
             _keyboard.ActiveKeyMasks = new uint[KeyMaskWordCount];
@@ -643,6 +672,16 @@ public sealed class MainForm : Form
                 row.ProgramNumber = snapshot.Programs[i] + 1;
                 row.ProgramName = ProgramNameFor(i, snapshot.Programs[i]);
                 row.ActiveNotes = (int)snapshot.ActiveNotes[i];
+                row.DryPeak = FormatPercent(snapshot.AudioPeaks[i]);
+                row.ReverbSendPeak = FormatPercent(snapshot.ReverbSendPeaks[i]);
+                row.ChorusSendPeak = FormatPercent(snapshot.ChorusSendPeaks[i]);
+                row.ControllerSummary = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}/{1}/{2}/{3}",
+                    FormatPercent(snapshot.Volumes[i]),
+                    FormatPercent(snapshot.Pans[i]),
+                    FormatPercent(snapshot.ReverbSends[i]),
+                    FormatPercent(snapshot.ChorusSends[i]));
                 row.Lamp = snapshot.ActiveNotes[i] > 0 ? "ON" : string.Empty;
                 row.On = (snapshot.MuteMask & (1u << i)) == 0;
                 row.Solo = (snapshot.SoloMask & (1u << i)) != 0;
@@ -651,7 +690,7 @@ public sealed class MainForm : Form
             _suppressMaskEvents = false;
         }
         var selectedChannel = SelectedChannelIndex();
-        _channelLevelMeter.SetLevels(snapshot.AudioPeaks, snapshot.MuteMask, snapshot.SoloMask);
+        _channelLevelMeter.SetLevels(snapshot.AudioPeaks, snapshot.ReverbSendPeaks, snapshot.ChorusSendPeaks, snapshot.MuteMask, snapshot.SoloMask);
         _keyboard.ActiveKeyMasks = snapshot.ActiveKeyMasks[selectedChannel];
         _keyboard.ApplyChannelEvents(selectedChannel, channelEvents);
         UpdateLampStyles();
@@ -823,6 +862,15 @@ public sealed class MainForm : Form
             : $"{time.Minutes:00}:{time.Seconds:00}";
     }
 
+    private static string FormatPercent(float value)
+    {
+        if (!float.IsFinite(value)) {
+            value = 0.0f;
+        }
+        var percent = Math.Clamp((int)MathF.Round(value * 100.0f), 0, 999);
+        return percent.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static uint DecimalToUInt32(decimal value)
     {
         return decimal.ToUInt32(decimal.Truncate(value));
@@ -935,6 +983,10 @@ public sealed class ChannelRow : INotifyPropertyChanged
     private int _programNumber;
     private string _programName = string.Empty;
     private int _activeNotes;
+    private string _dryPeak = string.Empty;
+    private string _reverbSendPeak = string.Empty;
+    private string _chorusSendPeak = string.Empty;
+    private string _controllerSummary = string.Empty;
     private string _lamp = string.Empty;
 
     public int Channel { get => _channel; set => SetField(ref _channel, value, nameof(Channel)); }
@@ -943,6 +995,10 @@ public sealed class ChannelRow : INotifyPropertyChanged
     public int ProgramNumber { get => _programNumber; set => SetField(ref _programNumber, value, nameof(ProgramNumber)); }
     public string ProgramName { get => _programName; set => SetField(ref _programName, value, nameof(ProgramName)); }
     public int ActiveNotes { get => _activeNotes; set => SetField(ref _activeNotes, value, nameof(ActiveNotes)); }
+    public string DryPeak { get => _dryPeak; set => SetField(ref _dryPeak, value, nameof(DryPeak)); }
+    public string ReverbSendPeak { get => _reverbSendPeak; set => SetField(ref _reverbSendPeak, value, nameof(ReverbSendPeak)); }
+    public string ChorusSendPeak { get => _chorusSendPeak; set => SetField(ref _chorusSendPeak, value, nameof(ChorusSendPeak)); }
+    public string ControllerSummary { get => _controllerSummary; set => SetField(ref _controllerSummary, value, nameof(ControllerSummary)); }
     public string Lamp { get => _lamp; set => SetField(ref _lamp, value, nameof(Lamp)); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -1126,11 +1182,23 @@ public sealed class WaveOutPlayer : IDisposable
             var programs = new int[ChannelCount];
             var activeNotes = new uint[ChannelCount];
             var audioPeaks = new float[ChannelCount];
+            var reverbSendPeaks = new float[ChannelCount];
+            var chorusSendPeaks = new float[ChannelCount];
+            var volumes = new float[ChannelCount];
+            var pans = new float[ChannelCount];
+            var reverbSends = new float[ChannelCount];
+            var chorusSends = new float[ChannelCount];
             var activeKeyMasks = new uint[ChannelCount][];
             for (uint ch = 0; ch < ChannelCount; ++ch) {
                 programs[ch] = _engine.GetChannelProgram(ch);
                 activeNotes[ch] = _engine.GetChannelActiveNoteCount(ch);
                 audioPeaks[ch] = _engine.GetChannelAudioPeak(ch);
+                reverbSendPeaks[ch] = _engine.GetChannelReverbSendPeak(ch);
+                chorusSendPeaks[ch] = _engine.GetChannelChorusSendPeak(ch);
+                volumes[ch] = _engine.GetChannelVolume(ch);
+                pans[ch] = _engine.GetChannelPan(ch);
+                reverbSends[ch] = _engine.GetChannelReverbSend(ch);
+                chorusSends[ch] = _engine.GetChannelChorusSend(ch);
                 var channelMasks = new uint[KeyMaskWordCount];
                 for (uint wordIndex = 0; wordIndex < KeyMaskWordCount; ++wordIndex) {
                     channelMasks[wordIndex] = _engine.GetChannelActiveKeyMaskWord(ch, wordIndex);
@@ -1141,6 +1209,12 @@ public sealed class WaveOutPlayer : IDisposable
                 programs,
                 activeNotes,
                 audioPeaks,
+                reverbSendPeaks,
+                chorusSendPeaks,
+                volumes,
+                pans,
+                reverbSends,
+                chorusSends,
                 activeKeyMasks,
                 _engine.ChannelMuteMask,
                 _engine.ChannelSoloMask);
@@ -1408,9 +1482,33 @@ internal sealed class WavDumpWriter : IDisposable
     }
 }
 
-public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes, float[] AudioPeaks, uint[][] ActiveKeyMasks, uint MuteMask, uint SoloMask)
+public readonly record struct ChannelSnapshot(
+    int[] Programs,
+    uint[] ActiveNotes,
+    float[] AudioPeaks,
+    float[] ReverbSendPeaks,
+    float[] ChorusSendPeaks,
+    float[] Volumes,
+    float[] Pans,
+    float[] ReverbSends,
+    float[] ChorusSends,
+    uint[][] ActiveKeyMasks,
+    uint MuteMask,
+    uint SoloMask)
 {
-    public static ChannelSnapshot Empty { get; } = new(new int[16], new uint[16], new float[16], CreateEmptyKeyMasks(), 0, 0);
+    public static ChannelSnapshot Empty { get; } = new(
+        new int[16],
+        new uint[16],
+        new float[16],
+        new float[16],
+        new float[16],
+        new float[16],
+        CreateDefaultPans(),
+        new float[16],
+        new float[16],
+        CreateEmptyKeyMasks(),
+        0,
+        0);
 
     private static uint[][] CreateEmptyKeyMasks()
     {
@@ -1420,13 +1518,22 @@ public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes
         }
         return result;
     }
+
+    private static float[] CreateDefaultPans()
+    {
+        var result = new float[16];
+        Array.Fill(result, 0.5f);
+        return result;
+    }
 }
 
 public readonly record struct WavExportProgress(double CurrentSeconds, double TotalSeconds);
 
 internal sealed class ChannelLevelMeterControl : Control
 {
-    private readonly float[] _levels = new float[16];
+    private readonly float[] _dryLevels = new float[16];
+    private readonly float[] _reverbLevels = new float[16];
+    private readonly float[] _chorusLevels = new float[16];
     private uint _muteMask;
     private uint _soloMask;
 
@@ -1438,21 +1545,28 @@ internal sealed class ChannelLevelMeterControl : Control
         Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
     }
 
-    public void SetLevels(IReadOnlyList<float> audioPeaks, uint muteMask, uint soloMask)
+    public void SetLevels(
+        IReadOnlyList<float> audioPeaks,
+        IReadOnlyList<float> reverbSendPeaks,
+        IReadOnlyList<float> chorusSendPeaks,
+        uint muteMask,
+        uint soloMask)
     {
         _muteMask = muteMask;
         _soloMask = soloMask;
-        for (int i = 0; i < _levels.Length; ++i) {
-            var peak = i < audioPeaks.Count ? audioPeaks[i] : 0.0f;
-            var target = MathF.Sqrt(Math.Clamp(peak, 0.0f, 1.0f));
-            _levels[i] = Math.Max(target, _levels[i] * 0.86f);
+        for (int i = 0; i < _dryLevels.Length; ++i) {
+            _dryLevels[i] = SmoothLevel(_dryLevels[i], i < audioPeaks.Count ? audioPeaks[i] : 0.0f);
+            _reverbLevels[i] = SmoothLevel(_reverbLevels[i], i < reverbSendPeaks.Count ? reverbSendPeaks[i] : 0.0f);
+            _chorusLevels[i] = SmoothLevel(_chorusLevels[i], i < chorusSendPeaks.Count ? chorusSendPeaks[i] : 0.0f);
         }
         Invalidate();
     }
 
     public void Clear()
     {
-        Array.Clear(_levels, 0, _levels.Length);
+        Array.Clear(_dryLevels, 0, _dryLevels.Length);
+        Array.Clear(_reverbLevels, 0, _reverbLevels.Length);
+        Array.Clear(_chorusLevels, 0, _chorusLevels.Length);
         _muteMask = 0;
         _soloMask = 0;
         Invalidate();
@@ -1489,11 +1603,12 @@ internal sealed class ChannelLevelMeterControl : Control
             e.Graphics.FillRectangle(isMuted ? mutedBrush : backBrush, frame);
             e.Graphics.DrawRectangle(framePen, frame);
 
-            var fillHeight = Math.Clamp((int)Math.Round((meterHeight - 2) * _levels[i]), 0, meterHeight - 2);
-            if (fillHeight > 0) {
-                using var fillBrush = new SolidBrush(ChannelColor(_levels[i], isSoloed));
-                e.Graphics.FillRectangle(fillBrush, x + 1, meterTop + meterHeight - 1 - fillHeight, Math.Max(1, slotWidth - 2), fillHeight);
-            }
+            var innerWidth = Math.Max(1, slotWidth - 2);
+            var barGap = innerWidth >= 9 ? 1 : 0;
+            var barWidth = Math.Max(1, (innerWidth - barGap * 2) / 3);
+            DrawSubMeter(e.Graphics, x + 1, meterTop + 1, barWidth, meterHeight - 2, _dryLevels[i], ChannelColor(_dryLevels[i], isSoloed));
+            DrawSubMeter(e.Graphics, x + 1 + barWidth + barGap, meterTop + 1, barWidth, meterHeight - 2, _reverbLevels[i], Color.FromArgb(128, 92, 172));
+            DrawSubMeter(e.Graphics, x + 1 + (barWidth + barGap) * 2, meterTop + 1, barWidth, meterHeight - 2, _chorusLevels[i], Color.FromArgb(52, 142, 176));
 
             var label = (i + 1).ToString();
             var labelSize = e.Graphics.MeasureString(label, Font);
@@ -1513,6 +1628,22 @@ internal sealed class ChannelLevelMeterControl : Control
             return Color.FromArgb(226, 156, 48);
         }
         return Color.FromArgb(64, 150, 94);
+    }
+
+    private static float SmoothLevel(float current, float peak)
+    {
+        var target = MathF.Sqrt(Math.Clamp(peak, 0.0f, 1.0f));
+        return Math.Max(target, current * 0.86f);
+    }
+
+    private static void DrawSubMeter(Graphics graphics, int x, int y, int width, int height, float level, Color color)
+    {
+        var fillHeight = Math.Clamp((int)Math.Round(height * level), 0, height);
+        if (fillHeight <= 0) {
+            return;
+        }
+        using var fillBrush = new SolidBrush(color);
+        graphics.FillRectangle(fillBrush, x, y + height - fillHeight, width, fillHeight);
     }
 }
 

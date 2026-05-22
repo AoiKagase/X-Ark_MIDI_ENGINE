@@ -272,6 +272,18 @@ XAME_API int XAmeGetChannelProgram(XAmeEngine engine, unsigned int channel);
 XAME_API unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int channel);
 /* Get the peak dry audio contribution for a MIDI channel from the most recent render call. 直近レンダリングでの指定チャンネルのドライ音声ピークを取得します。 */
 XAME_API float XAmeGetChannelAudioPeak(XAmeEngine engine, unsigned int channel);
+/* Get the peak pre-effect reverb-send audio contribution for a MIDI channel from the most recent render call. 直近レンダリングでの指定チャンネルのリバーブ送り音声ピークを取得します。 */
+XAME_API float XAmeGetChannelReverbSendPeak(XAmeEngine engine, unsigned int channel);
+/* Get the peak pre-effect chorus-send audio contribution for a MIDI channel from the most recent render call. 直近レンダリングでの指定チャンネルのコーラス送り音声ピークを取得します。 */
+XAME_API float XAmeGetChannelChorusSendPeak(XAmeEngine engine, unsigned int channel);
+/* Get the current channel volume controller value normalized to 0..1. 指定チャンネルの現在の音量コントローラー値を 0..1 で取得します。 */
+XAME_API float XAmeGetChannelVolume(XAmeEngine engine, unsigned int channel);
+/* Get the current channel pan controller value normalized to 0..1. 指定チャンネルの現在のパンコントローラー値を 0..1 で取得します。 */
+XAME_API float XAmeGetChannelPan(XAmeEngine engine, unsigned int channel);
+/* Get the current channel reverb send controller value normalized to 0..1. 指定チャンネルの現在のリバーブセンド値を 0..1 で取得します。 */
+XAME_API float XAmeGetChannelReverbSend(XAmeEngine engine, unsigned int channel);
+/* Get the current channel chorus send controller value normalized to 0..1. 指定チャンネルの現在のコーラスセンド値を 0..1 で取得します。 */
+XAME_API float XAmeGetChannelChorusSend(XAmeEngine engine, unsigned int channel);
 /* Get one 32-bit word of the active key bitset for a MIDI channel. アクティブキーのビットセット 32bit 分を取得します。 */
 XAME_API unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex);
 /* Pop the oldest queued channel key event. Returns non-zero if an event was written to outEvent. 最も古いキーイベントを取り出します。 */

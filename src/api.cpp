@@ -411,6 +411,48 @@ float XAmeGetChannelAudioPeak(XAmeEngine engine, unsigned int channel) {
     return engine->synthesizer.GetChannelAudioPeak(channel);
 }
 
+float XAmeGetChannelReverbSendPeak(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelReverbSendPeak(channel);
+}
+
+float XAmeGetChannelChorusSendPeak(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelChorusSendPeak(channel);
+}
+
+float XAmeGetChannelVolume(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelVolume(channel);
+}
+
+float XAmeGetChannelPan(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.5f;
+    }
+    return engine->synthesizer.GetChannelPan(channel);
+}
+
+float XAmeGetChannelReverbSend(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelReverbSend(channel);
+}
+
+float XAmeGetChannelChorusSend(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelChorusSend(channel);
+}
+
 unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex) {
     if (!engine || !engine->initialized) {
         return 0;

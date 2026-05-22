@@ -241,6 +241,24 @@ public static class XArkMidiEngine
     private static extern float XAmeGetChannelAudioPeak(IntPtr engine, uint channel);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelReverbSendPeak(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelChorusSendPeak(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelVolume(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelPan(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelReverbSend(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelChorusSend(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern uint XAmeGetChannelActiveKeyMaskWord(IntPtr engine, uint channel, uint wordIndex);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -555,6 +573,66 @@ public static class XArkMidiEngine
         {
             ThrowIfDisposed();
             return XAmeGetChannelAudioPeak(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get the peak pre-effect reverb-send audio contribution for a MIDI channel from the most recent render call.
+        /// 直近レンダリングでの指定 MIDI チャンネルのリバーブ送り音声ピークを取得します。
+        /// </summary>
+        public float GetChannelReverbSendPeak(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelReverbSendPeak(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get the peak pre-effect chorus-send audio contribution for a MIDI channel from the most recent render call.
+        /// 直近レンダリングでの指定 MIDI チャンネルのコーラス送り音声ピークを取得します。
+        /// </summary>
+        public float GetChannelChorusSendPeak(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelChorusSendPeak(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get current channel volume controller value normalized to 0..1.
+        /// 現在のチャンネル音量コントローラー値を 0..1 で取得します。
+        /// </summary>
+        public float GetChannelVolume(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelVolume(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get current channel pan controller value normalized to 0..1.
+        /// 現在のチャンネルパンコントローラー値を 0..1 で取得します。
+        /// </summary>
+        public float GetChannelPan(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelPan(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get current channel reverb send controller value normalized to 0..1.
+        /// 現在のチャンネルリバーブセンド値を 0..1 で取得します。
+        /// </summary>
+        public float GetChannelReverbSend(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelReverbSend(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get current channel chorus send controller value normalized to 0..1.
+        /// 現在のチャンネルコーラスセンド値を 0..1 で取得します。
+        /// </summary>
+        public float GetChannelChorusSend(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelChorusSend(_handle, channel);
         }
 
         /// <summary>

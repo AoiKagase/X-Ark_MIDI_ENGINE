@@ -51,6 +51,12 @@ public:
     u32 GetChannelActiveNoteCount(u32 channel) const;
     u32 GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const;
     f32 GetChannelAudioPeak(u32 channel) const;
+    f32 GetChannelReverbSendPeak(u32 channel) const;
+    f32 GetChannelChorusSendPeak(u32 channel) const;
+    f32 GetChannelVolume(u32 channel) const;
+    f32 GetChannelPan(u32 channel) const;
+    f32 GetChannelReverbSend(u32 channel) const;
+    f32 GetChannelChorusSend(u32 channel) const;
     bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
     u64 GetCurrentFramePosition() const;
     u64 GetLengthFramesEstimate() const;
@@ -98,6 +104,12 @@ private:
     std::array<std::atomic<u8>, MIDI_CHANNEL_COUNT> channelProgramView_{};
     std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelActiveNoteCountView_{};
     std::array<std::atomic<f32>, MIDI_CHANNEL_COUNT> channelAudioPeakView_{};
+    std::array<std::atomic<f32>, MIDI_CHANNEL_COUNT> channelReverbSendPeakView_{};
+    std::array<std::atomic<f32>, MIDI_CHANNEL_COUNT> channelChorusSendPeakView_{};
+    std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelVolume32View_{};
+    std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelPan32View_{};
+    std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelReverbSend32View_{};
+    std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelChorusSend32View_{};
     std::array<std::array<std::atomic<u32>, 4>, MIDI_CHANNEL_COUNT> channelActiveKeyMasksView_{};
     std::array<std::array<u16, 128>, MIDI_CHANNEL_COUNT> channelHeldKeyCounts_{};
     mutable std::mutex channelKeyEventMutex_;
@@ -123,6 +135,8 @@ private:
     void ApplyEventsBeforeTick(u32 tick);
     static bool ShouldApplyBeforeLoopStart(const MidiEvent& ev);
     void PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity);
+    void PublishChannelControllerView(u8 ch);
+    static f32 NormalizeU32(u32 value);
 };
 
 } // namespace XArkMidi

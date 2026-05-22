@@ -1178,10 +1178,10 @@ bool VoicePool::IsChannelAudible(u32 audibleChannelMask, u8 channel) {
     return (audibleChannelMask & (1u << channel)) != 0;
 }
 
-void VoicePool::AccumulateRenderedPeak(const f32* beforeL, const f32* beforeR,
-                                       const f32* afterL, const f32* afterR,
-                                       u32 numFrames, u8 channel,
-                                       std::array<f32, MIDI_CHANNEL_COUNT>& channelPeaks) {
+void VoicePool::AccumulateStereoDeltaPeak(const f32* beforeL, const f32* beforeR,
+                                          const f32* afterL, const f32* afterR,
+                                          u32 numFrames, u8 channel,
+                                          std::array<f32, MIDI_CHANNEL_COUNT>& channelPeaks) {
     if (channel >= MIDI_CHANNEL_COUNT) {
         return;
     }
@@ -1231,15 +1231,23 @@ int VoicePool::RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f3
 
 int VoicePool::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames,
                            u32 audibleChannelMask,
-                           std::array<f32, MIDI_CHANNEL_COUNT>* channelPeaks) {
+                           ChannelRenderPeaks* channelPeaks) {
     const u16 localActiveCount = activeCount_;
     const bool useParallel = !channelPeaks && !workers_.empty() && localActiveCount >= 24 && numFrames >= 256;
-    std::vector<f32> beforeL;
-    std::vector<f32> beforeR;
+    std::vector<f32> beforeDryL;
+    std::vector<f32> beforeDryR;
+    std::vector<f32> beforeReverbL;
+    std::vector<f32> beforeReverbR;
+    std::vector<f32> beforeChorusL;
+    std::vector<f32> beforeChorusR;
     if (channelPeaks) {
-        channelPeaks->fill(0.0f);
-        beforeL.resize(numFrames);
-        beforeR.resize(numFrames);
+        channelPeaks->Clear();
+        beforeDryL.resize(numFrames);
+        beforeDryR.resize(numFrames);
+        beforeReverbL.resize(numFrames);
+        beforeReverbR.resize(numFrames);
+        beforeChorusL.resize(numFrames);
+        beforeChorusR.resize(numFrames);
     }
 
     if (useParallel) {
@@ -1310,24 +1318,36 @@ int VoicePool::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32
             }
             if (IsChannelAudible(audibleChannelMask, v.channel)) {
                 if (channelPeaks) {
-                    std::copy_n(outL, numFrames, beforeL.data());
-                    std::copy_n(outR, numFrames, beforeR.data());
+                    std::copy_n(outL, numFrames, beforeDryL.data());
+                    std::copy_n(outR, numFrames, beforeDryR.data());
+                    std::copy_n(reverbL, numFrames, beforeReverbL.data());
+                    std::copy_n(reverbR, numFrames, beforeReverbR.data());
+                    std::copy_n(chorusL, numFrames, beforeChorusL.data());
+                    std::copy_n(chorusR, numFrames, beforeChorusR.data());
                 }
                 v.RenderBlock(outL, outR, reverbL, reverbR, chorusL, chorusR, numFrames);
                 if (channelPeaks) {
-                    AccumulateRenderedPeak(beforeL.data(), beforeR.data(), outL, outR, numFrames, v.channel, *channelPeaks);
+                    AccumulateStereoDeltaPeak(beforeDryL.data(), beforeDryR.data(), outL, outR, numFrames, v.channel, channelPeaks->dry);
+                    AccumulateStereoDeltaPeak(beforeReverbL.data(), beforeReverbR.data(), reverbL, reverbR, numFrames, v.channel, channelPeaks->reverbSend);
+                    AccumulateStereoDeltaPeak(beforeChorusL.data(), beforeChorusR.data(), chorusL, chorusR, numFrames, v.channel, channelPeaks->chorusSend);
                 }
             }
             if (v.HasLinkedVoice()) {
                 auto& linked = voices_[v.linkedVoiceIndex];
                 if (linked.active && IsChannelAudible(audibleChannelMask, linked.channel)) {
                     if (channelPeaks) {
-                        std::copy_n(outL, numFrames, beforeL.data());
-                        std::copy_n(outR, numFrames, beforeR.data());
+                        std::copy_n(outL, numFrames, beforeDryL.data());
+                        std::copy_n(outR, numFrames, beforeDryR.data());
+                        std::copy_n(reverbL, numFrames, beforeReverbL.data());
+                        std::copy_n(reverbR, numFrames, beforeReverbR.data());
+                        std::copy_n(chorusL, numFrames, beforeChorusL.data());
+                        std::copy_n(chorusR, numFrames, beforeChorusR.data());
                     }
                     linked.RenderBlock(outL, outR, reverbL, reverbR, chorusL, chorusR, numFrames);
                     if (channelPeaks) {
-                        AccumulateRenderedPeak(beforeL.data(), beforeR.data(), outL, outR, numFrames, linked.channel, *channelPeaks);
+                        AccumulateStereoDeltaPeak(beforeDryL.data(), beforeDryR.data(), outL, outR, numFrames, linked.channel, channelPeaks->dry);
+                        AccumulateStereoDeltaPeak(beforeReverbL.data(), beforeReverbR.data(), reverbL, reverbR, numFrames, linked.channel, channelPeaks->reverbSend);
+                        AccumulateStereoDeltaPeak(beforeChorusL.data(), beforeChorusR.data(), chorusL, chorusR, numFrames, linked.channel, channelPeaks->chorusSend);
                     }
                 }
                 if (!linked.active) {
