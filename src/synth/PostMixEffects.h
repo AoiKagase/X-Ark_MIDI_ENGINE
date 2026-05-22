@@ -29,6 +29,16 @@ public:
             ScaleCoefficientAt44100(kChorusInputDampingAt44100, effectiveSampleRate);
         reverbInputDamping_ =
             ScaleCoefficientAt44100(kReverbInputDampingAt44100, effectiveSampleRate);
+        chorusDamping_ =
+            ScaleCoefficientAt44100(kChorusDampingAt44100, effectiveSampleRate);
+        chorusToneDamping_ =
+            ScaleCoefficientAt44100(kChorusToneDampingAt44100, effectiveSampleRate);
+        reverbDamping_ =
+            ScaleCoefficientAt44100(kReverbDampingAt44100, effectiveSampleRate);
+        reverbToneDamping_ =
+            ScaleCoefficientAt44100(kReverbToneDampingAt44100, effectiveSampleRate);
+        reverbLowDamping_ =
+            ScaleCoefficientAt44100(kReverbLowDampingAt44100, effectiveSampleRate);
         const size_t reverbSize = DelaySamples(97.0f);
         reverbDelayL_.assign(reverbSize, 0.0f);
         reverbDelayR_.assign(reverbSize, 0.0f);
@@ -253,17 +263,17 @@ private:
     static constexpr f32 kChorusWetMix = 0.45f;
     static constexpr f32 kChorusToReverb = 0.30f;
     static constexpr f32 kChorusInputDampingAt44100 = 0.62f;
-    static constexpr f32 kChorusDamping = 0.52f;
+    static constexpr f32 kChorusDampingAt44100 = 0.52f;
     static constexpr f32 kChorusSecondaryMix = 0.34f;
-    static constexpr f32 kChorusToneDamping = 0.76f;
+    static constexpr f32 kChorusToneDampingAt44100 = 0.76f;
     static constexpr f32 kMaxChorusFeedback = 0.36f;
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kMaxReverbFeedback = 0.82f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbInputDampingAt44100 = 0.42f;
-    static constexpr f32 kReverbDamping = 0.38f;
-    static constexpr f32 kReverbToneDamping = 0.70f;
-    static constexpr f32 kReverbLowDamping = 0.035f;
+    static constexpr f32 kReverbDampingAt44100 = 0.38f;
+    static constexpr f32 kReverbToneDampingAt44100 = 0.70f;
+    static constexpr f32 kReverbLowDampingAt44100 = 0.035f;
     static constexpr f32 kReverbLowTrim = 0.18f;
     static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kWetReturnWidth = 1.14f;
@@ -378,8 +388,8 @@ private:
         const f32 chorusWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, fTapR);
         const f32 chorusSecondaryWetL = ReadDelayInterpolated(chorusDelayL_, chorusIndex_, secondaryTapL);
         const f32 chorusSecondaryWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, secondaryTapR);
-        chorusDampL_ = FlushTiny(chorusDampL_ + (chorusWetL - chorusDampL_) * kChorusDamping);
-        chorusDampR_ = FlushTiny(chorusDampR_ + (chorusWetR - chorusDampR_) * kChorusDamping);
+        chorusDampL_ = FlushTiny(chorusDampL_ + (chorusWetL - chorusDampL_) * chorusDamping_);
+        chorusDampR_ = FlushTiny(chorusDampR_ + (chorusWetR - chorusDampR_) * chorusDamping_);
         const f32 feedbackScale = SmoothScale(gsChorusFeedbackCurrent_, gsChorusFeedbackScale_);
         const f32 feedback = Clamp(kChorusFeedback * feedbackScale, 0.0f, kMaxChorusFeedback);
         chorusDelayL_[chorusIndex_] = FlushTiny(chorusInL + chorusDampR_ * feedback);
@@ -398,8 +408,8 @@ private:
         chorusCos_ = nextCos;
         const f32 mixedWetL = chorusWetL + chorusSecondaryWetL * kChorusSecondaryMix;
         const f32 mixedWetR = chorusWetR + chorusSecondaryWetR * kChorusSecondaryMix;
-        chorusToneL_ = FlushTiny(chorusToneL_ + (mixedWetL - chorusToneL_) * kChorusToneDamping);
-        chorusToneR_ = FlushTiny(chorusToneR_ + (mixedWetR - chorusToneR_) * kChorusToneDamping);
+        chorusToneL_ = FlushTiny(chorusToneL_ + (mixedWetL - chorusToneL_) * chorusToneDamping_);
+        chorusToneR_ = FlushTiny(chorusToneR_ + (mixedWetR - chorusToneR_) * chorusToneDamping_);
         return {
             chorusToneL_,
             chorusToneR_,
@@ -429,8 +439,8 @@ private:
             reverbDelayR_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
             reverbDelayL_[(reverbIndex_ >= reverbTap3_) ? (reverbIndex_ - reverbTap3_) : (reverbIndex_ + size - reverbTap3_)] * 0.18f +
             reverbDelayL_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
-        reverbDampL_ = FlushTiny(reverbDampL_ + (reverbWetL - reverbDampL_) * kReverbDamping);
-        reverbDampR_ = FlushTiny(reverbDampR_ + (reverbWetR - reverbDampR_) * kReverbDamping);
+        reverbDampL_ = FlushTiny(reverbDampL_ + (reverbWetL - reverbDampL_) * reverbDamping_);
+        reverbDampR_ = FlushTiny(reverbDampR_ + (reverbWetR - reverbDampR_) * reverbDamping_);
         const f32 feedbackScale = SmoothScale(gsReverbFeedbackCurrent_, gsReverbFeedbackScale_);
         const f32 feedback = Clamp(kReverbFeedback * feedbackScale, 0.0f, kMaxReverbFeedback);
         reverbDelayL_[reverbIndex_] = FlushTiny(reverbInL + reverbDampR_ * feedback);
@@ -439,12 +449,12 @@ private:
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
         }
-        reverbLowL_ = FlushTiny(reverbLowL_ + (reverbWetL - reverbLowL_) * kReverbLowDamping);
-        reverbLowR_ = FlushTiny(reverbLowR_ + (reverbWetR - reverbLowR_) * kReverbLowDamping);
+        reverbLowL_ = FlushTiny(reverbLowL_ + (reverbWetL - reverbLowL_) * reverbLowDamping_);
+        reverbLowR_ = FlushTiny(reverbLowR_ + (reverbWetR - reverbLowR_) * reverbLowDamping_);
         const f32 trimmedWetL = reverbWetL - reverbLowL_ * kReverbLowTrim;
         const f32 trimmedWetR = reverbWetR - reverbLowR_ * kReverbLowTrim;
-        reverbToneL_ = FlushTiny(reverbToneL_ + (trimmedWetL - reverbToneL_) * kReverbToneDamping);
-        reverbToneR_ = FlushTiny(reverbToneR_ + (trimmedWetR - reverbToneR_) * kReverbToneDamping);
+        reverbToneL_ = FlushTiny(reverbToneL_ + (trimmedWetL - reverbToneL_) * reverbToneDamping_);
+        reverbToneR_ = FlushTiny(reverbToneR_ + (trimmedWetR - reverbToneR_) * reverbToneDamping_);
         return {
             reverbToneL_ + early.wetL * kEarlyReflectionMix,
             reverbToneR_ + early.wetR * kEarlyReflectionMix,
@@ -507,6 +517,11 @@ private:
     f32 gsParameterSmoothing_ = kGsParameterSmoothingAt44100;
     f32 chorusInputDamping_ = kChorusInputDampingAt44100;
     f32 reverbInputDamping_ = kReverbInputDampingAt44100;
+    f32 chorusDamping_ = kChorusDampingAt44100;
+    f32 chorusToneDamping_ = kChorusToneDampingAt44100;
+    f32 reverbDamping_ = kReverbDampingAt44100;
+    f32 reverbToneDamping_ = kReverbToneDampingAt44100;
+    f32 reverbLowDamping_ = kReverbLowDampingAt44100;
     std::vector<f32> reverbDelayL_;
     std::vector<f32> reverbDelayR_;
     std::vector<f32> reverbPreDelayL_;

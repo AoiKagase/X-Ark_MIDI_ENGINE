@@ -1644,6 +1644,37 @@ namespace {
             "Post-mix reverb input damping should keep similar time response across sample rates");
     }
 
+    void TestPostMixEffectsInternalDampingScalesWithSampleRate() {
+        const auto measureWetEnergy = [](u32 sampleRate, u32 startMs, u32 endMs) {
+            PostMixEffects effects;
+            effects.Init(sampleRate);
+
+            double energy = 0.0;
+            const int totalFrames = static_cast<int>(sampleRate * 190u / 1000u);
+            const int windowStart = static_cast<int>(sampleRate * startMs / 1000u);
+            const int windowEnd = static_cast<int>(sampleRate * endMs / 1000u);
+            for (int i = 0; i < totalFrames; ++i) {
+                const f32 impulse = (i == 0) ? 1.0f : 0.0f;
+                const auto out = effects.ProcessSample(impulse, impulse,
+                    impulse * 0.6f, impulse * 0.6f, impulse, impulse);
+                if (i >= windowStart && i < windowEnd) {
+                    energy += std::fabs(out.wetL) + std::fabs(out.wetR);
+                }
+            }
+            return energy / static_cast<double>(windowEnd - windowStart);
+        };
+
+        const double midRatio =
+            measureWetEnergy(48000, 35, 105) / measureWetEnergy(44100, 35, 105);
+        const double lateRatio =
+            measureWetEnergy(48000, 110, 180) / measureWetEnergy(44100, 110, 180);
+
+        Require(midRatio > 0.70 && midRatio < 1.30,
+            "Post-mix internal damping should keep similar mid-tail energy across sample rates");
+        Require(lateRatio > 0.70 && lateRatio < 1.30,
+            "Post-mix internal damping should keep similar late-tail energy across sample rates");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3877,6 +3908,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsFeedbackChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsGsSmoothingScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsInputDampingScalesWithSampleRate);
+    RUN_TEST(TestPostMixEffectsInternalDampingScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusInputDampingSpreadsOnset);
