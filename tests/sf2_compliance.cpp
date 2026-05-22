@@ -1683,6 +1683,23 @@ namespace {
             "Post-mix reset should clear smoothing state from tail detection");
     }
 
+    void TestPostMixEffectsFlushesTinyAudioState() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double tinyWetEnergy = 0.0;
+        for (int i = 0; i < 256; ++i) {
+            const auto out =
+                effects.ProcessSample(1.0e-30f, -1.0e-30f, 1.0e-30f, -1.0e-30f, 1.0e-30f, -1.0e-30f);
+            tinyWetEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+        }
+
+        Require(tinyWetEnergy == 0.0,
+            "Post-mix effects should flush inaudibly tiny wet output");
+        Require(!effects.HasAudibleTail(1.0e-25f),
+            "Post-mix effects should not retain denormal-scale audio state");
+    }
+
     void TestPostMixEffectsFeedbackClampKeepsHotGsStable() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3708,6 +3725,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
+    RUN_TEST(TestPostMixEffectsFlushesTinyAudioState);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
     RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);
     RUN_TEST(TestPostMixEffectsShapesChorusToReverbSend);
