@@ -1320,6 +1320,46 @@ namespace {
             "Post-mix audio reset should clear buffers while preserving GS effect scales");
     }
 
+    void TestPostMixEffectsGsWetChangesAreSmoothed() {
+        PostMixEffects smoothedEffects;
+        smoothedEffects.Init(44100);
+        Require(smoothedEffects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level before smoothing test");
+
+        PostMixEffects immediateEffects;
+        immediateEffects.Init(44100);
+        Require(immediateEffects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level before immediate reset");
+        immediateEffects.ResetAudioState();
+
+        double smoothedEarlyEnergy = 0.0;
+        double immediateEarlyEnergy = 0.0;
+        double smoothedLateEnergy = 0.0;
+        for (int i = 0; i < 6000; ++i) {
+            const auto smoothedOut =
+                smoothedEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            const auto immediateOut =
+                immediateEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+
+            const f32 smoothedFrame = std::fabs(smoothedOut.wetL) + std::fabs(smoothedOut.wetR);
+            const f32 immediateFrame = std::fabs(immediateOut.wetL) + std::fabs(immediateOut.wetR);
+            if (i > 120 && i < 1200) {
+                smoothedEarlyEnergy += smoothedFrame;
+                immediateEarlyEnergy += immediateFrame;
+            }
+            if (i > 4800) {
+                smoothedLateEnergy += smoothedFrame;
+            }
+        }
+
+        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0,
+            "Post-mix GS wet smoothing should preserve early chorus energy");
+        Require(smoothedEarlyEnergy < immediateEarlyEnergy,
+            "Post-mix GS wet smoothing should ease into higher chorus levels");
+        Require(smoothedLateEnergy > smoothedEarlyEnergy,
+            "Post-mix GS wet smoothing should continue moving toward the requested level");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3440,6 +3480,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsAudioResetPreservesGsState);
+    RUN_TEST(TestPostMixEffectsGsWetChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);

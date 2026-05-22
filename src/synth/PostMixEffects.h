@@ -87,6 +87,8 @@ public:
         reverbToneR_ = 0.0f;
         reverbLowL_ = 0.0f;
         reverbLowR_ = 0.0f;
+        gsReverbWetCurrent_ = gsReverbWetScale_;
+        gsChorusWetCurrent_ = gsChorusWetScale_;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -163,16 +165,18 @@ public:
 
         if (!chorusDelayL_.empty()) {
             const auto chorusWet = ProcessChorus(ShapeEffectInput(chorusSendL), ShapeEffectInput(chorusSendR));
-            output.wetL += chorusWet.wetL * (kChorusWetMix * gsChorusWetScale_);
-            output.wetR += chorusWet.wetR * (kChorusWetMix * gsChorusWetScale_);
+            const f32 chorusWetScale = SmoothScale(gsChorusWetCurrent_, gsChorusWetScale_);
+            output.wetL += chorusWet.wetL * (kChorusWetMix * chorusWetScale);
+            output.wetR += chorusWet.wetR * (kChorusWetMix * chorusWetScale);
             reverbInL += chorusWet.wetL * (kChorusToReverb * gsChorusToReverbScale_);
             reverbInR += chorusWet.wetR * (kChorusToReverb * gsChorusToReverbScale_);
         }
 
         if (!reverbDelayL_.empty()) {
             const auto reverbWet = ProcessReverb(ShapeEffectInput(reverbInL), ShapeEffectInput(reverbInR));
-            output.wetL += reverbWet.wetL * (kReverbWetMix * gsReverbWetScale_);
-            output.wetR += reverbWet.wetR * (kReverbWetMix * gsReverbWetScale_);
+            const f32 reverbWetScale = SmoothScale(gsReverbWetCurrent_, gsReverbWetScale_);
+            output.wetL += reverbWet.wetL * (kReverbWetMix * reverbWetScale);
+            output.wetR += reverbWet.wetR * (kReverbWetMix * reverbWetScale);
         }
         const auto widenedWet = ApplyWetReturnWidth(output.wetL, output.wetR);
         output.wetL = ShapeWetReturn(widenedWet.wetL);
@@ -222,6 +226,7 @@ private:
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnMaxSideRatio = 1.25f;
     static constexpr f32 kWetReturnShape = 0.18f;
+    static constexpr f32 kGsWetSmoothing = 0.0025f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kTwoPi = 6.28318530717958647692f;
@@ -246,6 +251,11 @@ private:
 
     static bool HasAudibleScalar(f32 value, f32 threshold) {
         return std::fabs(value) >= threshold;
+    }
+
+    static f32 SmoothScale(f32& current, f32 target) {
+        current += (target - current) * kGsWetSmoothing;
+        return current;
     }
 
     static f32 ShapeWetReturn(f32 sample) {
@@ -467,9 +477,11 @@ private:
     f32 chorusToneL_ = 0.0f;
     f32 chorusToneR_ = 0.0f;
     f32 gsReverbWetScale_ = 1.0f;
+    f32 gsReverbWetCurrent_ = 1.0f;
     f32 gsReverbFeedbackScale_ = 1.0f;
     f32 gsMasterReverbSendScale_ = 1.0f;
     f32 gsChorusWetScale_ = 1.0f;
+    f32 gsChorusWetCurrent_ = 1.0f;
     f32 gsChorusFeedbackScale_ = 1.0f;
     f32 gsChorusToReverbScale_ = 1.0f;
     f32 gsChorusDelayScale_ = 1.0f;
