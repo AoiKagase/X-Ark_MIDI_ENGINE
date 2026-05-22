@@ -88,8 +88,10 @@ public:
         reverbLowL_ = 0.0f;
         reverbLowR_ = 0.0f;
         gsReverbWetCurrent_ = gsReverbWetScale_;
+        gsReverbFeedbackCurrent_ = gsReverbFeedbackScale_;
         gsMasterReverbSendCurrent_ = gsMasterReverbSendScale_;
         gsChorusWetCurrent_ = gsChorusWetScale_;
+        gsChorusFeedbackCurrent_ = gsChorusFeedbackScale_;
         gsChorusToReverbCurrent_ = gsChorusToReverbScale_;
         gsChorusDelayCurrent_ = gsChorusDelayScale_;
         gsChorusDepthCurrent_ = gsChorusDepthScale_;
@@ -321,7 +323,8 @@ private:
         const f32 chorusSecondaryWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, secondaryTapR);
         chorusDampL_ += (chorusWetL - chorusDampL_) * kChorusDamping;
         chorusDampR_ += (chorusWetR - chorusDampR_) * kChorusDamping;
-        const f32 feedback = Clamp(kChorusFeedback * gsChorusFeedbackScale_, 0.0f, kMaxChorusFeedback);
+        const f32 feedbackScale = SmoothScale(gsChorusFeedbackCurrent_, gsChorusFeedbackScale_);
+        const f32 feedback = Clamp(kChorusFeedback * feedbackScale, 0.0f, kMaxChorusFeedback);
         chorusDelayL_[chorusIndex_] = chorusInL + chorusDampR_ * feedback;
         chorusDelayR_[chorusIndex_] = chorusInR + chorusDampL_ * feedback;
         ++chorusIndex_;
@@ -367,7 +370,8 @@ private:
             reverbDelayL_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
         reverbDampL_ += (reverbWetL - reverbDampL_) * kReverbDamping;
         reverbDampR_ += (reverbWetR - reverbDampR_) * kReverbDamping;
-        const f32 feedback = Clamp(kReverbFeedback * gsReverbFeedbackScale_, 0.0f, kMaxReverbFeedback);
+        const f32 feedbackScale = SmoothScale(gsReverbFeedbackCurrent_, gsReverbFeedbackScale_);
+        const f32 feedback = Clamp(kReverbFeedback * feedbackScale, 0.0f, kMaxReverbFeedback);
         reverbDelayL_[reverbIndex_] = reverbInL + reverbDampR_ * feedback;
         reverbDelayR_[reverbIndex_] = reverbInR + reverbDampL_ * feedback;
         ++reverbIndex_;
@@ -491,11 +495,13 @@ private:
     f32 gsReverbWetScale_ = 1.0f;
     f32 gsReverbWetCurrent_ = 1.0f;
     f32 gsReverbFeedbackScale_ = 1.0f;
+    f32 gsReverbFeedbackCurrent_ = 1.0f;
     f32 gsMasterReverbSendScale_ = 1.0f;
     f32 gsMasterReverbSendCurrent_ = 1.0f;
     f32 gsChorusWetScale_ = 1.0f;
     f32 gsChorusWetCurrent_ = 1.0f;
     f32 gsChorusFeedbackScale_ = 1.0f;
+    f32 gsChorusFeedbackCurrent_ = 1.0f;
     f32 gsChorusToReverbScale_ = 1.0f;
     f32 gsChorusToReverbCurrent_ = 1.0f;
     f32 gsChorusDelayScale_ = 1.0f;

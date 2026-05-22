@@ -1495,6 +1495,50 @@ namespace {
             "Post-mix chorus modulation smoothing should keep producing later chorus energy");
     }
 
+    void TestPostMixEffectsFeedbackChangesAreSmoothed() {
+        PostMixEffects smoothedEffects;
+        smoothedEffects.Init(44100);
+        Require(smoothedEffects.ApplyGsParameter(0x09, 127),
+            "Post-mix effects should accept high GS reverb feedback before smoothing test");
+        Require(smoothedEffects.ApplyGsParameter(0x10, 127),
+            "Post-mix effects should accept high GS chorus feedback before smoothing test");
+
+        PostMixEffects immediateEffects;
+        immediateEffects.Init(44100);
+        Require(immediateEffects.ApplyGsParameter(0x09, 127),
+            "Post-mix effects should accept high GS reverb feedback before immediate reset");
+        Require(immediateEffects.ApplyGsParameter(0x10, 127),
+            "Post-mix effects should accept high GS chorus feedback before immediate reset");
+        immediateEffects.ResetAudioState();
+
+        double smoothedMidEnergy = 0.0;
+        double immediateMidEnergy = 0.0;
+        double smoothedLateEnergy = 0.0;
+        for (int i = 0; i < 14000; ++i) {
+            const auto smoothedOut =
+                smoothedEffects.ProcessSample(0.0f, 0.0f, 0.85f, 0.85f, 0.85f, 0.85f);
+            const auto immediateOut =
+                immediateEffects.ProcessSample(0.0f, 0.0f, 0.85f, 0.85f, 0.85f, 0.85f);
+
+            const f32 smoothedFrame = std::fabs(smoothedOut.wetL) + std::fabs(smoothedOut.wetR);
+            const f32 immediateFrame = std::fabs(immediateOut.wetL) + std::fabs(immediateOut.wetR);
+            if (i > 3000 && i < 7200) {
+                smoothedMidEnergy += smoothedFrame;
+                immediateMidEnergy += immediateFrame;
+            }
+            if (i > 11200) {
+                smoothedLateEnergy += smoothedFrame;
+            }
+        }
+
+        Require(smoothedMidEnergy > 0.0 && immediateMidEnergy > 0.0,
+            "Post-mix feedback smoothing should preserve reverb and chorus output");
+        Require(smoothedMidEnergy < immediateMidEnergy,
+            "Post-mix feedback smoothing should ease into stronger feedback");
+        Require(smoothedLateEnergy > 0.0,
+            "Post-mix feedback smoothing should keep producing later wet energy");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3619,6 +3663,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsChorusToReverbChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsMasterReverbSendChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusModulationChangesAreSmoothed);
+    RUN_TEST(TestPostMixEffectsFeedbackChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
