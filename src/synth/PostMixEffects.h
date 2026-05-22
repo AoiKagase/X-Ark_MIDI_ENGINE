@@ -419,16 +419,16 @@ private:
         const auto readTap = [size](const std::vector<f32>& buffer, size_t index, size_t tap) {
             return buffer[(index >= tap) ? (index - tap) : (index + size - tap)];
         };
-        const f32 wetL =
+        const f32 wetL = FlushTiny(
             readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap1_) * 0.42f +
             readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap2_) * 0.30f +
-            readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap3_) * 0.18f;
-        const f32 wetR =
+            readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap3_) * 0.18f);
+        const f32 wetR = FlushTiny(
             readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap1_) * 0.42f +
             readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap2_) * 0.30f +
-            readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap3_) * 0.18f;
-        earlyReflectionL_[earlyReflectionIndex_] = inputL;
-        earlyReflectionR_[earlyReflectionIndex_] = inputR;
+            readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap3_) * 0.18f);
+        earlyReflectionL_[earlyReflectionIndex_] = FlushTiny(inputL);
+        earlyReflectionR_[earlyReflectionIndex_] = FlushTiny(inputR);
         ++earlyReflectionIndex_;
         if (earlyReflectionIndex_ == size) {
             earlyReflectionIndex_ = 0;
@@ -440,8 +440,8 @@ private:
         if (delay.empty()) {
             return input;
         }
-        const f32 output = delay[index];
-        delay[index] = input;
+        const f32 output = FlushTiny(delay[index]);
+        delay[index] = FlushTiny(input);
         ++index;
         if (index == delay.size()) {
             index = 0;
@@ -454,8 +454,8 @@ private:
             return input;
         }
         const f32 delayed = delay[index];
-        const f32 output = delayed - input;
-        delay[index] = input + delayed * feedback;
+        const f32 output = FlushTiny(delayed - input);
+        delay[index] = FlushTiny(input + delayed * feedback);
         ++index;
         if (index == delay.size()) {
             index = 0;
