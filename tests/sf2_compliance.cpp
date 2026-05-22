@@ -1334,6 +1334,25 @@ namespace {
             "Post-mix early reflections should arrive before the main late reverb taps");
     }
 
+    void TestPostMixEffectsReverbPredelaySeparatesOnset() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int firstWetFrame = -1;
+        for (int i = 0; i < 2200; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            if (firstWetFrame < 0 && (std::fabs(out.wetL) + std::fabs(out.wetR)) > 1.0e-7f) {
+                firstWetFrame = i;
+            }
+        }
+
+        Require(firstWetFrame > 700,
+            "Post-mix reverb predelay should leave the direct onset uncluttered");
+        Require(firstWetFrame < 1000,
+            "Post-mix reverb predelay should still keep early reflections close to the source");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3066,6 +3085,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
+    RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
