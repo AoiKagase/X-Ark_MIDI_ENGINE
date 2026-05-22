@@ -61,6 +61,29 @@ namespace {
         AppendU16LE(out, static_cast<u16>(value));
     }
 
+    void AppendU16BE(std::vector<u8>& out, u16 value) {
+        out.push_back(static_cast<u8>((value >> 8) & 0xFFu));
+        out.push_back(static_cast<u8>(value & 0xFFu));
+    }
+
+    void AppendU32BE(std::vector<u8>& out, u32 value) {
+        out.push_back(static_cast<u8>((value >> 24) & 0xFFu));
+        out.push_back(static_cast<u8>((value >> 16) & 0xFFu));
+        out.push_back(static_cast<u8>((value >> 8) & 0xFFu));
+        out.push_back(static_cast<u8>(value & 0xFFu));
+    }
+
+    void AppendVarLen(std::vector<u8>& out, u32 value) {
+        u8 bytes[5]{};
+        int count = 1;
+        bytes[4] = static_cast<u8>(value & 0x7Fu);
+        while ((value >>= 7) != 0) {
+            bytes[4 - count] = static_cast<u8>((value & 0x7Fu) | 0x80u);
+            ++count;
+        }
+        out.insert(out.end(), bytes + 5 - count, bytes + 5);
+    }
+
     void AppendChunk(std::vector<u8>& out, const char id[4], const std::vector<u8>& data) {
         out.insert(out.end(), id, id + 4);
         AppendU32LE(out, static_cast<u32>(data.size()));
@@ -68,6 +91,33 @@ namespace {
         if ((data.size() & 1u) != 0u) {
             out.push_back(0);
         }
+    }
+
+    std::vector<u8> BuildSingleNoteMidi() {
+        std::vector<u8> track;
+        AppendVarLen(track, 0);
+        track.push_back(0x90);
+        track.push_back(60);
+        track.push_back(96);
+        AppendVarLen(track, 48);
+        track.push_back(0x80);
+        track.push_back(60);
+        track.push_back(0);
+        AppendVarLen(track, 0);
+        track.push_back(0xFF);
+        track.push_back(0x2F);
+        track.push_back(0);
+
+        std::vector<u8> midi;
+        midi.insert(midi.end(), { 'M','T','h','d' });
+        AppendU32BE(midi, 6);
+        AppendU16BE(midi, 0);
+        AppendU16BE(midi, 1);
+        AppendU16BE(midi, 96);
+        midi.insert(midi.end(), { 'M','T','r','k' });
+        AppendU32BE(midi, static_cast<u32>(track.size()));
+        midi.insert(midi.end(), track.begin(), track.end());
+        return midi;
     }
 
     void AppendListChunk(std::vector<u8>& out, const char type[4], const std::vector<u8>& payload) {
@@ -2207,6 +2257,45 @@ namespace {
             "Synth compatibility options should expose internal effects disable switch");
     }
 
+    void TestSynthesizerCanDisableInternalEffectsTail() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_ReverbEffectsSend, 1000));
+        config.instGens.push_back(MakeSignedGen(GEN_ChorusEffectsSend, 1000));
+        const std::vector<u8> sf2Bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(sf2Bytes.data(), sf2Bytes.size()), sf2.ErrorMessage().c_str());
+
+        const std::vector<u8> midiBytes = BuildSingleNoteMidi();
+        MidiFile midi;
+        Require(midi.LoadFromMemory(midiBytes.data(), midiBytes.size()), midi.ErrorMessage().c_str());
+
+        const auto renderUntilFinished = [&](const SynthCompatOptions& options) {
+            Synthesizer synth;
+            Require(synth.Init(&midi, &sf2, 44100, 2, options), synth.ErrorMessage().c_str());
+            std::array<i16, 1024> buffer{};
+            u64 frames = 0;
+            for (int i = 0; i < 400 && !synth.IsFinished(); ++i) {
+                const u32 written = synth.Render(buffer.data(), 512);
+                frames += written;
+                if (written == 0) {
+                    break;
+                }
+            }
+            Require(synth.IsFinished(),
+                "Synthesizer should finish the short internal-effects test MIDI within the guard window");
+            return frames;
+        };
+
+        SynthCompatOptions enabledOptions;
+        SynthCompatOptions disabledOptions;
+        disabledOptions.disableInternalEffects = true;
+        const u64 enabledFrames = renderUntilFinished(enabledOptions);
+        const u64 disabledFrames = renderUntilFinished(disabledOptions);
+
+        Require(disabledFrames < enabledFrames,
+            "Disabling internal effects should bypass post-mix reverb/chorus tail rendering");
+    }
+
     void TestPublicCompatibilityFlagsRemainStable() {
         Require(XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER == (1u << 0),
             "Public SF2 zero-length loop compatibility flag value should remain stable");
@@ -3986,6 +4075,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestSynthCompatCanDisableInternalEffects);
+    RUN_TEST(TestSynthesizerCanDisableInternalEffectsTail);
     RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);

@@ -116,9 +116,15 @@ if(XAME_BUILD_TESTS)
         src/common/BinaryReader.cpp
         src/common/CpuFeatures.cpp
         src/common/FileUtil.cpp
+        src/midi/MidiFile.cpp
+        src/midi/MidiSequencer.cpp
+        src/midi/MidiTrack.cpp
+        src/midi2/Midi2File.cpp
+        src/midi2/UmpDownConverter.cpp
         src/sf2/Sf2File.cpp
         src/synth/SimdKernels.cpp
         src/synth/SimdKernelsAvx2.cpp
+        src/synth/Synthesizer.cpp
         src/synth/Voice.cpp
         src/synth/VoicePool.cpp
     )
