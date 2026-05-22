@@ -149,7 +149,7 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124f));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
@@ -227,34 +227,35 @@ public sealed class MainForm : Form
     {
         var layout = new TableLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            RowCount = 4,
-            Padding = new Padding(8),
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 7,
+            RowCount = 2,
+            Padding = new Padding(6, 4, 6, 5),
         };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        layout.Controls.Add(CreateFieldLabel("Max sample bytes"), 0, 0);
+        layout.Controls.Add(CreateCompactLabel("Sample bytes"), 0, 0);
         layout.Controls.Add(_maxSampleDataBytesUpDown, 1, 0);
-        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 0);
-
-        layout.Controls.Add(CreateFieldLabel("Max SF2 pdta entries"), 0, 1);
-        layout.Controls.Add(_maxSf2PdtaEntriesUpDown, 1, 1);
-        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 1);
-
-        layout.Controls.Add(CreateFieldLabel("Max DLS pool entries"), 0, 2);
-        layout.Controls.Add(_maxDlsPoolTableEntriesUpDown, 1, 2);
-        layout.Controls.Add(CreateHintLabel("0 = default"), 2, 2);
+        layout.Controls.Add(CreateCompactLabel("SF2 pdta"), 2, 0);
+        layout.Controls.Add(_maxSf2PdtaEntriesUpDown, 3, 0);
+        layout.Controls.Add(CreateCompactLabel("DLS pool"), 4, 0);
+        layout.Controls.Add(_maxDlsPoolTableEntriesUpDown, 5, 0);
 
         var flagsPanel = new FlowLayoutPanel {
             AutoSize = true,
-            Dock = DockStyle.Top,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
-            Margin = new Padding(0, 6, 0, 0),
+            Margin = new Padding(0, 0, 0, 0),
+            Padding = new Padding(0),
         };
         flagsPanel.Controls.Add(_sf2ZeroLengthLoopRetriggerCheckBox);
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
@@ -264,9 +265,9 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
-        layout.Controls.Add(CreateFieldLabel("Compatibility"), 0, 3);
-        layout.Controls.Add(flagsPanel, 1, 3);
-        layout.SetColumnSpan(flagsPanel, 3);
+        layout.Controls.Add(CreateCompactLabel("Compatibility"), 0, 1);
+        layout.Controls.Add(flagsPanel, 1, 1);
+        layout.SetColumnSpan(flagsPanel, 6);
 
         _createOptionsGroup.Controls.Add(layout);
         ConfigureCreateOptionToolTips();
@@ -306,6 +307,17 @@ public sealed class MainForm : Form
         };
     }
 
+    private static Label CreateCompactLabel(string text)
+    {
+        return new Label {
+            AutoSize = true,
+            Text = text,
+            Anchor = AnchorStyles.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 4, 6, 0),
+        };
+    }
+
     private void ConfigureCreateOptionToolTips()
     {
         _optionToolTip.SetToolTip(_maxSampleDataBytesUpDown,
@@ -339,6 +351,19 @@ public sealed class MainForm : Form
         _channelGrid.MultiSelect = false;
         _channelGrid.RowHeadersVisible = false;
         _channelGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _channelGrid.BackgroundColor = SystemColors.Window;
+        _channelGrid.BorderStyle = BorderStyle.FixedSingle;
+        _channelGrid.EnableHeadersVisualStyles = false;
+        _channelGrid.GridColor = Color.FromArgb(224, 224, 224);
+        _channelGrid.DefaultCellStyle.BackColor = SystemColors.Window;
+        _channelGrid.DefaultCellStyle.ForeColor = SystemColors.ControlText;
+        _channelGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(210, 228, 250);
+        _channelGrid.DefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+        _channelGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
+        _channelGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+        _channelGrid.ColumnHeadersDefaultCellStyle.ForeColor = SystemColors.ControlText;
+        _channelGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(240, 240, 240);
+        _channelGrid.ColumnHeadersDefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
         _channelGrid.DataSource = _channels;
 
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
@@ -401,6 +426,7 @@ public sealed class MainForm : Form
             ReadOnly = true,
         });
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
+            Name = nameof(ChannelRow.Lamp),
             DataPropertyName = nameof(ChannelRow.Lamp),
             HeaderText = "NoteOn",
             Width = 80,
@@ -745,12 +771,18 @@ public sealed class MainForm : Form
 
     private void UpdateLampStyles()
     {
+        var lampColumnIndex = _channelGrid.Columns[nameof(ChannelRow.Lamp)]?.Index ?? -1;
+        if (lampColumnIndex < 0) {
+            return;
+        }
         for (int rowIndex = 0; rowIndex < _channelGrid.Rows.Count; ++rowIndex) {
             var row = _channelGrid.Rows[rowIndex];
-            var lampCell = row.Cells[6];
+            var lampCell = row.Cells[lampColumnIndex];
             var isOn = _channels[rowIndex].ActiveNotes > 0;
             lampCell.Style.BackColor = isOn ? Color.FromArgb(216, 255, 216) : Color.FromArgb(245, 245, 245);
             lampCell.Style.ForeColor = isOn ? Color.FromArgb(0, 96, 32) : Color.FromArgb(128, 128, 128);
+            lampCell.Style.SelectionBackColor = isOn ? Color.FromArgb(180, 235, 190) : Color.FromArgb(230, 230, 230);
+            lampCell.Style.SelectionForeColor = lampCell.Style.ForeColor;
         }
     }
 
@@ -1531,6 +1563,10 @@ public readonly record struct WavExportProgress(double CurrentSeconds, double To
 
 internal sealed class ChannelLevelMeterControl : Control
 {
+    private static readonly Color DryLegendColor = Color.FromArgb(64, 150, 94);
+    private static readonly Color ReverbLegendColor = Color.FromArgb(128, 92, 172);
+    private static readonly Color ChorusLegendColor = Color.FromArgb(52, 142, 176);
+
     private readonly float[] _dryLevels = new float[16];
     private readonly float[] _reverbLevels = new float[16];
     private readonly float[] _chorusLevels = new float[16];
@@ -1585,8 +1621,9 @@ internal sealed class ChannelLevelMeterControl : Control
 
         const int channelCount = 16;
         const int gap = 4;
+        const int legendHeight = 18;
         const int labelHeight = 18;
-        var meterTop = 6;
+        var meterTop = 6 + legendHeight;
         var meterHeight = Math.Max(12, height - labelHeight - meterTop - 6);
         var slotWidth = Math.Max(10, (width - gap * (channelCount - 1)) / channelCount);
 
@@ -1594,6 +1631,8 @@ internal sealed class ChannelLevelMeterControl : Control
         using var framePen = new Pen(Color.FromArgb(150, 150, 150));
         using var mutedBrush = new SolidBrush(Color.FromArgb(214, 214, 214));
         using var backBrush = new SolidBrush(Color.FromArgb(232, 232, 232));
+
+        DrawLegend(e.Graphics, width);
 
         for (int i = 0; i < channelCount; ++i) {
             var x = i * (slotWidth + gap);
@@ -1607,12 +1646,46 @@ internal sealed class ChannelLevelMeterControl : Control
             var barGap = innerWidth >= 9 ? 1 : 0;
             var barWidth = Math.Max(1, (innerWidth - barGap * 2) / 3);
             DrawSubMeter(e.Graphics, x + 1, meterTop + 1, barWidth, meterHeight - 2, _dryLevels[i], ChannelColor(_dryLevels[i], isSoloed));
-            DrawSubMeter(e.Graphics, x + 1 + barWidth + barGap, meterTop + 1, barWidth, meterHeight - 2, _reverbLevels[i], Color.FromArgb(128, 92, 172));
-            DrawSubMeter(e.Graphics, x + 1 + (barWidth + barGap) * 2, meterTop + 1, barWidth, meterHeight - 2, _chorusLevels[i], Color.FromArgb(52, 142, 176));
+            DrawSubMeter(e.Graphics, x + 1 + barWidth + barGap, meterTop + 1, barWidth, meterHeight - 2, _reverbLevels[i], ReverbLegendColor);
+            DrawSubMeter(e.Graphics, x + 1 + (barWidth + barGap) * 2, meterTop + 1, barWidth, meterHeight - 2, _chorusLevels[i], ChorusLegendColor);
 
             var label = (i + 1).ToString();
             var labelSize = e.Graphics.MeasureString(label, Font);
             e.Graphics.DrawString(label, Font, labelBrush, x + (slotWidth - labelSize.Width) * 0.5f, meterTop + meterHeight + 1);
+        }
+    }
+
+    private void DrawLegend(Graphics graphics, int width)
+    {
+        const int swatchSize = 8;
+        const int itemGap = 14;
+        var labels = new[] {
+            ("Dry", DryLegendColor),
+            ("Rev Send", ReverbLegendColor),
+            ("Cho Send", ChorusLegendColor),
+        };
+
+        var itemWidths = new int[labels.Length];
+        var totalWidth = 0;
+        for (int i = 0; i < labels.Length; ++i) {
+            itemWidths[i] = swatchSize + 4 + (int)Math.Ceiling(graphics.MeasureString(labels[i].Item1, Font).Width);
+            totalWidth += itemWidths[i];
+            if (i > 0) {
+                totalWidth += itemGap;
+            }
+        }
+        if (totalWidth > width - 8) {
+            return;
+        }
+
+        var x = Math.Max(0, width - totalWidth - 4);
+        const int y = 4;
+        using var textBrush = new SolidBrush(ForeColor);
+        for (int i = 0; i < labels.Length; ++i) {
+            using var swatchBrush = new SolidBrush(labels[i].Item2);
+            graphics.FillRectangle(swatchBrush, x, y + 3, swatchSize, swatchSize);
+            graphics.DrawString(labels[i].Item1, Font, textBrush, x + swatchSize + 4, y);
+            x += itemWidths[i] + itemGap;
         }
     }
 
@@ -1627,7 +1700,7 @@ internal sealed class ChannelLevelMeterControl : Control
         if (level >= 0.55f) {
             return Color.FromArgb(226, 156, 48);
         }
-        return Color.FromArgb(64, 150, 94);
+        return DryLegendColor;
     }
 
     private static float SmoothLevel(float current, float peak)
@@ -1680,31 +1753,40 @@ internal sealed class OutputStageMeterControl : Control
         e.Graphics.Clear(BackColor);
 
         using var textBrush = new SolidBrush(ForeColor);
+        const int modeWidth = 118;
         if (_meter.ProcessedFrames == 0) {
             e.Graphics.DrawString("Out: --", Font, textBrush, 0, 14);
             return;
         }
 
-        e.Graphics.DrawString($"Out: {_meter.Mode}", Font, textBrush, 0, 2);
+        var modeText = $"Out: {_meter.Mode}";
+        var modeSize = e.Graphics.MeasureString(modeText, Font);
+        if (modeSize.Width <= modeWidth - 4) {
+            e.Graphics.DrawString(modeText, Font, textBrush, 0, 2);
+        } else {
+            e.Graphics.DrawString("Out", Font, textBrush, 0, 2);
+            e.Graphics.DrawString(_meter.Mode.ToString(), Font, textBrush, 0, 18);
+        }
 
         const int labelWidth = 34;
         const int barHeight = 7;
-        const int gapX = 12;
+        const int gapX = 10;
         const int rowGap = 16;
-        const int leftX = 74;
+        const int leftX = modeWidth + labelWidth;
         const int topY = 3;
-        int barWidth = Math.Max(36, (ClientSize.Width - leftX - gapX - labelWidth * 2) / 2);
+        int availableWidth = Math.Max(72, ClientSize.Width - leftX - gapX - labelWidth - 2);
+        int barWidth = Math.Max(24, availableWidth / 2);
 
-        DrawBar(e.Graphics, "In", _meter.InputPeak, 1.20f, leftX, topY, barWidth, barHeight, PeakColor(_meter.InputPeak));
-        DrawBar(e.Graphics, "Out", _meter.OutputPeak, 1.00f, leftX + barWidth + gapX + labelWidth, topY, barWidth, barHeight, PeakColor(_meter.OutputPeak));
-        DrawBar(e.Graphics, "Dense", _meter.DensityGain, 1.00f, leftX, topY + rowGap, barWidth, barHeight, GainColor(_meter.DensityGain));
-        DrawBar(e.Graphics, "Peak", _meter.PeakGain, 1.00f, leftX + barWidth + gapX + labelWidth, topY + rowGap, barWidth, barHeight, GainColor(_meter.PeakGain));
+        DrawBar(e.Graphics, "In", _meter.InputPeak, 1.20f, leftX, topY, barWidth, barHeight, labelWidth, PeakColor(_meter.InputPeak));
+        DrawBar(e.Graphics, "Out", _meter.OutputPeak, 1.00f, leftX + barWidth + gapX + labelWidth, topY, barWidth, barHeight, labelWidth, PeakColor(_meter.OutputPeak));
+        DrawBar(e.Graphics, "Dense", _meter.DensityGain, 1.00f, leftX, topY + rowGap, barWidth, barHeight, labelWidth, GainColor(_meter.DensityGain));
+        DrawBar(e.Graphics, "Peak", _meter.PeakGain, 1.00f, leftX + barWidth + gapX + labelWidth, topY + rowGap, barWidth, barHeight, labelWidth, GainColor(_meter.PeakGain));
     }
 
-    private void DrawBar(Graphics graphics, string label, float value, float scale, int x, int y, int width, int height, Color fillColor)
+    private void DrawBar(Graphics graphics, string label, float value, float scale, int x, int y, int width, int height, int labelWidth, Color fillColor)
     {
         using var textBrush = new SolidBrush(ForeColor);
-        graphics.DrawString(label, Font, textBrush, x - 38, y - 4);
+        graphics.DrawString(label, Font, textBrush, x - labelWidth, y - 4);
 
         var frame = new Rectangle(x, y, width, height);
         using var backBrush = new SolidBrush(Color.FromArgb(230, 230, 230));
