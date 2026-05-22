@@ -1345,6 +1345,35 @@ namespace {
             "Post-mix effects reset should clear chorus tone damping state");
     }
 
+    void TestPostMixEffectsFeedbackClampKeepsHotGsStable() {
+        PostMixEffects effects;
+        effects.Init(44100);
+        Require(effects.ApplyGsParameter(0x09, 127),
+            "Post-mix effects should accept maximum GS reverb feedback");
+        Require(effects.ApplyGsParameter(0x10, 127),
+            "Post-mix effects should accept maximum GS chorus feedback");
+
+        double peak = 0.0;
+        double lateEnergy = 0.0;
+        for (int i = 0; i < 48000; ++i) {
+            const f32 hotSend = (i == 0) ? 8.0f : 0.0f;
+            const auto out =
+                effects.ProcessSample(0.0f, 0.0f, hotSend, hotSend, hotSend, hotSend);
+            const f32 framePeak = std::max(std::fabs(out.wetL), std::fabs(out.wetR));
+            peak = std::max<double>(peak, framePeak);
+            if (i > 24000) {
+                lateEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+            }
+        }
+
+        Require(peak > 0.0,
+            "Post-mix feedback clamp should preserve hot GS effect output");
+        Require(peak < 8.0,
+            "Post-mix feedback clamp should keep hot GS effect peaks bounded");
+        Require(lateEnergy < 200.0,
+            "Post-mix feedback clamp should avoid runaway late tails");
+    }
+
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3221,6 +3250,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
+    RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);

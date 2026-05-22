@@ -198,7 +198,9 @@ private:
     static constexpr f32 kChorusDamping = 0.52f;
     static constexpr f32 kChorusSecondaryMix = 0.34f;
     static constexpr f32 kChorusToneDamping = 0.76f;
+    static constexpr f32 kMaxChorusFeedback = 0.36f;
     static constexpr f32 kReverbFeedback = 0.58f;
+    static constexpr f32 kMaxReverbFeedback = 0.82f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kReverbToneDamping = 0.70f;
@@ -220,6 +222,10 @@ private:
 
     static f32 Lerp(f32 a, f32 b, f32 t) {
         return a + (b - a) * t;
+    }
+
+    static f32 Clamp(f32 value, f32 low, f32 high) {
+        return std::max(low, std::min(value, high));
     }
 
     static f32 ShapeWetReturn(f32 sample) {
@@ -268,8 +274,9 @@ private:
         const f32 chorusSecondaryWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, secondaryTapR);
         chorusDampL_ += (chorusWetL - chorusDampL_) * kChorusDamping;
         chorusDampR_ += (chorusWetR - chorusDampR_) * kChorusDamping;
-        chorusDelayL_[chorusIndex_] = chorusInL + chorusDampR_ * (kChorusFeedback * gsChorusFeedbackScale_);
-        chorusDelayR_[chorusIndex_] = chorusInR + chorusDampL_ * (kChorusFeedback * gsChorusFeedbackScale_);
+        const f32 feedback = Clamp(kChorusFeedback * gsChorusFeedbackScale_, 0.0f, kMaxChorusFeedback);
+        chorusDelayL_[chorusIndex_] = chorusInL + chorusDampR_ * feedback;
+        chorusDelayR_[chorusIndex_] = chorusInR + chorusDampL_ * feedback;
         ++chorusIndex_;
         if (chorusIndex_ == size) {
             chorusIndex_ = 0;
@@ -314,8 +321,9 @@ private:
             reverbDelayL_[(reverbIndex_ >= reverbTap4_) ? (reverbIndex_ - reverbTap4_) : (reverbIndex_ + size - reverbTap4_)] * 0.12f;
         reverbDampL_ += (reverbWetL - reverbDampL_) * kReverbDamping;
         reverbDampR_ += (reverbWetR - reverbDampR_) * kReverbDamping;
-        reverbDelayL_[reverbIndex_] = reverbInL + reverbDampR_ * (kReverbFeedback * gsReverbFeedbackScale_);
-        reverbDelayR_[reverbIndex_] = reverbInR + reverbDampL_ * (kReverbFeedback * gsReverbFeedbackScale_);
+        const f32 feedback = Clamp(kReverbFeedback * gsReverbFeedbackScale_, 0.0f, kMaxReverbFeedback);
+        reverbDelayL_[reverbIndex_] = reverbInL + reverbDampR_ * feedback;
+        reverbDelayR_[reverbIndex_] = reverbInR + reverbDampL_ * feedback;
         ++reverbIndex_;
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
