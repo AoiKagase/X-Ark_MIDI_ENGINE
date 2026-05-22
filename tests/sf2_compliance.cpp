@@ -15,6 +15,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace XArkMidi;
@@ -1270,6 +1271,40 @@ namespace {
             "Output stage density smoothing should keep similar time response across sample rates");
         Require(std::fabs(meter44100.peakGain - meter48000.peakGain) < 0.025f,
             "Output stage peak smoothing should keep similar time response across sample rates");
+    }
+
+    void TestOutputStageSampleRateAndModeOrderIsStable() {
+        const auto measure = [](bool sampleRateFirst) {
+            OutputStage stage;
+            if (sampleRateFirst) {
+                stage.SetSampleRate(48000);
+                stage.SetMode(OutputStage::Mode::EnhancedWarm);
+            } else {
+                stage.SetMode(OutputStage::Mode::EnhancedWarm);
+                stage.SetSampleRate(48000);
+            }
+            stage.Reset();
+
+            f32 lastL = 0.0f;
+            f32 lastR = 0.0f;
+            for (int i = 0; i < 7200; ++i) {
+                lastL = 0.72f;
+                lastR = -0.68f;
+                stage.Process(lastL, lastR, 1.0f);
+            }
+
+            return std::pair<OutputStage::Meter, f32>{stage.GetMeter(), lastL + lastR};
+        };
+
+        const auto modeThenRate = measure(false);
+        const auto rateThenMode = measure(true);
+
+        Require(std::fabs(modeThenRate.first.densityGain - rateThenMode.first.densityGain) < 1.0e-6f,
+            "Output stage density smoothing should not depend on SetMode/SetSampleRate order");
+        Require(std::fabs(modeThenRate.first.peakGain - rateThenMode.first.peakGain) < 1.0e-6f,
+            "Output stage peak smoothing should not depend on SetMode/SetSampleRate order");
+        Require(std::fabs(modeThenRate.second - rateThenMode.second) < 1.0e-6f,
+            "Output stage samples should not depend on SetMode/SetSampleRate order");
     }
 
     void TestOutputStageStandardMatchesLimiterPath() {
@@ -4066,6 +4101,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEnhancedOutputStageAdaptsToDensePassages);
     RUN_TEST(TestOutputStagePresetsHaveDistinctDrive);
     RUN_TEST(TestOutputStageSmoothingScalesWithSampleRate);
+    RUN_TEST(TestOutputStageSampleRateAndModeOrderIsStable);
     RUN_TEST(TestOutputStageStandardMatchesLimiterPath);
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
