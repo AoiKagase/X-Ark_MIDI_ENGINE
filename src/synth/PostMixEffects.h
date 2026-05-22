@@ -39,6 +39,7 @@ public:
             ScaleCoefficientAt44100(kReverbToneDampingAt44100, effectiveSampleRate);
         reverbLowDamping_ =
             ScaleCoefficientAt44100(kReverbLowDampingAt44100, effectiveSampleRate);
+        wetReturnDcPole_ = std::pow(kWetReturnDcPoleAt44100, 44100.0f / effectiveSampleRate);
         const size_t reverbSize = DelaySamples(97.0f);
         reverbDelayL_.assign(reverbSize, 0.0f);
         reverbDelayR_.assign(reverbSize, 0.0f);
@@ -278,7 +279,7 @@ private:
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnMaxSideRatio = 1.25f;
     static constexpr f32 kWetReturnShape = 0.18f;
-    static constexpr f32 kWetReturnDcPole = 0.9950f;
+    static constexpr f32 kWetReturnDcPoleAt44100 = 0.9950f;
     static constexpr f32 kGsParameterSmoothingAt44100 = 0.0025f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kDenormalGuard = 1.0e-20f;
@@ -344,8 +345,8 @@ private:
         return { mid + side, mid - side };
     }
 
-    static f32 ApplyWetReturnDcBlock(f32 sample, f32& previousInput, f32& previousOutput) {
-        const f32 output = FlushTiny(sample - previousInput + previousOutput * kWetReturnDcPole);
+    f32 ApplyWetReturnDcBlock(f32 sample, f32& previousInput, f32& previousOutput) const {
+        const f32 output = FlushTiny(sample - previousInput + previousOutput * wetReturnDcPole_);
         previousInput = FlushTiny(sample);
         previousOutput = output;
         return output;
@@ -526,6 +527,7 @@ private:
     f32 reverbDamping_ = kReverbDampingAt44100;
     f32 reverbToneDamping_ = kReverbToneDampingAt44100;
     f32 reverbLowDamping_ = kReverbLowDampingAt44100;
+    f32 wetReturnDcPole_ = kWetReturnDcPoleAt44100;
     std::vector<f32> reverbDelayL_;
     std::vector<f32> reverbDelayR_;
     std::vector<f32> reverbPreDelayL_;
