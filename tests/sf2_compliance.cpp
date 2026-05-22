@@ -1345,6 +1345,40 @@ namespace {
             "Post-mix effects reset should clear chorus tone damping state");
     }
 
+    void TestPostMixEffectsChorusRateScalesWithSampleRate() {
+        PostMixEffects at44100;
+        at44100.Init(44100);
+        PostMixEffects at48000;
+        at48000.Init(48000);
+
+        double energy44100 = 0.0;
+        double energy48000 = 0.0;
+        int first44100 = -1;
+        int first48000 = -1;
+        for (int i = 0; i < 2200; ++i) {
+            const f32 send44100 = (i == 0) ? 1.0f : 0.0f;
+            const auto out44100 = at44100.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, send44100, send44100);
+            if (first44100 < 0 && (std::fabs(out44100.wetL) + std::fabs(out44100.wetR)) > 1.0e-7f) {
+                first44100 = i;
+            }
+            energy44100 += std::fabs(out44100.wetL) + std::fabs(out44100.wetR);
+
+            const f32 send48000 = (i == 0) ? 1.0f : 0.0f;
+            const auto out48000 = at48000.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, send48000, send48000);
+            if (first48000 < 0 && (std::fabs(out48000.wetL) + std::fabs(out48000.wetR)) > 1.0e-7f) {
+                first48000 = i;
+            }
+            energy48000 += std::fabs(out48000.wetL) + std::fabs(out48000.wetR);
+        }
+
+        Require(energy44100 > 0.0 && energy48000 > 0.0,
+            "Post-mix chorus should produce output at common sample rates");
+        Require(first48000 > first44100,
+            "Post-mix chorus delay timing should scale upward at 48 kHz");
+        Require(first48000 - first44100 < 24,
+            "Post-mix chorus sample-rate scaling should keep timing close in milliseconds");
+    }
+
     void TestPostMixEffectsTailIncludesSmoothingState() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3378,6 +3412,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
+    RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
     RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);

@@ -21,6 +21,7 @@ public:
 
     void Init(u32 sampleRate) {
         sampleRate_ = sampleRate;
+        chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / static_cast<f32>(std::max<u32>(1, sampleRate_));
         const size_t reverbSize = DelaySamples(97.0f);
         reverbDelayL_.assign(reverbSize, 0.0f);
         reverbDelayR_.assign(reverbSize, 0.0f);
@@ -219,8 +220,8 @@ private:
     static constexpr f32 kWetReturnShape = 0.18f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kMasterReverbSend = 0.28f;
-    static constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
-    static constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
+    static constexpr f32 kTwoPi = 6.28318530717958647692f;
+    static constexpr f32 kChorusRateHz = 2.60f;
 
     struct WetPair {
         f32 wetL = 0.0f;
@@ -302,8 +303,7 @@ private:
             chorusIndex_ = 0;
         }
 
-        const f32 phaseStepAngle =
-            std::atan2(kChorusPhaseStepSin, kChorusPhaseStepCos) * gsChorusRateScale_;
+        const f32 phaseStepAngle = chorusBasePhaseStep_ * gsChorusRateScale_;
         const f32 phaseStepSin = std::sin(phaseStepAngle);
         const f32 phaseStepCos = std::cos(phaseStepAngle);
         const f32 nextSin = chorusSin_ * phaseStepCos + chorusCos_ * phaseStepSin;
@@ -457,6 +457,7 @@ private:
     size_t chorusSecondaryDepthTapR_ = 0;
     f32 chorusSin_ = 0.0f;
     f32 chorusCos_ = 1.0f;
+    f32 chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / 44100.0f;
     f32 chorusDampL_ = 0.0f;
     f32 chorusDampR_ = 0.0f;
     f32 chorusToneL_ = 0.0f;
