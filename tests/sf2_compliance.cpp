@@ -1402,6 +1402,39 @@ namespace {
             "Post-mix wet return width should preserve stereo spread from the effect tank");
     }
 
+    void TestPostMixEffectsReverbToneDampingSmoothsTail() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int observedFrames = 0;
+        double maxStep = 0.0;
+        f32 previous = 0.0f;
+        bool havePrevious = false;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            const f32 wet = (out.wetL + out.wetR) * 0.5f;
+            if (std::fabs(wet) > 1.0e-7f) {
+                if (havePrevious) {
+                    maxStep = std::max<double>(maxStep, std::fabs(wet - previous));
+                }
+                previous = wet;
+                havePrevious = true;
+                ++observedFrames;
+            }
+        }
+
+        Require(observedFrames > 8,
+            "Post-mix reverb tone damping should preserve the reverb tail");
+        Require(maxStep < 0.12,
+            "Post-mix reverb tone damping should avoid abrupt wet-tail jumps");
+
+        effects.ResetState();
+        const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
+            "Post-mix effects reset should clear reverb tone damping state");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3137,6 +3170,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
+    RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);

@@ -74,6 +74,8 @@ public:
         reverbDiffusionIndexR2_ = 0;
         reverbDampL_ = 0.0f;
         reverbDampR_ = 0.0f;
+        reverbToneL_ = 0.0f;
+        reverbToneR_ = 0.0f;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -191,6 +193,7 @@ private:
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
+    static constexpr f32 kReverbToneDamping = 0.70f;
     static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnShape = 0.18f;
@@ -294,9 +297,11 @@ private:
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
         }
+        reverbToneL_ += (reverbWetL - reverbToneL_) * kReverbToneDamping;
+        reverbToneR_ += (reverbWetR - reverbToneR_) * kReverbToneDamping;
         return {
-            reverbWetL + early.wetL * kEarlyReflectionMix,
-            reverbWetR + early.wetR * kEarlyReflectionMix,
+            reverbToneL_ + early.wetL * kEarlyReflectionMix,
+            reverbToneR_ + early.wetR * kEarlyReflectionMix,
         };
     }
 
@@ -376,6 +381,8 @@ private:
     size_t reverbDiffusionIndexR2_ = 0;
     f32 reverbDampL_ = 0.0f;
     f32 reverbDampR_ = 0.0f;
+    f32 reverbToneL_ = 0.0f;
+    f32 reverbToneR_ = 0.0f;
     size_t reverbTap1_ = 0;
     size_t reverbTap2_ = 0;
     size_t reverbTap3_ = 0;
