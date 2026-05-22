@@ -67,6 +67,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL = 1u << 5,
     /* Use the warm preset for the enhanced output stage. Natural takes precedence if both preset flags are set. enhanced output stage の Warm プリセットを使います。Natural と同時指定された場合は Natural を優先します。 */
     XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM = 1u << 6,
+    /* Disable the internal post-mix reverb/chorus processing while keeping dry rendering active. 内部 post-mix リバーブ/コーラス処理を無効化し、ドライ出力のみを維持します。 */
+    XAME_COMPAT_DISABLE_INTERNAL_EFFECTS = 1u << 7,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */

@@ -443,10 +443,12 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
         for (u32 i = 0; i < blockFrames; ++i) {
             f32 dryL = dryBlockL_[i];
             f32 dryR = dryBlockR_[i];
-            const auto effects = postMixEffects_.ProcessSample(
-                dryL, dryR,
-                reverbBlockL_[i], reverbBlockR_[i],
-                chorusBlockL_[i], chorusBlockR_[i]);
+            const auto effects = compatOptions_.disableInternalEffects
+                ? PostMixEffects::Output{}
+                : postMixEffects_.ProcessSample(
+                    dryL, dryR,
+                    reverbBlockL_[i], reverbBlockR_[i],
+                    chorusBlockL_[i], chorusBlockR_[i]);
 
             f32 outL = dryL + effects.wetL;
             f32 outR = dryR + effects.wetR;
@@ -679,7 +681,8 @@ void Synthesizer::ApplyEventsBeforeTick(u32 tick) {
 }
 
 bool Synthesizer::HasAudibleEffectTail() const {
-    return postMixEffects_.HasAudibleTail(kEffectTailThreshold);
+    return !compatOptions_.disableInternalEffects &&
+           postMixEffects_.HasAudibleTail(kEffectTailThreshold);
 }
 
 void Synthesizer::PushChannelKeyEvent(u8 ch, u8 key, bool isNoteOn, u16 velocity) {

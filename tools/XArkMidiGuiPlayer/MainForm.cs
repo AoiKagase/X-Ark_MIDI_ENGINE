@@ -71,6 +71,11 @@ public sealed class MainForm : Form
         AutoSize = true,
         Text = "Apply SF2 channel default modulators",
     };
+    private readonly CheckBox _internalEffectsCheckBox = new() {
+        AutoSize = true,
+        Text = "Internal effects",
+        Checked = true,
+    };
     private readonly ComboBox _outputStageComboBox = new() {
         DropDownStyle = ComboBoxStyle.DropDownList,
         Width = 140,
@@ -245,6 +250,7 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
         flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
+        flagsPanel.Controls.Add(_internalEffectsCheckBox);
         flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
@@ -306,6 +312,8 @@ public sealed class MainForm : Form
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
+        _optionToolTip.SetToolTip(_internalEffectsCheckBox,
+            "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
         _outputStageComboBox.Items.AddRange(new object[] { "Standard", "Natural", "Warm", "Loud" });
         _outputStageComboBox.SelectedIndex = 0;
         _optionToolTip.SetToolTip(_outputStageComboBox,
@@ -623,6 +631,9 @@ public sealed class MainForm : Form
         }
         if (_applySf2ChannelDefaultModulatorsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
+        }
+        if (!_internalEffectsCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.DisableInternalEffects;
         }
         if (_outputStageComboBox.SelectedIndex == 1) {
             flags |= XArkMidiEngine.CompatibilityFlags.EnableEnhancedOutputStage;

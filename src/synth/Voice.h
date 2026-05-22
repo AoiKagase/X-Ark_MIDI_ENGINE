@@ -21,6 +21,7 @@ struct SynthCompatOptions {
     bool enableEnhancedOutputStage = false;
     bool useNaturalOutputStage = false;
     bool useWarmOutputStage = false;
+    bool disableInternalEffects = false;
 };
 
 struct SpecialVoiceRoute {

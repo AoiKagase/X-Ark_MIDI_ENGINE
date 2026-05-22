@@ -2197,6 +2197,15 @@ namespace {
             "Post-mix reset should clear reverb low-trim state from tail detection");
     }
 
+    void TestSynthCompatCanDisableInternalEffects() {
+        SynthCompatOptions options;
+        Require(!options.disableInternalEffects,
+            "Internal effects should remain enabled by default for compatibility");
+        options.disableInternalEffects = true;
+        Require(options.disableInternalEffects,
+            "Synth compatibility options should expose internal effects disable switch");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3956,6 +3965,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsWetReturnDcBlockResetsCleanly);
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
+    RUN_TEST(TestSynthCompatCanDisableInternalEffects);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);

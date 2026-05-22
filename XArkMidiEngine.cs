@@ -76,6 +76,8 @@ public static class XArkMidiEngine
         EnhancedOutputStageNatural = 1 << 5,
         /// <summary>Use the warm preset for the enhanced output stage. Natural takes precedence if both preset flags are set. enhanced output stage の Warm プリセットを使います。Natural と同時指定された場合は Natural を優先します。</summary>
         EnhancedOutputStageWarm = 1 << 6,
+        /// <summary>Disable internal post-mix reverb/chorus processing while keeping dry rendering active. 内部 post-mix リバーブ/コーラス処理を無効化し、ドライ出力のみを維持します。</summary>
+        DisableInternalEffects = 1 << 7,
     }
 
     [StructLayout(LayoutKind.Sequential)]
