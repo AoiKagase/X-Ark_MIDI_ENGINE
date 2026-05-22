@@ -1291,6 +1291,27 @@ namespace {
             "Post-mix effects reset should clear chorus damping state");
     }
 
+    void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int wetFrameCount = 0;
+        int lastWetFrame = -1;
+        for (int i = 0; i < 1200; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            if ((std::fabs(out.wetL) + std::fabs(out.wetR)) > 1.0e-7f) {
+                ++wetFrameCount;
+                lastWetFrame = i;
+            }
+        }
+
+        Require(wetFrameCount > 4,
+            "Post-mix chorus should spread an impulse across multiple wet frames");
+        Require(lastWetFrame > 260,
+            "Post-mix chorus secondary tap should add a later thickening reflection");
+    }
+
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3165,6 +3186,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestOutputStageMeterTracksRenderBlock);
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
+    RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);

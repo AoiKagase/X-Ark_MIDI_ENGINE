@@ -47,6 +47,10 @@ public:
         chorusBaseTapR_ = DelaySamples(3.0f);
         chorusDepthTapL_ = DelaySamples(0.7f);
         chorusDepthTapR_ = DelaySamples(0.8f);
+        chorusSecondaryBaseTapL_ = DelaySamples(6.8f);
+        chorusSecondaryBaseTapR_ = DelaySamples(7.6f);
+        chorusSecondaryDepthTapL_ = DelaySamples(1.1f);
+        chorusSecondaryDepthTapR_ = DelaySamples(1.0f);
         ResetState();
     }
 
@@ -190,6 +194,7 @@ private:
     static constexpr f32 kChorusWetMix = 0.45f;
     static constexpr f32 kChorusToReverb = 0.30f;
     static constexpr f32 kChorusDamping = 0.52f;
+    static constexpr f32 kChorusSecondaryMix = 0.34f;
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
@@ -228,6 +233,18 @@ private:
         return std::max<size_t>(1, static_cast<size_t>(sampleRate_ * (ms / 1000.0f)));
     }
 
+    static f32 ReadDelayInterpolated(const std::vector<f32>& delay, size_t index, f32 tap) {
+        const size_t size = delay.size();
+        const f32 fTap = std::max(1.0f, tap);
+        const size_t iTap = static_cast<size_t>(fTap);
+        const f32 frac = fTap - static_cast<f32>(iTap);
+        const size_t w0 = iTap % size;
+        const size_t w1 = (iTap + 1) % size;
+        const size_t idx0 = (index >= w0) ? (index - w0) : (index + size - w0);
+        const size_t idx1 = (index >= w1) ? (index - w1) : (index + size - w1);
+        return delay[idx0] * (1.0f - frac) + delay[idx1] * frac;
+    }
+
     WetPair ProcessChorus(f32 chorusInL, f32 chorusInR) {
         const size_t size = chorusDelayL_.size();
         const f32 baseTapL = static_cast<f32>(chorusBaseTapL_) * gsChorusDelayScale_;
@@ -236,20 +253,16 @@ private:
         const f32 depthTapR = static_cast<f32>(chorusDepthTapR_) * gsChorusDepthScale_;
         const f32 fTapL = std::max(1.0f, baseTapL + (chorusSin_ + 1.0f) * 0.5f * depthTapL);
         const f32 fTapR = std::max(1.0f, baseTapR + (chorusCos_ + 1.0f) * 0.5f * depthTapR);
-        const size_t iTapL = static_cast<size_t>(fTapL);
-        const size_t iTapR = static_cast<size_t>(fTapR);
-        const f32 fracL = fTapL - static_cast<f32>(iTapL);
-        const f32 fracR = fTapR - static_cast<f32>(iTapR);
-        const size_t wL0 = iTapL % size;
-        const size_t wL1 = (iTapL + 1) % size;
-        const size_t wR0 = iTapR % size;
-        const size_t wR1 = (iTapR + 1) % size;
-        const size_t idxL0 = (chorusIndex_ >= wL0) ? (chorusIndex_ - wL0) : (chorusIndex_ + size - wL0);
-        const size_t idxL1 = (chorusIndex_ >= wL1) ? (chorusIndex_ - wL1) : (chorusIndex_ + size - wL1);
-        const size_t idxR0 = (chorusIndex_ >= wR0) ? (chorusIndex_ - wR0) : (chorusIndex_ + size - wR0);
-        const size_t idxR1 = (chorusIndex_ >= wR1) ? (chorusIndex_ - wR1) : (chorusIndex_ + size - wR1);
-        const f32 chorusWetL = chorusDelayL_[idxL0] * (1.0f - fracL) + chorusDelayL_[idxL1] * fracL;
-        const f32 chorusWetR = chorusDelayR_[idxR0] * (1.0f - fracR) + chorusDelayR_[idxR1] * fracR;
+        const f32 secondaryTapL =
+            static_cast<f32>(chorusSecondaryBaseTapL_) * gsChorusDelayScale_ +
+            (chorusCos_ + 1.0f) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapL_) * gsChorusDepthScale_;
+        const f32 secondaryTapR =
+            static_cast<f32>(chorusSecondaryBaseTapR_) * gsChorusDelayScale_ +
+            (1.0f - chorusSin_) * 0.5f * static_cast<f32>(chorusSecondaryDepthTapR_) * gsChorusDepthScale_;
+        const f32 chorusWetL = ReadDelayInterpolated(chorusDelayL_, chorusIndex_, fTapL);
+        const f32 chorusWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, fTapR);
+        const f32 chorusSecondaryWetL = ReadDelayInterpolated(chorusDelayL_, chorusIndex_, secondaryTapL);
+        const f32 chorusSecondaryWetR = ReadDelayInterpolated(chorusDelayR_, chorusIndex_, secondaryTapR);
         chorusDampL_ += (chorusWetL - chorusDampL_) * kChorusDamping;
         chorusDampR_ += (chorusWetR - chorusDampR_) * kChorusDamping;
         chorusDelayL_[chorusIndex_] = chorusInL + chorusDampR_ * (kChorusFeedback * gsChorusFeedbackScale_);
@@ -267,7 +280,10 @@ private:
         const f32 nextCos = chorusCos_ * phaseStepCos - chorusSin_ * phaseStepSin;
         chorusSin_ = nextSin;
         chorusCos_ = nextCos;
-        return { chorusWetL, chorusWetR };
+        return {
+            chorusWetL + chorusSecondaryWetL * kChorusSecondaryMix,
+            chorusWetR + chorusSecondaryWetR * kChorusSecondaryMix,
+        };
     }
 
     WetPair ProcessReverb(f32 reverbInL, f32 reverbInR) {
@@ -394,6 +410,10 @@ private:
     size_t chorusBaseTapR_ = 0;
     size_t chorusDepthTapL_ = 0;
     size_t chorusDepthTapR_ = 0;
+    size_t chorusSecondaryBaseTapL_ = 0;
+    size_t chorusSecondaryBaseTapR_ = 0;
+    size_t chorusSecondaryDepthTapL_ = 0;
+    size_t chorusSecondaryDepthTapR_ = 0;
     f32 chorusSin_ = 0.0f;
     f32 chorusCos_ = 1.0f;
     f32 chorusDampL_ = 0.0f;
