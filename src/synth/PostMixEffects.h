@@ -188,7 +188,11 @@ public:
                hasAudibleSample(reverbDiffusionL1_) || hasAudibleSample(reverbDiffusionR1_) ||
                hasAudibleSample(reverbDiffusionL2_) || hasAudibleSample(reverbDiffusionR2_) ||
                hasAudibleSample(earlyReflectionL_) || hasAudibleSample(earlyReflectionR_) ||
-               hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_);
+               hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_) ||
+               HasAudibleScalar(reverbDampL_, threshold) || HasAudibleScalar(reverbDampR_, threshold) ||
+               HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
+               HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
+               HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold);
     }
 
 private:
@@ -227,6 +231,10 @@ private:
 
     static f32 Clamp(f32 value, f32 low, f32 high) {
         return std::max(low, std::min(value, high));
+    }
+
+    static bool HasAudibleScalar(f32 value, f32 threshold) {
+        return std::fabs(value) >= threshold;
     }
 
     static f32 ShapeWetReturn(f32 sample) {

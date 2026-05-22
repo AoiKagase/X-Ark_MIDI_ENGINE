@@ -1345,6 +1345,23 @@ namespace {
             "Post-mix effects reset should clear chorus tone damping state");
     }
 
+    void TestPostMixEffectsTailIncludesSmoothingState() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        for (int i = 0; i < 1600; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+        }
+
+        Require(effects.HasAudibleTail(1.0e-7f),
+            "Post-mix tail detection should include smoothing state as well as delay buffers");
+
+        effects.ResetState();
+        Require(!effects.HasAudibleTail(1.0e-7f),
+            "Post-mix reset should clear smoothing state from tail detection");
+    }
+
     void TestPostMixEffectsFeedbackClampKeepsHotGsStable() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3280,6 +3297,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
+    RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
     RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
