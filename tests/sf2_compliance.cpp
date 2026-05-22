@@ -1857,6 +1857,36 @@ namespace {
             "Post-mix reverb predelay should still keep early reflections close to the source");
     }
 
+    void TestPostMixEffectsReverbInputDampingSpreadsOnset() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int firstWetFrame = -1;
+        int onsetFrames = 0;
+        double onsetEnergy = 0.0;
+        double totalEnergy = 0.0;
+        for (int i = 0; i < 2400; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            const f32 frameWet = std::fabs(out.wetL) + std::fabs(out.wetR);
+            totalEnergy += frameWet;
+            if (firstWetFrame < 0 && frameWet > 1.0e-7f) {
+                firstWetFrame = i;
+            }
+            if (firstWetFrame >= 0 && i >= firstWetFrame && i < firstWetFrame + 48 && frameWet > 1.0e-7f) {
+                ++onsetFrames;
+                onsetEnergy += frameWet;
+            }
+        }
+
+        Require(firstWetFrame >= 0,
+            "Post-mix reverb input damping should preserve the first reverb onset");
+        Require(onsetFrames > 4,
+            "Post-mix reverb input damping should spread a sharp onset across multiple wet frames");
+        Require(onsetEnergy > 0.0 && totalEnergy > onsetEnergy,
+            "Post-mix reverb input damping should leave energy for the later tail");
+    }
+
     void TestPostMixEffectsWetReturnShapeKeepsPeaksBounded() {
         PostMixEffects naturalEffects;
         naturalEffects.Init(44100);
@@ -3732,6 +3762,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
+    RUN_TEST(TestPostMixEffectsReverbInputDampingSpreadsOnset);
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
     RUN_TEST(TestPostMixEffectsWetReturnWidthLimitsSideBias);

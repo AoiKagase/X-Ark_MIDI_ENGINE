@@ -86,6 +86,8 @@ public:
         reverbDiffusionIndexR2_ = 0;
         reverbDampL_ = 0.0f;
         reverbDampR_ = 0.0f;
+        reverbInputL_ = 0.0f;
+        reverbInputR_ = 0.0f;
         reverbToneL_ = 0.0f;
         reverbToneR_ = 0.0f;
         reverbLowL_ = 0.0f;
@@ -215,6 +217,7 @@ public:
                hasAudibleSample(earlyReflectionL_) || hasAudibleSample(earlyReflectionR_) ||
                hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_) ||
                HasAudibleScalar(reverbDampL_, threshold) || HasAudibleScalar(reverbDampR_, threshold) ||
+               HasAudibleScalar(reverbInputL_, threshold) || HasAudibleScalar(reverbInputR_, threshold) ||
                HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
                HasAudibleScalar(reverbLowL_, threshold) || HasAudibleScalar(reverbLowR_, threshold) ||
                HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
@@ -241,6 +244,7 @@ private:
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kMaxReverbFeedback = 0.82f;
     static constexpr f32 kReverbWetMix = 0.95f;
+    static constexpr f32 kReverbInputDamping = 0.42f;
     static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kReverbToneDamping = 0.70f;
     static constexpr f32 kReverbLowDamping = 0.035f;
@@ -372,6 +376,10 @@ private:
 
     WetPair ProcessReverb(f32 reverbInL, f32 reverbInR) {
         const size_t size = reverbDelayL_.size();
+        reverbInputL_ = FlushTiny(reverbInputL_ + (reverbInL - reverbInputL_) * kReverbInputDamping);
+        reverbInputR_ = FlushTiny(reverbInputR_ + (reverbInR - reverbInputR_) * kReverbInputDamping);
+        reverbInL = reverbInputL_;
+        reverbInR = reverbInputR_;
         reverbInL = ProcessDelay(reverbPreDelayL_, reverbPreDelayIndexL_, reverbInL);
         reverbInR = ProcessDelay(reverbPreDelayR_, reverbPreDelayIndexR_, reverbInR);
         reverbInL = ProcessAllpass(reverbDiffusionL1_, reverbDiffusionIndexL1_, reverbInL, 0.62f);
@@ -488,6 +496,8 @@ private:
     size_t reverbDiffusionIndexR2_ = 0;
     f32 reverbDampL_ = 0.0f;
     f32 reverbDampR_ = 0.0f;
+    f32 reverbInputL_ = 0.0f;
+    f32 reverbInputR_ = 0.0f;
     f32 reverbToneL_ = 0.0f;
     f32 reverbToneR_ = 0.0f;
     f32 reverbLowL_ = 0.0f;
