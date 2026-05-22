@@ -82,6 +82,7 @@ private:
     f32              dcBlockPrevInR_ = 0.0f;
     f32              dcBlockPrevOutL_ = 0.0f;
     f32              dcBlockPrevOutR_ = 0.0f;
+    f32              dcBlockPole_ = 0.995f;
     std::vector<f32> dryBlockL_;
     std::vector<f32> dryBlockR_;
     std::vector<f32> reverbBlockL_;

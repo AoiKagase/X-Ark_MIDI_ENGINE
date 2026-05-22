@@ -17,6 +17,7 @@ namespace {
 constexpr f32 kMixGainSmooth = 0.0025f;
 constexpr f32 kMasterOutputGain = 0.90f;
 constexpr f32 kEffectTailThreshold = 1.0e-4f;
+constexpr f32 kDcBlockPoleAt44100 = 0.995f;
 constexpr u32 kSeekDiscardChunkFrames = 4096;
 constexpr const char* kProgramDebugLogPath = "./diagnostics/program_focus.log";
 constexpr const char* kProgramSummaryLogPath = "./diagnostics/program_summary.log";
@@ -294,9 +295,13 @@ f32 ComputeMixGain(int /*activeVoices*/) {
     return 1.0f;
 }
 
-f32 ApplyDcBlock(f32 input, f32& prevIn, f32& prevOut) {
-    constexpr f32 r = 0.995f;
-    const f32 output = input - prevIn + r * prevOut;
+f32 ScalePoleAt44100(f32 pole, u32 sampleRate) {
+    const f32 effectiveSampleRate = static_cast<f32>(std::max<u32>(1, sampleRate));
+    return std::pow(pole, 44100.0f / effectiveSampleRate);
+}
+
+f32 ApplyDcBlock(f32 input, f32& prevIn, f32& prevOut, f32 pole) {
+    const f32 output = input - prevIn + pole * prevOut;
     prevIn = input;
     prevOut = output;
     return output;
@@ -328,6 +333,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
     soundBank_        = soundBank;
     sampleRate_       = sampleRate;
     numChannels_      = numChannels;
+    dcBlockPole_      = ScalePoleAt44100(kDcBlockPoleAt44100, sampleRate_);
     finished_         = false;
     normGain_         = soundBank ? soundBank->GetLoudnessNormCompensation() : 1.0f;
     seqEndNotified_   = false;
@@ -455,8 +461,8 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             f32 outR = dryR + effects.wetR;
             mixGainCurrent_ += (targetMixGain - mixGainCurrent_) * kMixGainSmooth;
             const f32 outputGain = mixGainCurrent_ * kMasterOutputGain * normGain_ * masterVolume_;
-            outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_);
-            outR = ApplyDcBlock(outR, dcBlockPrevInR_, dcBlockPrevOutR_);
+            outL = ApplyDcBlock(outL, dcBlockPrevInL_, dcBlockPrevOutL_, dcBlockPole_);
+            outR = ApplyDcBlock(outR, dcBlockPrevInR_, dcBlockPrevOutR_, dcBlockPole_);
             outputStage_.Process(outL, outR, outputGain);
 
             if (stereo) {
