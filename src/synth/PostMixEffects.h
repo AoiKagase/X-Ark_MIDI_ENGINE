@@ -32,6 +32,11 @@ public:
         reverbDiffusionR1_.assign(DelaySamples(6.3f), 0.0f);
         reverbDiffusionL2_.assign(DelaySamples(11.7f), 0.0f);
         reverbDiffusionR2_.assign(DelaySamples(13.1f), 0.0f);
+        earlyReflectionL_.assign(DelaySamples(24.0f), 0.0f);
+        earlyReflectionR_.assign(DelaySamples(24.0f), 0.0f);
+        earlyTap1_ = DelaySamples(7.3f) % earlyReflectionL_.size();
+        earlyTap2_ = DelaySamples(13.7f) % earlyReflectionL_.size();
+        earlyTap3_ = DelaySamples(19.1f) % earlyReflectionL_.size();
 
         const size_t chorusSize = DelaySamples(32.0f);
         chorusDelayL_.assign(chorusSize, 0.0f);
@@ -51,9 +56,12 @@ public:
         std::fill(reverbDiffusionR1_.begin(), reverbDiffusionR1_.end(), 0.0f);
         std::fill(reverbDiffusionL2_.begin(), reverbDiffusionL2_.end(), 0.0f);
         std::fill(reverbDiffusionR2_.begin(), reverbDiffusionR2_.end(), 0.0f);
+        std::fill(earlyReflectionL_.begin(), earlyReflectionL_.end(), 0.0f);
+        std::fill(earlyReflectionR_.begin(), earlyReflectionR_.end(), 0.0f);
         std::fill(chorusDelayL_.begin(), chorusDelayL_.end(), 0.0f);
         std::fill(chorusDelayR_.begin(), chorusDelayR_.end(), 0.0f);
         reverbIndex_ = 0;
+        earlyReflectionIndex_ = 0;
         reverbDiffusionIndexL1_ = 0;
         reverbDiffusionIndexR1_ = 0;
         reverbDiffusionIndexL2_ = 0;
@@ -161,6 +169,7 @@ public:
         return hasAudibleSample(reverbDelayL_) || hasAudibleSample(reverbDelayR_) ||
                hasAudibleSample(reverbDiffusionL1_) || hasAudibleSample(reverbDiffusionR1_) ||
                hasAudibleSample(reverbDiffusionL2_) || hasAudibleSample(reverbDiffusionR2_) ||
+               hasAudibleSample(earlyReflectionL_) || hasAudibleSample(earlyReflectionR_) ||
                hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_);
     }
 
@@ -172,6 +181,7 @@ private:
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
+    static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
     static constexpr f32 kChorusPhaseStepCos = 0.999999940395f;
@@ -241,6 +251,7 @@ private:
         reverbInR = ProcessAllpass(reverbDiffusionR1_, reverbDiffusionIndexR1_, reverbInR, 0.60f);
         reverbInL = ProcessAllpass(reverbDiffusionL2_, reverbDiffusionIndexL2_, reverbInL, 0.50f);
         reverbInR = ProcessAllpass(reverbDiffusionR2_, reverbDiffusionIndexR2_, reverbInR, 0.48f);
+        const WetPair early = ProcessEarlyReflections(reverbInL, reverbInR);
         const f32 reverbWetL =
             reverbDelayL_[(reverbIndex_ >= reverbTap1_) ? (reverbIndex_ - reverbTap1_) : (reverbIndex_ + size - reverbTap1_)] * 0.30f +
             reverbDelayL_[(reverbIndex_ >= reverbTap2_) ? (reverbIndex_ - reverbTap2_) : (reverbIndex_ + size - reverbTap2_)] * 0.24f +
@@ -259,7 +270,35 @@ private:
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
         }
-        return { reverbWetL, reverbWetR };
+        return {
+            reverbWetL + early.wetL * kEarlyReflectionMix,
+            reverbWetR + early.wetR * kEarlyReflectionMix,
+        };
+    }
+
+    WetPair ProcessEarlyReflections(f32 inputL, f32 inputR) {
+        if (earlyReflectionL_.empty()) {
+            return {};
+        }
+        const size_t size = earlyReflectionL_.size();
+        const auto readTap = [size](const std::vector<f32>& buffer, size_t index, size_t tap) {
+            return buffer[(index >= tap) ? (index - tap) : (index + size - tap)];
+        };
+        const f32 wetL =
+            readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap1_) * 0.42f +
+            readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap2_) * 0.30f +
+            readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap3_) * 0.18f;
+        const f32 wetR =
+            readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap1_) * 0.42f +
+            readTap(earlyReflectionL_, earlyReflectionIndex_, earlyTap2_) * 0.30f +
+            readTap(earlyReflectionR_, earlyReflectionIndex_, earlyTap3_) * 0.18f;
+        earlyReflectionL_[earlyReflectionIndex_] = inputL;
+        earlyReflectionR_[earlyReflectionIndex_] = inputR;
+        ++earlyReflectionIndex_;
+        if (earlyReflectionIndex_ == size) {
+            earlyReflectionIndex_ = 0;
+        }
+        return { wetL, wetR };
     }
 
     static f32 ProcessAllpass(std::vector<f32>& delay, size_t& index, f32 input, f32 feedback) {
@@ -283,7 +322,13 @@ private:
     std::vector<f32> reverbDiffusionR1_;
     std::vector<f32> reverbDiffusionL2_;
     std::vector<f32> reverbDiffusionR2_;
+    std::vector<f32> earlyReflectionL_;
+    std::vector<f32> earlyReflectionR_;
     size_t reverbIndex_ = 0;
+    size_t earlyReflectionIndex_ = 0;
+    size_t earlyTap1_ = 0;
+    size_t earlyTap2_ = 0;
+    size_t earlyTap3_ = 0;
     size_t reverbDiffusionIndexL1_ = 0;
     size_t reverbDiffusionIndexR1_ = 0;
     size_t reverbDiffusionIndexL2_ = 0;
