@@ -80,6 +80,8 @@ public:
         reverbDampR_ = 0.0f;
         reverbToneL_ = 0.0f;
         reverbToneR_ = 0.0f;
+        reverbLowL_ = 0.0f;
+        reverbLowR_ = 0.0f;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -191,6 +193,7 @@ public:
                hasAudibleSample(chorusDelayL_) || hasAudibleSample(chorusDelayR_) ||
                HasAudibleScalar(reverbDampL_, threshold) || HasAudibleScalar(reverbDampR_, threshold) ||
                HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
+               HasAudibleScalar(reverbLowL_, threshold) || HasAudibleScalar(reverbLowR_, threshold) ||
                HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
                HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold);
     }
@@ -208,6 +211,8 @@ private:
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kReverbToneDamping = 0.70f;
+    static constexpr f32 kReverbLowDamping = 0.035f;
+    static constexpr f32 kReverbLowTrim = 0.18f;
     static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnShape = 0.18f;
@@ -341,8 +346,12 @@ private:
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;
         }
-        reverbToneL_ += (reverbWetL - reverbToneL_) * kReverbToneDamping;
-        reverbToneR_ += (reverbWetR - reverbToneR_) * kReverbToneDamping;
+        reverbLowL_ += (reverbWetL - reverbLowL_) * kReverbLowDamping;
+        reverbLowR_ += (reverbWetR - reverbLowR_) * kReverbLowDamping;
+        const f32 trimmedWetL = reverbWetL - reverbLowL_ * kReverbLowTrim;
+        const f32 trimmedWetR = reverbWetR - reverbLowR_ * kReverbLowTrim;
+        reverbToneL_ += (trimmedWetL - reverbToneL_) * kReverbToneDamping;
+        reverbToneR_ += (trimmedWetR - reverbToneR_) * kReverbToneDamping;
         return {
             reverbToneL_ + early.wetL * kEarlyReflectionMix,
             reverbToneR_ + early.wetR * kEarlyReflectionMix,
@@ -427,6 +436,8 @@ private:
     f32 reverbDampR_ = 0.0f;
     f32 reverbToneL_ = 0.0f;
     f32 reverbToneR_ = 0.0f;
+    f32 reverbLowL_ = 0.0f;
+    f32 reverbLowR_ = 0.0f;
     size_t reverbTap1_ = 0;
     size_t reverbTap2_ = 0;
     size_t reverbTap3_ = 0;

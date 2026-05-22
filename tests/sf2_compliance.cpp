@@ -1601,6 +1601,32 @@ namespace {
             "Post-mix effects reset should clear reverb tone damping state");
     }
 
+    void TestPostMixEffectsReverbLowTrimKeepsTailBalanced() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double absEnergy = 0.0;
+        double signedEnergy = 0.0;
+        for (int i = 0; i < 24000; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            const f32 wet = (out.wetL + out.wetR) * 0.5f;
+            if (i > 2000) {
+                absEnergy += std::fabs(wet);
+                signedEnergy += wet;
+            }
+        }
+
+        Require(absEnergy > 0.0,
+            "Post-mix reverb low trim should preserve audible reverb tail energy");
+        Require(std::fabs(signedEnergy) < absEnergy * 0.95,
+            "Post-mix reverb low trim should avoid a strongly biased late tail");
+
+        effects.ResetState();
+        Require(!effects.HasAudibleTail(1.0e-7f),
+            "Post-mix reset should clear reverb low-trim state from tail detection");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3343,6 +3369,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
+    RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
