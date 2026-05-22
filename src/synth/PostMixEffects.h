@@ -21,7 +21,10 @@ public:
 
     void Init(u32 sampleRate) {
         sampleRate_ = sampleRate;
-        chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / static_cast<f32>(std::max<u32>(1, sampleRate_));
+        const f32 effectiveSampleRate = static_cast<f32>(std::max<u32>(1, sampleRate_));
+        chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / effectiveSampleRate;
+        gsParameterSmoothing_ = 1.0f - std::pow(1.0f - kGsParameterSmoothingAt44100,
+                                                44100.0f / effectiveSampleRate);
         const size_t reverbSize = DelaySamples(97.0f);
         reverbDelayL_.assign(reverbSize, 0.0f);
         reverbDelayR_.assign(reverbSize, 0.0f);
@@ -237,7 +240,7 @@ private:
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnMaxSideRatio = 1.25f;
     static constexpr f32 kWetReturnShape = 0.18f;
-    static constexpr f32 kGsWetSmoothing = 0.0025f;
+    static constexpr f32 kGsParameterSmoothingAt44100 = 0.0025f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kTwoPi = 6.28318530717958647692f;
@@ -264,8 +267,8 @@ private:
         return std::fabs(value) >= threshold;
     }
 
-    static f32 SmoothScale(f32& current, f32 target) {
-        current += (target - current) * kGsWetSmoothing;
+    f32 SmoothScale(f32& current, f32 target) const {
+        current += (target - current) * gsParameterSmoothing_;
         return current;
     }
 
@@ -443,6 +446,7 @@ private:
     }
 
     u32 sampleRate_ = 44100;
+    f32 gsParameterSmoothing_ = kGsParameterSmoothingAt44100;
     std::vector<f32> reverbDelayL_;
     std::vector<f32> reverbDelayR_;
     std::vector<f32> reverbPreDelayL_;

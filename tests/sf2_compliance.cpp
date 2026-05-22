@@ -1539,6 +1539,37 @@ namespace {
             "Post-mix feedback smoothing should keep producing later wet energy");
     }
 
+    void TestPostMixEffectsGsSmoothingScalesWithSampleRate() {
+        const auto measureEnergy = [](u32 sampleRate) {
+            PostMixEffects effects;
+            effects.Init(sampleRate);
+            Require(effects.ApplyGsParameter(0x0F, 127),
+                "Post-mix effects should accept high GS chorus level before sample-rate smoothing test");
+
+            double energy = 0.0;
+            const int totalFrames = static_cast<int>(sampleRate * 140u / 1000u);
+            const int windowStart = static_cast<int>(sampleRate * 45u / 1000u);
+            const int windowEnd = static_cast<int>(sampleRate * 110u / 1000u);
+            for (int i = 0; i < totalFrames; ++i) {
+                const auto out =
+                    effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (i >= windowStart && i < windowEnd) {
+                    energy += std::fabs(out.wetL) + std::fabs(out.wetR);
+                }
+            }
+            return energy / static_cast<double>(windowEnd - windowStart);
+        };
+
+        const double energy44100 = measureEnergy(44100);
+        const double energy48000 = measureEnergy(48000);
+        const double ratio = energy48000 / energy44100;
+
+        Require(energy44100 > 0.0 && energy48000 > 0.0,
+            "Post-mix GS smoothing should produce wet output at both sample rates");
+        Require(ratio > 0.80 && ratio < 1.20,
+            "Post-mix GS smoothing should keep similar time response across sample rates");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3664,6 +3695,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsMasterReverbSendChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusModulationChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsFeedbackChangesAreSmoothed);
+    RUN_TEST(TestPostMixEffectsGsSmoothingScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
