@@ -23,8 +23,12 @@ public:
         sampleRate_ = sampleRate;
         const f32 effectiveSampleRate = static_cast<f32>(std::max<u32>(1, sampleRate_));
         chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / effectiveSampleRate;
-        gsParameterSmoothing_ = 1.0f - std::pow(1.0f - kGsParameterSmoothingAt44100,
-                                                44100.0f / effectiveSampleRate);
+        gsParameterSmoothing_ =
+            ScaleCoefficientAt44100(kGsParameterSmoothingAt44100, effectiveSampleRate);
+        chorusInputDamping_ =
+            ScaleCoefficientAt44100(kChorusInputDampingAt44100, effectiveSampleRate);
+        reverbInputDamping_ =
+            ScaleCoefficientAt44100(kReverbInputDampingAt44100, effectiveSampleRate);
         const size_t reverbSize = DelaySamples(97.0f);
         reverbDelayL_.assign(reverbSize, 0.0f);
         reverbDelayR_.assign(reverbSize, 0.0f);
@@ -240,7 +244,7 @@ private:
     static constexpr f32 kChorusFeedback = 0.22f;
     static constexpr f32 kChorusWetMix = 0.45f;
     static constexpr f32 kChorusToReverb = 0.30f;
-    static constexpr f32 kChorusInputDamping = 0.62f;
+    static constexpr f32 kChorusInputDampingAt44100 = 0.62f;
     static constexpr f32 kChorusDamping = 0.52f;
     static constexpr f32 kChorusSecondaryMix = 0.34f;
     static constexpr f32 kChorusToneDamping = 0.76f;
@@ -248,7 +252,7 @@ private:
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kMaxReverbFeedback = 0.82f;
     static constexpr f32 kReverbWetMix = 0.95f;
-    static constexpr f32 kReverbInputDamping = 0.42f;
+    static constexpr f32 kReverbInputDampingAt44100 = 0.42f;
     static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kReverbToneDamping = 0.70f;
     static constexpr f32 kReverbLowDamping = 0.035f;
@@ -293,6 +297,10 @@ private:
         return (std::fabs(value) < kDenormalGuard) ? 0.0f : value;
     }
 
+    static f32 ScaleCoefficientAt44100(f32 coefficient, f32 sampleRate) {
+        return 1.0f - std::pow(1.0f - coefficient, 44100.0f / sampleRate);
+    }
+
     f32 SmoothScale(f32& current, f32 target) const {
         current += (target - current) * gsParameterSmoothing_;
         return current;
@@ -331,8 +339,8 @@ private:
 
     WetPair ProcessChorus(f32 chorusInL, f32 chorusInR) {
         const size_t size = chorusDelayL_.size();
-        chorusInputL_ = FlushTiny(chorusInputL_ + (chorusInL - chorusInputL_) * kChorusInputDamping);
-        chorusInputR_ = FlushTiny(chorusInputR_ + (chorusInR - chorusInputR_) * kChorusInputDamping);
+        chorusInputL_ = FlushTiny(chorusInputL_ + (chorusInL - chorusInputL_) * chorusInputDamping_);
+        chorusInputR_ = FlushTiny(chorusInputR_ + (chorusInR - chorusInputR_) * chorusInputDamping_);
         chorusInL = chorusInputL_;
         chorusInR = chorusInputR_;
         const f32 delayScale = SmoothScale(gsChorusDelayCurrent_, gsChorusDelayScale_);
@@ -384,8 +392,8 @@ private:
 
     WetPair ProcessReverb(f32 reverbInL, f32 reverbInR) {
         const size_t size = reverbDelayL_.size();
-        reverbInputL_ = FlushTiny(reverbInputL_ + (reverbInL - reverbInputL_) * kReverbInputDamping);
-        reverbInputR_ = FlushTiny(reverbInputR_ + (reverbInR - reverbInputR_) * kReverbInputDamping);
+        reverbInputL_ = FlushTiny(reverbInputL_ + (reverbInL - reverbInputL_) * reverbInputDamping_);
+        reverbInputR_ = FlushTiny(reverbInputR_ + (reverbInR - reverbInputR_) * reverbInputDamping_);
         reverbInL = reverbInputL_;
         reverbInR = reverbInputR_;
         reverbInL = ProcessDelay(reverbPreDelayL_, reverbPreDelayIndexL_, reverbInL);
@@ -481,6 +489,8 @@ private:
 
     u32 sampleRate_ = 44100;
     f32 gsParameterSmoothing_ = kGsParameterSmoothingAt44100;
+    f32 chorusInputDamping_ = kChorusInputDampingAt44100;
+    f32 reverbInputDamping_ = kReverbInputDampingAt44100;
     std::vector<f32> reverbDelayL_;
     std::vector<f32> reverbDelayR_;
     std::vector<f32> reverbPreDelayL_;

@@ -1570,6 +1570,68 @@ namespace {
             "Post-mix GS smoothing should keep similar time response across sample rates");
     }
 
+    void TestPostMixEffectsInputDampingScalesWithSampleRate() {
+        const auto measureChorusOnset = [](u32 sampleRate) {
+            PostMixEffects effects;
+            effects.Init(sampleRate);
+
+            int firstWetFrame = -1;
+            double energy = 0.0;
+            int frames = 0;
+            const int totalFrames = static_cast<int>(sampleRate * 70u / 1000u);
+            const int windowFrames = static_cast<int>(sampleRate * 7u / 1000u);
+            for (int i = 0; i < totalFrames; ++i) {
+                const f32 send = (i == 0) ? 1.0f : 0.0f;
+                const auto out = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, send, send);
+                const double frameWet = std::fabs(out.wetL) + std::fabs(out.wetR);
+                if (firstWetFrame < 0 && frameWet > 1.0e-7) {
+                    firstWetFrame = i;
+                }
+                if (firstWetFrame >= 0 && i >= firstWetFrame && i < firstWetFrame + windowFrames) {
+                    energy += frameWet;
+                    ++frames;
+                }
+            }
+            Require(firstWetFrame >= 0 && frames > 0,
+                "Post-mix chorus input damping should produce a measurable onset");
+            return energy / static_cast<double>(frames);
+        };
+
+        const auto measureReverbOnset = [](u32 sampleRate) {
+            PostMixEffects effects;
+            effects.Init(sampleRate);
+
+            int firstWetFrame = -1;
+            double energy = 0.0;
+            int frames = 0;
+            const int totalFrames = static_cast<int>(sampleRate * 90u / 1000u);
+            const int windowFrames = static_cast<int>(sampleRate * 9u / 1000u);
+            for (int i = 0; i < totalFrames; ++i) {
+                const f32 dry = (i == 0) ? 1.0f : 0.0f;
+                const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+                const double frameWet = std::fabs(out.wetL) + std::fabs(out.wetR);
+                if (firstWetFrame < 0 && frameWet > 1.0e-7) {
+                    firstWetFrame = i;
+                }
+                if (firstWetFrame >= 0 && i >= firstWetFrame && i < firstWetFrame + windowFrames) {
+                    energy += frameWet;
+                    ++frames;
+                }
+            }
+            Require(firstWetFrame >= 0 && frames > 0,
+                "Post-mix reverb input damping should produce a measurable onset");
+            return energy / static_cast<double>(frames);
+        };
+
+        const double chorusRatio = measureChorusOnset(48000) / measureChorusOnset(44100);
+        const double reverbRatio = measureReverbOnset(48000) / measureReverbOnset(44100);
+
+        Require(chorusRatio > 0.80 && chorusRatio < 1.20,
+            "Post-mix chorus input damping should keep similar time response across sample rates");
+        Require(reverbRatio > 0.80 && reverbRatio < 1.20,
+            "Post-mix reverb input damping should keep similar time response across sample rates");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3781,6 +3843,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsChorusModulationChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsFeedbackChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsGsSmoothingScalesWithSampleRate);
+    RUN_TEST(TestPostMixEffectsInputDampingScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusInputDampingSpreadsOnset);
