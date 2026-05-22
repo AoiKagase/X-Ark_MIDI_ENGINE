@@ -1421,6 +1421,42 @@ namespace {
             "Post-mix effect input shaping should soften extreme send levels before the tank");
     }
 
+    void TestPostMixEffectsShapesChorusToReverbSend() {
+        PostMixEffects normalEffects;
+        normalEffects.Init(44100);
+        Require(normalEffects.ApplyGsParameter(0x14, 127),
+            "Post-mix effects should accept maximum GS chorus-to-reverb send");
+        PostMixEffects extremeEffects;
+        extremeEffects.Init(44100);
+        Require(extremeEffects.ApplyGsParameter(0x14, 127),
+            "Post-mix effects should accept maximum GS chorus-to-reverb send");
+
+        double normalLateEnergy = 0.0;
+        double extremeLateEnergy = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 normalChorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto normalOut =
+                normalEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, normalChorusSend, normalChorusSend);
+            if (i > 2000) {
+                normalLateEnergy += std::fabs(normalOut.wetL) + std::fabs(normalOut.wetR);
+            }
+
+            const f32 extremeChorusSend = (i == 0) ? 32.0f : 0.0f;
+            const auto extremeOut =
+                extremeEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, extremeChorusSend, extremeChorusSend);
+            if (i > 2000) {
+                extremeLateEnergy += std::fabs(extremeOut.wetL) + std::fabs(extremeOut.wetR);
+            }
+        }
+
+        Require(normalLateEnergy > 0.0,
+            "Post-mix chorus-to-reverb shaping should preserve normal routed reverb energy");
+        Require(extremeLateEnergy > normalLateEnergy,
+            "Post-mix chorus-to-reverb shaping should still respond to stronger chorus sends");
+        Require(extremeLateEnergy < normalLateEnergy * 16.0,
+            "Post-mix chorus-to-reverb shaping should soften extreme routed reverb energy");
+    }
+
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3300,6 +3336,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
     RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);
+    RUN_TEST(TestPostMixEffectsShapesChorusToReverbSend);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);

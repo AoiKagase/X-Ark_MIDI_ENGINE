@@ -163,7 +163,7 @@ public:
         }
 
         if (!reverbDelayL_.empty()) {
-            const auto reverbWet = ProcessReverb(reverbInL, reverbInR);
+            const auto reverbWet = ProcessReverb(ShapeEffectInput(reverbInL), ShapeEffectInput(reverbInR));
             output.wetL += reverbWet.wetL * (kReverbWetMix * gsReverbWetScale_);
             output.wetR += reverbWet.wetR * (kReverbWetMix * gsReverbWetScale_);
         }
