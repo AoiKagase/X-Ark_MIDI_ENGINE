@@ -1335,6 +1335,7 @@ namespace {
         double smoothedEarlyEnergy = 0.0;
         double immediateEarlyEnergy = 0.0;
         double smoothedLateEnergy = 0.0;
+        double immediateLateEnergy = 0.0;
         for (int i = 0; i < 6000; ++i) {
             const auto smoothedOut =
                 smoothedEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
@@ -1349,14 +1350,17 @@ namespace {
             }
             if (i > 4800) {
                 smoothedLateEnergy += smoothedFrame;
+                immediateLateEnergy += immediateFrame;
             }
         }
 
-        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0,
+        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0 &&
+                smoothedLateEnergy > 0.0 && immediateLateEnergy > 0.0,
             "Post-mix GS wet smoothing should preserve early chorus energy");
         Require(smoothedEarlyEnergy < immediateEarlyEnergy,
             "Post-mix GS wet smoothing should ease into higher chorus levels");
-        Require(smoothedLateEnergy > smoothedEarlyEnergy,
+        Require((smoothedLateEnergy / immediateLateEnergy) >
+                (smoothedEarlyEnergy / immediateEarlyEnergy),
             "Post-mix GS wet smoothing should continue moving toward the requested level");
     }
 
@@ -1379,6 +1383,7 @@ namespace {
         double smoothedEarlyLateEnergy = 0.0;
         double immediateEarlyLateEnergy = 0.0;
         double smoothedLaterEnergy = 0.0;
+        double immediateLaterEnergy = 0.0;
         for (int i = 0; i < 9000; ++i) {
             const auto smoothedOut =
                 smoothedEffects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
@@ -1393,14 +1398,17 @@ namespace {
             }
             if (i > 7000) {
                 smoothedLaterEnergy += smoothedFrame;
+                immediateLaterEnergy += immediateFrame;
             }
         }
 
-        Require(smoothedEarlyLateEnergy > 0.0 && immediateEarlyLateEnergy > 0.0,
+        Require(smoothedEarlyLateEnergy > 0.0 && immediateEarlyLateEnergy > 0.0 &&
+                smoothedLaterEnergy > 0.0 && immediateLaterEnergy > 0.0,
             "Post-mix chorus-to-reverb smoothing should preserve routed reverb energy");
         Require(smoothedEarlyLateEnergy < immediateEarlyLateEnergy,
             "Post-mix chorus-to-reverb smoothing should ease into stronger routed reverb");
-        Require(smoothedLaterEnergy > smoothedEarlyLateEnergy,
+        Require((smoothedLaterEnergy / immediateLaterEnergy) >
+                (smoothedEarlyLateEnergy / immediateEarlyLateEnergy),
             "Post-mix chorus-to-reverb smoothing should continue moving toward the requested route");
     }
 
@@ -1419,6 +1427,7 @@ namespace {
         double smoothedEarlyEnergy = 0.0;
         double immediateEarlyEnergy = 0.0;
         double smoothedLateEnergy = 0.0;
+        double immediateLateEnergy = 0.0;
         for (int i = 0; i < 9000; ++i) {
             const auto smoothedOut =
                 smoothedEffects.ProcessSample(1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
@@ -1433,14 +1442,17 @@ namespace {
             }
             if (i > 7000) {
                 smoothedLateEnergy += smoothedFrame;
+                immediateLateEnergy += immediateFrame;
             }
         }
 
-        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0,
+        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0 &&
+                smoothedLateEnergy > 0.0 && immediateLateEnergy > 0.0,
             "Post-mix master reverb send smoothing should preserve routed dry reverb energy");
         Require(smoothedEarlyEnergy < immediateEarlyEnergy,
             "Post-mix master reverb send smoothing should ease into stronger dry reverb sends");
-        Require(smoothedLateEnergy > smoothedEarlyEnergy,
+        Require((smoothedLateEnergy / immediateLateEnergy) >
+                (smoothedEarlyEnergy / immediateEarlyEnergy),
             "Post-mix master reverb send smoothing should continue moving toward the requested send");
     }
 
@@ -2045,6 +2057,27 @@ namespace {
             "Post-mix wet return side limiter should preserve stereo side energy");
         Require(sideEnergy < midEnergy * 1.35,
             "Post-mix wet return side limiter should avoid excessive side bias");
+    }
+
+    void TestPostMixEffectsWetReturnDcBlockResetsCleanly() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double wetEnergy = 0.0;
+        for (int i = 0; i < 24000; ++i) {
+            const auto out = effects.ProcessSample(0.0f, 0.0f, 0.85f, 0.85f, 0.85f, 0.85f);
+            wetEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+        }
+
+        Require(wetEnergy > 0.0,
+            "Post-mix wet return DC block should preserve sustained wet-return energy");
+
+        effects.ResetAudioState();
+        const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
+            "Post-mix audio reset should clear wet-return DC block output state");
+        Require(!effects.HasAudibleTail(1.0e-7f),
+            "Post-mix reset should clear wet-return DC block state from tail detection");
     }
 
     void TestPostMixEffectsReverbToneDampingSmoothsTail() {
@@ -3860,6 +3893,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
     RUN_TEST(TestPostMixEffectsWetReturnWidthLimitsSideBias);
+    RUN_TEST(TestPostMixEffectsWetReturnDcBlockResetsCleanly);
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);

@@ -96,6 +96,10 @@ public:
         reverbToneR_ = 0.0f;
         reverbLowL_ = 0.0f;
         reverbLowR_ = 0.0f;
+        wetReturnDcInputL_ = 0.0f;
+        wetReturnDcInputR_ = 0.0f;
+        wetReturnDcOutputL_ = 0.0f;
+        wetReturnDcOutputR_ = 0.0f;
         gsReverbWetCurrent_ = gsReverbWetScale_;
         gsReverbFeedbackCurrent_ = gsReverbFeedbackScale_;
         gsMasterReverbSendCurrent_ = gsMasterReverbSendScale_;
@@ -201,8 +205,10 @@ public:
             output.wetR += reverbWet.wetR * (kReverbWetMix * reverbWetScale);
         }
         const auto widenedWet = ApplyWetReturnWidth(output.wetL, output.wetR);
-        output.wetL = ShapeWetReturn(widenedWet.wetL);
-        output.wetR = ShapeWetReturn(widenedWet.wetR);
+        output.wetL = ApplyWetReturnDcBlock(ShapeWetReturn(widenedWet.wetL),
+                                            wetReturnDcInputL_, wetReturnDcOutputL_);
+        output.wetR = ApplyWetReturnDcBlock(ShapeWetReturn(widenedWet.wetR),
+                                            wetReturnDcInputR_, wetReturnDcOutputR_);
         return output;
     }
 
@@ -226,6 +232,8 @@ public:
                HasAudibleScalar(reverbInputL_, threshold) || HasAudibleScalar(reverbInputR_, threshold) ||
                HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
                HasAudibleScalar(reverbLowL_, threshold) || HasAudibleScalar(reverbLowR_, threshold) ||
+               HasAudibleScalar(wetReturnDcInputL_, threshold) || HasAudibleScalar(wetReturnDcInputR_, threshold) ||
+               HasAudibleScalar(wetReturnDcOutputL_, threshold) || HasAudibleScalar(wetReturnDcOutputR_, threshold) ||
                HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
                HasAudibleScalar(chorusInputL_, threshold) || HasAudibleScalar(chorusInputR_, threshold) ||
                HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold) ||
@@ -261,6 +269,7 @@ private:
     static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnMaxSideRatio = 1.25f;
     static constexpr f32 kWetReturnShape = 0.18f;
+    static constexpr f32 kWetReturnDcPole = 0.9950f;
     static constexpr f32 kGsParameterSmoothingAt44100 = 0.0025f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kDenormalGuard = 1.0e-20f;
@@ -319,6 +328,13 @@ private:
         const f32 sideLimit = std::max(std::fabs(mid), 1.0e-6f) * kWetReturnMaxSideRatio;
         const f32 side = Clamp((wetL - wetR) * (0.5f * kWetReturnWidth), -sideLimit, sideLimit);
         return { mid + side, mid - side };
+    }
+
+    static f32 ApplyWetReturnDcBlock(f32 sample, f32& previousInput, f32& previousOutput) {
+        const f32 output = FlushTiny(sample - previousInput + previousOutput * kWetReturnDcPole);
+        previousInput = FlushTiny(sample);
+        previousOutput = output;
+        return output;
     }
 
     size_t DelaySamples(f32 ms) const {
@@ -520,6 +536,10 @@ private:
     f32 reverbToneR_ = 0.0f;
     f32 reverbLowL_ = 0.0f;
     f32 reverbLowR_ = 0.0f;
+    f32 wetReturnDcInputL_ = 0.0f;
+    f32 wetReturnDcInputR_ = 0.0f;
+    f32 wetReturnDcOutputL_ = 0.0f;
+    f32 wetReturnDcOutputR_ = 0.0f;
     size_t reverbTap1_ = 0;
     size_t reverbTap2_ = 0;
     size_t reverbTap3_ = 0;
