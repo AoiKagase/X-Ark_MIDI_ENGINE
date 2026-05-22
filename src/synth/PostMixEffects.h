@@ -218,7 +218,16 @@ public:
                HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
                HasAudibleScalar(reverbLowL_, threshold) || HasAudibleScalar(reverbLowR_, threshold) ||
                HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
-               HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold);
+               HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold) ||
+               HasPendingScale(gsReverbWetCurrent_, gsReverbWetScale_, threshold) ||
+               HasPendingScale(gsReverbFeedbackCurrent_, gsReverbFeedbackScale_, threshold) ||
+               HasPendingScale(gsMasterReverbSendCurrent_, gsMasterReverbSendScale_, threshold) ||
+               HasPendingScale(gsChorusWetCurrent_, gsChorusWetScale_, threshold) ||
+               HasPendingScale(gsChorusFeedbackCurrent_, gsChorusFeedbackScale_, threshold) ||
+               HasPendingScale(gsChorusToReverbCurrent_, gsChorusToReverbScale_, threshold) ||
+               HasPendingScale(gsChorusDelayCurrent_, gsChorusDelayScale_, threshold) ||
+               HasPendingScale(gsChorusDepthCurrent_, gsChorusDepthScale_, threshold) ||
+               HasPendingScale(gsChorusRateCurrent_, gsChorusRateScale_, threshold);
     }
 
 private:
@@ -265,6 +274,10 @@ private:
 
     static bool HasAudibleScalar(f32 value, f32 threshold) {
         return std::fabs(value) >= threshold;
+    }
+
+    static bool HasPendingScale(f32 current, f32 target, f32 threshold) {
+        return std::fabs(target - current) >= threshold;
     }
 
     f32 SmoothScale(f32& current, f32 target) const {

@@ -1661,6 +1661,14 @@ namespace {
     void TestPostMixEffectsTailIncludesSmoothingState() {
         PostMixEffects effects;
         effects.Init(44100);
+        Require(effects.ApplyGsParameter(0x0F, 127),
+            "Post-mix effects should accept GS chorus level before tail smoothing test");
+        Require(effects.HasAudibleTail(1.0e-7f),
+            "Post-mix tail detection should include pending GS smoothing state");
+
+        effects.ResetAudioState();
+        Require(!effects.HasAudibleTail(1.0e-7f),
+            "Post-mix audio reset should sync pending GS smoothing state");
 
         for (int i = 0; i < 1600; ++i) {
             const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
