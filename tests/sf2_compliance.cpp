@@ -1624,6 +1624,36 @@ namespace {
             "Post-mix effects reset should clear chorus tone damping state");
     }
 
+    void TestPostMixEffectsChorusInputDampingSpreadsOnset() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int firstWetFrame = -1;
+        int onsetFrames = 0;
+        double onsetEnergy = 0.0;
+        double totalEnergy = 0.0;
+        for (int i = 0; i < 1200; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            const f32 frameWet = std::fabs(out.wetL) + std::fabs(out.wetR);
+            totalEnergy += frameWet;
+            if (firstWetFrame < 0 && frameWet > 1.0e-7f) {
+                firstWetFrame = i;
+            }
+            if (firstWetFrame >= 0 && i >= firstWetFrame && i < firstWetFrame + 32 && frameWet > 1.0e-7f) {
+                ++onsetFrames;
+                onsetEnergy += frameWet;
+            }
+        }
+
+        Require(firstWetFrame >= 0,
+            "Post-mix chorus input damping should preserve the first chorus onset");
+        Require(onsetFrames > 2,
+            "Post-mix chorus input damping should spread a sharp send across multiple wet frames");
+        Require(onsetEnergy > 0.0 && totalEnergy > onsetEnergy,
+            "Post-mix chorus input damping should leave energy for the later chorus return");
+    }
+
     void TestPostMixEffectsChorusRateScalesWithSampleRate() {
         PostMixEffects at44100;
         at44100.Init(44100);
@@ -3753,6 +3783,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsGsSmoothingScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
+    RUN_TEST(TestPostMixEffectsChorusInputDampingSpreadsOnset);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);
     RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
     RUN_TEST(TestPostMixEffectsFlushesTinyAudioState);

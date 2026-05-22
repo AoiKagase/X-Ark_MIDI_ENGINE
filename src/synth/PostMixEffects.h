@@ -106,6 +106,8 @@ public:
         chorusCos_ = 1.0f;
         chorusDampL_ = 0.0f;
         chorusDampR_ = 0.0f;
+        chorusInputL_ = 0.0f;
+        chorusInputR_ = 0.0f;
         chorusToneL_ = 0.0f;
         chorusToneR_ = 0.0f;
     }
@@ -221,6 +223,7 @@ public:
                HasAudibleScalar(reverbToneL_, threshold) || HasAudibleScalar(reverbToneR_, threshold) ||
                HasAudibleScalar(reverbLowL_, threshold) || HasAudibleScalar(reverbLowR_, threshold) ||
                HasAudibleScalar(chorusDampL_, threshold) || HasAudibleScalar(chorusDampR_, threshold) ||
+               HasAudibleScalar(chorusInputL_, threshold) || HasAudibleScalar(chorusInputR_, threshold) ||
                HasAudibleScalar(chorusToneL_, threshold) || HasAudibleScalar(chorusToneR_, threshold) ||
                HasPendingScale(gsReverbWetCurrent_, gsReverbWetScale_, threshold) ||
                HasPendingScale(gsReverbFeedbackCurrent_, gsReverbFeedbackScale_, threshold) ||
@@ -237,6 +240,7 @@ private:
     static constexpr f32 kChorusFeedback = 0.22f;
     static constexpr f32 kChorusWetMix = 0.45f;
     static constexpr f32 kChorusToReverb = 0.30f;
+    static constexpr f32 kChorusInputDamping = 0.62f;
     static constexpr f32 kChorusDamping = 0.52f;
     static constexpr f32 kChorusSecondaryMix = 0.34f;
     static constexpr f32 kChorusToneDamping = 0.76f;
@@ -327,6 +331,10 @@ private:
 
     WetPair ProcessChorus(f32 chorusInL, f32 chorusInR) {
         const size_t size = chorusDelayL_.size();
+        chorusInputL_ = FlushTiny(chorusInputL_ + (chorusInL - chorusInputL_) * kChorusInputDamping);
+        chorusInputR_ = FlushTiny(chorusInputR_ + (chorusInR - chorusInputR_) * kChorusInputDamping);
+        chorusInL = chorusInputL_;
+        chorusInR = chorusInputR_;
         const f32 delayScale = SmoothScale(gsChorusDelayCurrent_, gsChorusDelayScale_);
         const f32 depthScale = SmoothScale(gsChorusDepthCurrent_, gsChorusDepthScale_);
         const f32 rateScale = SmoothScale(gsChorusRateCurrent_, gsChorusRateScale_);
@@ -522,6 +530,8 @@ private:
     f32 chorusBasePhaseStep_ = (kTwoPi * kChorusRateHz) / 44100.0f;
     f32 chorusDampL_ = 0.0f;
     f32 chorusDampR_ = 0.0f;
+    f32 chorusInputL_ = 0.0f;
+    f32 chorusInputR_ = 0.0f;
     f32 chorusToneL_ = 0.0f;
     f32 chorusToneR_ = 0.0f;
     f32 gsReverbWetScale_ = 1.0f;
