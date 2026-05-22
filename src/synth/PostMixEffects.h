@@ -215,6 +215,7 @@ private:
     static constexpr f32 kReverbLowTrim = 0.18f;
     static constexpr f32 kEarlyReflectionMix = 0.16f;
     static constexpr f32 kWetReturnWidth = 1.14f;
+    static constexpr f32 kWetReturnMaxSideRatio = 1.25f;
     static constexpr f32 kWetReturnShape = 0.18f;
     static constexpr f32 kEffectInputShape = 0.10f;
     static constexpr f32 kMasterReverbSend = 0.28f;
@@ -252,7 +253,8 @@ private:
 
     static WetPair ApplyWetReturnWidth(f32 wetL, f32 wetR) {
         const f32 mid = (wetL + wetR) * 0.5f;
-        const f32 side = (wetL - wetR) * (0.5f * kWetReturnWidth);
+        const f32 sideLimit = std::max(std::fabs(mid), 1.0e-6f) * kWetReturnMaxSideRatio;
+        const f32 side = Clamp((wetL - wetR) * (0.5f * kWetReturnWidth), -sideLimit, sideLimit);
         return { mid + side, mid - side };
     }
 

@@ -1568,6 +1568,25 @@ namespace {
             "Post-mix wet return width should preserve stereo spread from the effect tank");
     }
 
+    void TestPostMixEffectsWetReturnWidthLimitsSideBias() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double midEnergy = 0.0;
+        double sideEnergy = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 reverbSendL = (i == 0) ? 16.0f : 0.0f;
+            const auto out = effects.ProcessSample(0.0f, 0.0f, reverbSendL, 0.0f, 0.0f, 0.0f);
+            midEnergy += std::fabs((out.wetL + out.wetR) * 0.5f);
+            sideEnergy += std::fabs((out.wetL - out.wetR) * 0.5f);
+        }
+
+        Require(sideEnergy > 0.0,
+            "Post-mix wet return side limiter should preserve stereo side energy");
+        Require(sideEnergy < midEnergy * 1.35,
+            "Post-mix wet return side limiter should avoid excessive side bias");
+    }
+
     void TestPostMixEffectsReverbToneDampingSmoothsTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3368,6 +3387,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
+    RUN_TEST(TestPostMixEffectsWetReturnWidthLimitsSideBias);
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
