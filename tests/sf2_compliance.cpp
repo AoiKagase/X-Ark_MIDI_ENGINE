@@ -1404,6 +1404,46 @@ namespace {
             "Post-mix chorus-to-reverb smoothing should continue moving toward the requested route");
     }
 
+    void TestPostMixEffectsMasterReverbSendChangesAreSmoothed() {
+        PostMixEffects smoothedEffects;
+        smoothedEffects.Init(44100);
+        Require(smoothedEffects.ApplyGsParameter(0x0A, 127),
+            "Post-mix effects should accept high GS master reverb send before smoothing test");
+
+        PostMixEffects immediateEffects;
+        immediateEffects.Init(44100);
+        Require(immediateEffects.ApplyGsParameter(0x0A, 127),
+            "Post-mix effects should accept high GS master reverb send before immediate reset");
+        immediateEffects.ResetAudioState();
+
+        double smoothedEarlyEnergy = 0.0;
+        double immediateEarlyEnergy = 0.0;
+        double smoothedLateEnergy = 0.0;
+        for (int i = 0; i < 9000; ++i) {
+            const auto smoothedOut =
+                smoothedEffects.ProcessSample(1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+            const auto immediateOut =
+                immediateEffects.ProcessSample(1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+            const f32 smoothedFrame = std::fabs(smoothedOut.wetL) + std::fabs(smoothedOut.wetR);
+            const f32 immediateFrame = std::fabs(immediateOut.wetL) + std::fabs(immediateOut.wetR);
+            if (i > 900 && i < 2600) {
+                smoothedEarlyEnergy += smoothedFrame;
+                immediateEarlyEnergy += immediateFrame;
+            }
+            if (i > 7000) {
+                smoothedLateEnergy += smoothedFrame;
+            }
+        }
+
+        Require(smoothedEarlyEnergy > 0.0 && immediateEarlyEnergy > 0.0,
+            "Post-mix master reverb send smoothing should preserve routed dry reverb energy");
+        Require(smoothedEarlyEnergy < immediateEarlyEnergy,
+            "Post-mix master reverb send smoothing should ease into stronger dry reverb sends");
+        Require(smoothedLateEnergy > smoothedEarlyEnergy,
+            "Post-mix master reverb send smoothing should continue moving toward the requested send");
+    }
+
     void TestPostMixEffectsChorusSecondaryTapThickensReturn() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3526,6 +3566,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsAudioResetPreservesGsState);
     RUN_TEST(TestPostMixEffectsGsWetChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusToReverbChangesAreSmoothed);
+    RUN_TEST(TestPostMixEffectsMasterReverbSendChangesAreSmoothed);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
     RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsChorusRateScalesWithSampleRate);

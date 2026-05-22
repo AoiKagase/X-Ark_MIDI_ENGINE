@@ -88,6 +88,7 @@ public:
         reverbLowL_ = 0.0f;
         reverbLowR_ = 0.0f;
         gsReverbWetCurrent_ = gsReverbWetScale_;
+        gsMasterReverbSendCurrent_ = gsMasterReverbSendScale_;
         gsChorusWetCurrent_ = gsChorusWetScale_;
         gsChorusToReverbCurrent_ = gsChorusToReverbScale_;
         chorusIndex_ = 0;
@@ -161,8 +162,10 @@ public:
     Output ProcessSample(f32 dryL, f32 dryR, f32 reverbSendL, f32 reverbSendR,
                          f32 chorusSendL, f32 chorusSendR) {
         Output output{};
-        f32 reverbInL = ShapeEffectInput(reverbSendL + dryL * (kMasterReverbSend * gsMasterReverbSendScale_));
-        f32 reverbInR = ShapeEffectInput(reverbSendR + dryR * (kMasterReverbSend * gsMasterReverbSendScale_));
+        const f32 masterReverbSendScale =
+            SmoothScale(gsMasterReverbSendCurrent_, gsMasterReverbSendScale_);
+        f32 reverbInL = ShapeEffectInput(reverbSendL + dryL * (kMasterReverbSend * masterReverbSendScale));
+        f32 reverbInR = ShapeEffectInput(reverbSendR + dryR * (kMasterReverbSend * masterReverbSendScale));
 
         if (!chorusDelayL_.empty()) {
             const auto chorusWet = ProcessChorus(ShapeEffectInput(chorusSendL), ShapeEffectInput(chorusSendR));
@@ -483,6 +486,7 @@ private:
     f32 gsReverbWetCurrent_ = 1.0f;
     f32 gsReverbFeedbackScale_ = 1.0f;
     f32 gsMasterReverbSendScale_ = 1.0f;
+    f32 gsMasterReverbSendCurrent_ = 1.0f;
     f32 gsChorusWetScale_ = 1.0f;
     f32 gsChorusWetCurrent_ = 1.0f;
     f32 gsChorusFeedbackScale_ = 1.0f;
