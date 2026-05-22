@@ -89,6 +89,7 @@ public:
         reverbLowR_ = 0.0f;
         gsReverbWetCurrent_ = gsReverbWetScale_;
         gsChorusWetCurrent_ = gsChorusWetScale_;
+        gsChorusToReverbCurrent_ = gsChorusToReverbScale_;
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
@@ -168,8 +169,10 @@ public:
             const f32 chorusWetScale = SmoothScale(gsChorusWetCurrent_, gsChorusWetScale_);
             output.wetL += chorusWet.wetL * (kChorusWetMix * chorusWetScale);
             output.wetR += chorusWet.wetR * (kChorusWetMix * chorusWetScale);
-            reverbInL += chorusWet.wetL * (kChorusToReverb * gsChorusToReverbScale_);
-            reverbInR += chorusWet.wetR * (kChorusToReverb * gsChorusToReverbScale_);
+            const f32 chorusToReverbScale =
+                SmoothScale(gsChorusToReverbCurrent_, gsChorusToReverbScale_);
+            reverbInL += chorusWet.wetL * (kChorusToReverb * chorusToReverbScale);
+            reverbInR += chorusWet.wetR * (kChorusToReverb * chorusToReverbScale);
         }
 
         if (!reverbDelayL_.empty()) {
@@ -484,6 +487,7 @@ private:
     f32 gsChorusWetCurrent_ = 1.0f;
     f32 gsChorusFeedbackScale_ = 1.0f;
     f32 gsChorusToReverbScale_ = 1.0f;
+    f32 gsChorusToReverbCurrent_ = 1.0f;
     f32 gsChorusDelayScale_ = 1.0f;
     f32 gsChorusDepthScale_ = 1.0f;
     f32 gsChorusRateScale_ = 1.0f;
