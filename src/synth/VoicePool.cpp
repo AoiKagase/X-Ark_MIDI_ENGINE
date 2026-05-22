@@ -13,6 +13,7 @@
 #include <limits>
 #include <string>
 #include <array>
+#include <algorithm>
 
 namespace XArkMidi {
 
@@ -1177,6 +1178,22 @@ bool VoicePool::IsChannelAudible(u32 audibleChannelMask, u8 channel) {
     return (audibleChannelMask & (1u << channel)) != 0;
 }
 
+void VoicePool::AccumulateRenderedPeak(const f32* beforeL, const f32* beforeR,
+                                       const f32* afterL, const f32* afterR,
+                                       u32 numFrames, u8 channel,
+                                       std::array<f32, MIDI_CHANNEL_COUNT>& channelPeaks) {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return;
+    }
+
+    f32 peak = channelPeaks[channel];
+    for (u32 i = 0; i < numFrames; ++i) {
+        peak = std::max(peak, std::fabs(afterL[i] - beforeL[i]));
+        peak = std::max(peak, std::fabs(afterR[i] - beforeR[i]));
+    }
+    channelPeaks[channel] = peak;
+}
+
 int VoicePool::RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR,
                             u32 audibleChannelMask) {
     u16 write = 0;
@@ -1213,9 +1230,17 @@ int VoicePool::RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f3
 }
 
 int VoicePool::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames,
-                           u32 audibleChannelMask) {
+                           u32 audibleChannelMask,
+                           std::array<f32, MIDI_CHANNEL_COUNT>* channelPeaks) {
     const u16 localActiveCount = activeCount_;
-    const bool useParallel = !workers_.empty() && localActiveCount >= 24 && numFrames >= 256;
+    const bool useParallel = !channelPeaks && !workers_.empty() && localActiveCount >= 24 && numFrames >= 256;
+    std::vector<f32> beforeL;
+    std::vector<f32> beforeR;
+    if (channelPeaks) {
+        channelPeaks->fill(0.0f);
+        beforeL.resize(numFrames);
+        beforeR.resize(numFrames);
+    }
 
     if (useParallel) {
         const u16 totalTasks = std::min<u16>(static_cast<u16>(workers_.size() + 1), localActiveCount);
@@ -1284,12 +1309,26 @@ int VoicePool::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32
                 continue;
             }
             if (IsChannelAudible(audibleChannelMask, v.channel)) {
+                if (channelPeaks) {
+                    std::copy_n(outL, numFrames, beforeL.data());
+                    std::copy_n(outR, numFrames, beforeR.data());
+                }
                 v.RenderBlock(outL, outR, reverbL, reverbR, chorusL, chorusR, numFrames);
+                if (channelPeaks) {
+                    AccumulateRenderedPeak(beforeL.data(), beforeR.data(), outL, outR, numFrames, v.channel, *channelPeaks);
+                }
             }
             if (v.HasLinkedVoice()) {
                 auto& linked = voices_[v.linkedVoiceIndex];
                 if (linked.active && IsChannelAudible(audibleChannelMask, linked.channel)) {
+                    if (channelPeaks) {
+                        std::copy_n(outL, numFrames, beforeL.data());
+                        std::copy_n(outR, numFrames, beforeR.data());
+                    }
                     linked.RenderBlock(outL, outR, reverbL, reverbR, chorusL, chorusR, numFrames);
+                    if (channelPeaks) {
+                        AccumulateRenderedPeak(beforeL.data(), beforeR.data(), outL, outR, numFrames, linked.channel, *channelPeaks);
+                    }
                 }
                 if (!linked.active) {
                     linked.Kill();

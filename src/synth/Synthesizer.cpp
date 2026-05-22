@@ -366,6 +366,7 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
         channels_[ch].Reset();
         channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
         channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
+        channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
     }
 
     if (!sequencer_.Init(midi, sampleRate)) {
@@ -379,6 +380,9 @@ bool Synthesizer::Init(const MidiFile* midi, const SoundBank* soundBank,
 u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     outputStage_.BeginMeterBlock();
     if (finished_ || !soundBank_) {
+        for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+            channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
+        }
         return 0;
     }
     dryBlockL_.resize(numFrames);
@@ -389,6 +393,7 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     chorusBlockR_.resize(numFrames);
 
     u32 frame = 0;
+    std::array<f32, MIDI_CHANNEL_COUNT> renderChannelPeaks{};
     while (frame < numFrames) {
         if (sequencer_.IsAtLoopEnd()) {
             if (TryRestartLoop()) {
@@ -434,11 +439,15 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
             channelMuteMask_.load(std::memory_order_relaxed),
             channelSoloMask_.load(std::memory_order_relaxed));
 
+        std::array<f32, MIDI_CHANNEL_COUNT> blockChannelPeaks{};
         const int activeVoices = voicePool_.RenderBlock(
             dryBlockL_.data(), dryBlockR_.data(),
             reverbBlockL_.data(), reverbBlockR_.data(),
             chorusBlockL_.data(), chorusBlockR_.data(),
-            blockFrames, audibleChannelMask);
+            blockFrames, audibleChannelMask, &blockChannelPeaks);
+        for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+            renderChannelPeaks[ch] = std::max(renderChannelPeaks[ch], blockChannelPeaks[ch]);
+        }
         std::array<u32, MIDI_CHANNEL_COUNT> activeRootCounts{};
         voicePool_.GetActiveRootNoteCountsPerChannel(activeRootCounts);
         for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
@@ -492,6 +501,10 @@ u32 Synthesizer::Render(i16* buf, u32 numFrames) {
     // シーケンサー完了後もボイスが鳴り終わるまで続ける
     if (sequencer_.IsFinished() && voicePool_.ActiveCount() == 0 && !HasAudibleEffectTail()) {
         finished_ = true;
+    }
+
+    for (u32 ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
+        channelAudioPeakView_[ch].store(renderChannelPeaks[ch], std::memory_order_relaxed);
     }
 
     return numFrames;
@@ -558,6 +571,13 @@ u32 Synthesizer::GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const {
     return channelActiveKeyMasksView_[channel][wordIndex].load(std::memory_order_relaxed);
 }
 
+f32 Synthesizer::GetChannelAudioPeak(u32 channel) const {
+    if (channel >= MIDI_CHANNEL_COUNT) {
+        return 0.0f;
+    }
+    return channelAudioPeakView_[channel].load(std::memory_order_relaxed);
+}
+
 bool Synthesizer::PopChannelKeyEvent(ChannelKeyEvent& eventOut) {
     std::lock_guard<std::mutex> lock(channelKeyEventMutex_);
     if (channelKeyEvents_.empty()) {
@@ -617,6 +637,7 @@ void Synthesizer::ResetPlaybackState(bool resetLoopProgress) {
         channels_[ch].isDrum = (ch == MIDI_DRUM_CHANNEL);
         channelProgramView_[ch].store(channels_[ch].program, std::memory_order_relaxed);
         channelActiveNoteCountView_[ch].store(0, std::memory_order_relaxed);
+        channelAudioPeakView_[ch].store(0.0f, std::memory_order_relaxed);
         channelHeldKeyCounts_[ch].fill(0);
         for (u32 wordIndex = 0; wordIndex < 4; ++wordIndex) {
             channelActiveKeyMasksView_[ch][wordIndex].store(0, std::memory_order_relaxed);

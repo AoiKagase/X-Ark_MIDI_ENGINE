@@ -50,6 +50,7 @@ public:
     int GetChannelProgram(u32 channel) const;
     u32 GetChannelActiveNoteCount(u32 channel) const;
     u32 GetChannelActiveKeyMaskWord(u32 channel, u32 wordIndex) const;
+    f32 GetChannelAudioPeak(u32 channel) const;
     bool PopChannelKeyEvent(ChannelKeyEvent& eventOut);
     u64 GetCurrentFramePosition() const;
     u64 GetLengthFramesEstimate() const;
@@ -96,6 +97,7 @@ private:
     std::atomic<u32> channelSoloMask_{0};
     std::array<std::atomic<u8>, MIDI_CHANNEL_COUNT> channelProgramView_{};
     std::array<std::atomic<u32>, MIDI_CHANNEL_COUNT> channelActiveNoteCountView_{};
+    std::array<std::atomic<f32>, MIDI_CHANNEL_COUNT> channelAudioPeakView_{};
     std::array<std::array<std::atomic<u32>, 4>, MIDI_CHANNEL_COUNT> channelActiveKeyMasksView_{};
     std::array<std::array<u16, 128>, MIDI_CHANNEL_COUNT> channelHeldKeyCounts_{};
     mutable std::mutex channelKeyEventMutex_;

@@ -238,6 +238,9 @@ public static class XArkMidiEngine
     private static extern uint XAmeGetChannelActiveNoteCount(IntPtr engine, uint channel);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern float XAmeGetChannelAudioPeak(IntPtr engine, uint channel);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern uint XAmeGetChannelActiveKeyMaskWord(IntPtr engine, uint channel, uint wordIndex);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -542,6 +545,16 @@ public static class XArkMidiEngine
         {
             ThrowIfDisposed();
             return XAmeGetChannelActiveNoteCount(_handle, channel);
+        }
+
+        /// <summary>
+        /// Get the peak dry audio contribution for a MIDI channel from the most recent render call.
+        /// 直近レンダリングでの指定 MIDI チャンネルのドライ音声ピークを取得します。
+        /// </summary>
+        public float GetChannelAudioPeak(uint channel)
+        {
+            ThrowIfDisposed();
+            return XAmeGetChannelAudioPeak(_handle, channel);
         }
 
         /// <summary>

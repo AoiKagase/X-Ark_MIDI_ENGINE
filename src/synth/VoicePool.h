@@ -61,7 +61,8 @@ public:
     int RenderSample(f32& outL, f32& outR, f32& reverbL, f32& reverbR, f32& chorusL, f32& chorusR,
                      u32 audibleChannelMask = 0xFFFFu);
     int RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* chorusL, f32* chorusR, u32 numFrames,
-                    u32 audibleChannelMask = 0xFFFFu);
+                    u32 audibleChannelMask = 0xFFFFu,
+                    std::array<f32, MIDI_CHANNEL_COUNT>* channelPeaks = nullptr);
 
     // アクティブなボイス数
     int ActiveCount() const;
@@ -106,6 +107,10 @@ private:
     Voice* AllocVoice(u8 channel, u8 key);
     bool HasActiveNote(u8 channel, u8 key, u32 noteId) const;
     static bool IsChannelAudible(u32 audibleChannelMask, u8 channel);
+    static void AccumulateRenderedPeak(const f32* beforeL, const f32* beforeR,
+                                       const f32* afterL, const f32* afterR,
+                                       u32 numFrames, u8 channel,
+                                       std::array<f32, MIDI_CHANNEL_COUNT>& channelPeaks);
     void TrackVoice(u16 index);
     void UntrackVoice(u16 index);
     void WorkerLoop(u16 workerIndex);

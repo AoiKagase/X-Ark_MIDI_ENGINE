@@ -270,6 +270,8 @@ XAME_API unsigned int XAmeGetChannelSoloMask(XAmeEngine engine);
 XAME_API int XAmeGetChannelProgram(XAmeEngine engine, unsigned int channel);
 /* Get the number of currently active notes for a MIDI channel. 指定チャンネルで現在発音中のノート数を取得します。 */
 XAME_API unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int channel);
+/* Get the peak dry audio contribution for a MIDI channel from the most recent render call. 直近レンダリングでの指定チャンネルのドライ音声ピークを取得します。 */
+XAME_API float XAmeGetChannelAudioPeak(XAmeEngine engine, unsigned int channel);
 /* Get one 32-bit word of the active key bitset for a MIDI channel. アクティブキーのビットセット 32bit 分を取得します。 */
 XAME_API unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex);
 /* Pop the oldest queued channel key event. Returns non-zero if an event was written to outEvent. 最も古いキーイベントを取り出します。 */

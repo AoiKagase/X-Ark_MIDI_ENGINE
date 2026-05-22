@@ -404,6 +404,13 @@ unsigned int XAmeGetChannelActiveNoteCount(XAmeEngine engine, unsigned int chann
     return engine->synthesizer.GetChannelActiveNoteCount(channel);
 }
 
+float XAmeGetChannelAudioPeak(XAmeEngine engine, unsigned int channel) {
+    if (!engine || !engine->initialized) {
+        return 0.0f;
+    }
+    return engine->synthesizer.GetChannelAudioPeak(channel);
+}
+
 unsigned int XAmeGetChannelActiveKeyMaskWord(XAmeEngine engine, unsigned int channel, unsigned int wordIndex) {
     if (!engine || !engine->initialized) {
         return 0;

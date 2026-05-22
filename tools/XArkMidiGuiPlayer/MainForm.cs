@@ -22,6 +22,7 @@ public sealed class MainForm : Form
     private readonly Button _browseSoundFontButton = new() { Text = "Open Bank..." };
     private readonly Button _playButton = new() { Text = "Play", Width = 90 };
     private readonly Button _stopButton = new() { Text = "Stop", Width = 90, Enabled = false };
+    private readonly Button _exportWavButton = new() { Text = "Export WAV...", Width = 110 };
     private readonly CheckBox _loopEnabledCheckBox = new() { AutoSize = true, Text = "Loop" };
     private readonly NumericUpDown _loopCountUpDown = new() {
         Width = 80,
@@ -80,11 +81,14 @@ public sealed class MainForm : Form
         DropDownStyle = ComboBoxStyle.DropDownList,
         Width = 140,
     };
+    private readonly GroupBox _channelLevelGroup = new() { Dock = DockStyle.Fill, Text = "Channel Levels" };
+    private readonly ChannelLevelMeterControl _channelLevelMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(0, 72) };
     private readonly DataGridView _channelGrid = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
     private readonly BindingList<ChannelRow> _channels = new();
     private readonly OpenFileDialog _midiDialog = new() { Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*" };
     private readonly OpenFileDialog _soundFontDialog = new() { Filter = "Sound banks (*.sf2;*.dls)|*.sf2;*.dls|SoundFont (*.sf2)|*.sf2|DLS (*.dls)|*.dls|All files (*.*)|*.*" };
+    private readonly SaveFileDialog _wavSaveDialog = new() { Filter = "WAV audio (*.wav)|*.wav|All files (*.*)|*.*", DefaultExt = "wav", AddExtension = true };
     private readonly Label _keyboardLabel = new() { AutoSize = true, Text = "Keyboard: Ch 1" };
     private readonly PianoKeyboardControl _keyboard = new() { Dock = DockStyle.Fill, Height = 120, MinimumSize = new Size(0, 120) };
     private readonly ToolTip _optionToolTip = new() {
@@ -99,6 +103,7 @@ public sealed class MainForm : Form
     private bool _suppressSeekEvents;
     private bool _seekDragActive;
     private bool _seekRestartInFlight;
+    private bool _exportInFlight;
 
     public MainForm()
     {
@@ -135,7 +140,7 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 7,
+            RowCount = 8,
             Padding = new Padding(12),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -143,6 +148,7 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
@@ -172,6 +178,7 @@ public sealed class MainForm : Form
         };
         playbackControls.Controls.Add(_playButton);
         playbackControls.Controls.Add(_stopButton);
+        playbackControls.Controls.Add(_exportWavButton);
         playbackControls.Controls.Add(new Label { AutoSize = true, Width = 12 });
         playbackControls.Controls.Add(_loopEnabledCheckBox);
         playbackControls.Controls.Add(CreateInlineLabel("Count"));
@@ -202,14 +209,16 @@ public sealed class MainForm : Form
 
         ConfigureCreateOptionsPanel();
         ConfigureGrid();
+        _channelLevelGroup.Controls.Add(_channelLevelMeter);
 
         root.Controls.Add(filePanel, 0, 0);
         root.Controls.Add(controlPanel, 0, 1);
         root.Controls.Add(seekPanel, 0, 2);
         root.Controls.Add(_createOptionsGroup, 0, 3);
-        root.Controls.Add(_channelGrid, 0, 4);
-        root.Controls.Add(_keyboardLabel, 0, 5);
-        root.Controls.Add(_keyboard, 0, 6);
+        root.Controls.Add(_channelLevelGroup, 0, 4);
+        root.Controls.Add(_channelGrid, 0, 5);
+        root.Controls.Add(_keyboardLabel, 0, 6);
+        root.Controls.Add(_keyboard, 0, 7);
         Controls.Add(root);
     }
 
@@ -380,6 +389,7 @@ public sealed class MainForm : Form
         _browseSoundFontButton.Click += (_, _) => BrowseFile(_soundFontDialog, _soundFontPathTextBox);
         _playButton.Click += async (_, _) => await StartPlaybackAsync();
         _stopButton.Click += (_, _) => StopPlayback();
+        _exportWavButton.Click += async (_, _) => await ExportWavAsync();
         _loopEnabledCheckBox.CheckedChanged += (_, _) => {
             _loopCountUpDown.Enabled = _loopEnabledCheckBox.Checked;
             ApplyLoopToPlayer();
@@ -423,6 +433,75 @@ public sealed class MainForm : Form
         }
         if (dialog.ShowDialog(this) == DialogResult.OK) {
             textBox.Text = dialog.FileName;
+        }
+    }
+
+    private async Task ExportWavAsync()
+    {
+        if (_exportInFlight) {
+            return;
+        }
+        if (_player is not null) {
+            MessageBox.Show(this, "Stop playback before exporting WAV.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!File.Exists(_midiPathTextBox.Text)) {
+            MessageBox.Show(this, "MIDI file not found.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!File.Exists(_soundFontPathTextBox.Text)) {
+            MessageBox.Show(this, "Sound bank file not found.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (_loopEnabledCheckBox.Checked && DecimalToUInt32(_loopCountUpDown.Value) == 0) {
+            MessageBox.Show(this, "Infinite loop export is not available. Set a finite loop count first.",
+                "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_midiPathTextBox.Text)) {
+            _wavSaveDialog.FileName = Path.ChangeExtension(Path.GetFileName(_midiPathTextBox.Text), ".wav");
+        }
+        if (_wavSaveDialog.ShowDialog(this) != DialogResult.OK) {
+            return;
+        }
+
+        var midiPath = _midiPathTextBox.Text;
+        var soundFontPath = _soundFontPathTextBox.Text;
+        var outputPath = _wavSaveDialog.FileName;
+        var createOptions = CreatePlayerOptions();
+        var muteMask = BuildMuteMaskFromRows();
+        var soloMask = BuildSoloMaskFromRows();
+        var loopEnabled = _loopEnabledCheckBox.Checked;
+        var loopCount = DecimalToUInt32(_loopCountUpDown.Value);
+        var progress = new Progress<WavExportProgress>(p => {
+            _statusLabel.Text = p.TotalSeconds > 0.0
+                ? $"Exporting {FormatPlaybackTime(p.CurrentSeconds)} / {FormatPlaybackTime(p.TotalSeconds)}"
+                : $"Exporting {FormatPlaybackTime(p.CurrentSeconds)}";
+        });
+
+        _exportInFlight = true;
+        UpdateCreateOptionsEnabledState();
+        _statusLabel.Text = "Exporting";
+        try {
+            await Task.Run(() => RenderWavFile(
+                midiPath,
+                soundFontPath,
+                outputPath,
+                createOptions,
+                muteMask,
+                soloMask,
+                loopEnabled,
+                loopCount,
+                progress));
+            _statusLabel.Text = "Exported WAV";
+            MessageBox.Show(this, "WAV export completed.", "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        } catch (Exception ex) {
+            _statusLabel.Text = "Export error";
+            MessageBox.Show(this, ex.Message, "X-Ark MIDI GUI Player", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        } finally {
+            _exportInFlight = false;
+            UpdateCreateOptionsEnabledState();
         }
     }
 
@@ -511,6 +590,28 @@ public sealed class MainForm : Form
         _player.SetChannelMasks(muteMask, soloMask);
     }
 
+    private uint BuildMuteMaskFromRows()
+    {
+        uint muteMask = 0;
+        for (int i = 0; i < ChannelCount; ++i) {
+            if (!_channels[i].On) {
+                muteMask |= 1u << i;
+            }
+        }
+        return muteMask;
+    }
+
+    private uint BuildSoloMaskFromRows()
+    {
+        uint soloMask = 0;
+        for (int i = 0; i < ChannelCount; ++i) {
+            if (_channels[i].Solo) {
+                soloMask |= 1u << i;
+            }
+        }
+        return soloMask;
+    }
+
     private void ApplyLoopToPlayer()
     {
         _player?.SetLoop(_loopEnabledCheckBox.Checked, DecimalToUInt32(_loopCountUpDown.Value));
@@ -525,6 +626,7 @@ public sealed class MainForm : Form
             }
             _keyboard.ActiveKeyMasks = new uint[KeyMaskWordCount];
             _keyboard.ClearTransientEvents();
+            _channelLevelMeter.Clear();
             UpdateLampStyles();
             UpdateKeyboardLabel();
             _outputStageMeter.Clear();
@@ -549,6 +651,7 @@ public sealed class MainForm : Form
             _suppressMaskEvents = false;
         }
         var selectedChannel = SelectedChannelIndex();
+        _channelLevelMeter.SetLevels(snapshot.AudioPeaks, snapshot.MuteMask, snapshot.SoloMask);
         _keyboard.ActiveKeyMasks = snapshot.ActiveKeyMasks[selectedChannel];
         _keyboard.ApplyChannelEvents(selectedChannel, channelEvents);
         UpdateLampStyles();
@@ -650,7 +753,9 @@ public sealed class MainForm : Form
 
     private void UpdateCreateOptionsEnabledState()
     {
-        _createOptionsGroup.Enabled = _player is null;
+        var idle = _player is null && !_exportInFlight;
+        _createOptionsGroup.Enabled = idle;
+        _exportWavButton.Enabled = idle;
     }
 
     private void RefreshSeekUi()
@@ -726,6 +831,53 @@ public sealed class MainForm : Form
     private static ulong DecimalToUInt64(decimal value)
     {
         return decimal.ToUInt64(decimal.Truncate(value));
+    }
+
+    private static void RenderWavFile(
+        string midiPath,
+        string soundFontPath,
+        string outputPath,
+        XArkMidiEngine.CreateOptions createOptions,
+        uint muteMask,
+        uint soloMask,
+        bool loopEnabled,
+        uint loopCount,
+        IProgress<WavExportProgress>? progress)
+    {
+        using var engine = new XArkMidiEngine.Engine(
+            midiPath,
+            soundFontPath,
+            WaveOutPlayer.DetectSoundBankKind(soundFontPath),
+            WaveOutPlayer.SampleRate,
+            WaveOutPlayer.NumChannels,
+            createOptions);
+        engine.ChannelMuteMask = muteMask;
+        engine.ChannelSoloMask = soloMask;
+        engine.SetLoop(loopEnabled, loopCount);
+
+        var estimatedFrames = engine.LengthFramesEstimate;
+        if (loopEnabled) {
+            estimatedFrames = checked(estimatedFrames * ((ulong)loopCount + 1UL));
+        }
+
+        using var writer = new WavDumpWriter(outputPath, WaveOutPlayer.SampleRate, WaveOutPlayer.NumChannels, bitsPerSample: 16);
+        var buffer = new short[WaveOutPlayer.FramesPerBuffer * WaveOutPlayer.NumChannels];
+        ulong lastReportedFrame = 0;
+        while (!engine.IsFinished) {
+            var written = engine.Render(buffer, WaveOutPlayer.FramesPerBuffer);
+            if (written == 0) {
+                break;
+            }
+
+            writer.WriteInterleavedI16(buffer, checked((int)(written * WaveOutPlayer.NumChannels)));
+            var currentFrame = engine.CurrentFramePosition;
+            if (currentFrame - lastReportedFrame >= WaveOutPlayer.SampleRate / 4 || engine.IsFinished) {
+                lastReportedFrame = currentFrame;
+                progress?.Report(new WavExportProgress(
+                    currentFrame / (double)WaveOutPlayer.SampleRate,
+                    estimatedFrames / (double)WaveOutPlayer.SampleRate));
+            }
+        }
     }
 
     private static string ProgramNameFor(int channelIndex, int zeroBasedProgram)
@@ -809,9 +961,9 @@ public sealed class WaveOutPlayer : IDisposable
 {
     private const int ChannelCount = 16;
     private const int KeyMaskWordCount = 4;
-    private const int SampleRate = 44100;
-    private const int NumChannels = 2;
-    private const int FramesPerBuffer = 2048;
+    public const int SampleRate = 44100;
+    public const int NumChannels = 2;
+    public const int FramesPerBuffer = 2048;
     private const int BufferCount = 4;
 
     private readonly string _midiPath;
@@ -973,10 +1125,12 @@ public sealed class WaveOutPlayer : IDisposable
             }
             var programs = new int[ChannelCount];
             var activeNotes = new uint[ChannelCount];
+            var audioPeaks = new float[ChannelCount];
             var activeKeyMasks = new uint[ChannelCount][];
             for (uint ch = 0; ch < ChannelCount; ++ch) {
                 programs[ch] = _engine.GetChannelProgram(ch);
                 activeNotes[ch] = _engine.GetChannelActiveNoteCount(ch);
+                audioPeaks[ch] = _engine.GetChannelAudioPeak(ch);
                 var channelMasks = new uint[KeyMaskWordCount];
                 for (uint wordIndex = 0; wordIndex < KeyMaskWordCount; ++wordIndex) {
                     channelMasks[wordIndex] = _engine.GetChannelActiveKeyMaskWord(ch, wordIndex);
@@ -986,6 +1140,7 @@ public sealed class WaveOutPlayer : IDisposable
             return new ChannelSnapshot(
                 programs,
                 activeNotes,
+                audioPeaks,
                 activeKeyMasks,
                 _engine.ChannelMuteMask,
                 _engine.ChannelSoloMask);
@@ -1139,7 +1294,7 @@ public sealed class WaveOutPlayer : IDisposable
         return engine;
     }
 
-    private static XArkMidiEngine.SoundBankKind DetectSoundBankKind(string path)
+    public static XArkMidiEngine.SoundBankKind DetectSoundBankKind(string path)
     {
         var extension = Path.GetExtension(path);
         if (extension.Equals(".sf2", StringComparison.OrdinalIgnoreCase)) {
@@ -1253,9 +1408,9 @@ internal sealed class WavDumpWriter : IDisposable
     }
 }
 
-public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes, uint[][] ActiveKeyMasks, uint MuteMask, uint SoloMask)
+public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes, float[] AudioPeaks, uint[][] ActiveKeyMasks, uint MuteMask, uint SoloMask)
 {
-    public static ChannelSnapshot Empty { get; } = new(new int[16], new uint[16], CreateEmptyKeyMasks(), 0, 0);
+    public static ChannelSnapshot Empty { get; } = new(new int[16], new uint[16], new float[16], CreateEmptyKeyMasks(), 0, 0);
 
     private static uint[][] CreateEmptyKeyMasks()
     {
@@ -1264,6 +1419,100 @@ public readonly record struct ChannelSnapshot(int[] Programs, uint[] ActiveNotes
             result[i] = new uint[4];
         }
         return result;
+    }
+}
+
+public readonly record struct WavExportProgress(double CurrentSeconds, double TotalSeconds);
+
+internal sealed class ChannelLevelMeterControl : Control
+{
+    private readonly float[] _levels = new float[16];
+    private uint _muteMask;
+    private uint _soloMask;
+
+    public ChannelLevelMeterControl()
+    {
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+        BackColor = SystemColors.Control;
+        Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
+    }
+
+    public void SetLevels(IReadOnlyList<float> audioPeaks, uint muteMask, uint soloMask)
+    {
+        _muteMask = muteMask;
+        _soloMask = soloMask;
+        for (int i = 0; i < _levels.Length; ++i) {
+            var peak = i < audioPeaks.Count ? audioPeaks[i] : 0.0f;
+            var target = MathF.Sqrt(Math.Clamp(peak, 0.0f, 1.0f));
+            _levels[i] = Math.Max(target, _levels[i] * 0.86f);
+        }
+        Invalidate();
+    }
+
+    public void Clear()
+    {
+        Array.Clear(_levels, 0, _levels.Length);
+        _muteMask = 0;
+        _soloMask = 0;
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.Clear(BackColor);
+
+        var width = ClientSize.Width;
+        var height = ClientSize.Height;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        const int channelCount = 16;
+        const int gap = 4;
+        const int labelHeight = 18;
+        var meterTop = 6;
+        var meterHeight = Math.Max(12, height - labelHeight - meterTop - 6);
+        var slotWidth = Math.Max(10, (width - gap * (channelCount - 1)) / channelCount);
+
+        using var labelBrush = new SolidBrush(ForeColor);
+        using var framePen = new Pen(Color.FromArgb(150, 150, 150));
+        using var mutedBrush = new SolidBrush(Color.FromArgb(214, 214, 214));
+        using var backBrush = new SolidBrush(Color.FromArgb(232, 232, 232));
+
+        for (int i = 0; i < channelCount; ++i) {
+            var x = i * (slotWidth + gap);
+            var frame = new Rectangle(x, meterTop, slotWidth, meterHeight);
+            var isMuted = (_muteMask & (1u << i)) != 0;
+            var isSoloed = (_soloMask & (1u << i)) != 0;
+            e.Graphics.FillRectangle(isMuted ? mutedBrush : backBrush, frame);
+            e.Graphics.DrawRectangle(framePen, frame);
+
+            var fillHeight = Math.Clamp((int)Math.Round((meterHeight - 2) * _levels[i]), 0, meterHeight - 2);
+            if (fillHeight > 0) {
+                using var fillBrush = new SolidBrush(ChannelColor(_levels[i], isSoloed));
+                e.Graphics.FillRectangle(fillBrush, x + 1, meterTop + meterHeight - 1 - fillHeight, Math.Max(1, slotWidth - 2), fillHeight);
+            }
+
+            var label = (i + 1).ToString();
+            var labelSize = e.Graphics.MeasureString(label, Font);
+            e.Graphics.DrawString(label, Font, labelBrush, x + (slotWidth - labelSize.Width) * 0.5f, meterTop + meterHeight + 1);
+        }
+    }
+
+    private static Color ChannelColor(float level, bool soloed)
+    {
+        if (soloed) {
+            return Color.FromArgb(80, 132, 210);
+        }
+        if (level >= 0.85f) {
+            return Color.FromArgb(214, 70, 56);
+        }
+        if (level >= 0.55f) {
+            return Color.FromArgb(226, 156, 48);
+        }
+        return Color.FromArgb(64, 150, 94);
     }
 }
 
