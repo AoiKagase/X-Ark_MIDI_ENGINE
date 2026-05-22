@@ -2090,6 +2090,33 @@ namespace {
             "Post-mix wet return side limiter should avoid excessive side bias");
     }
 
+    void TestPostMixEffectsWetReturnShapeUsesLinkedStereoGain() {
+        const auto measureSideToMid = [](f32 sendScale) {
+            PostMixEffects effects;
+            effects.Init(44100);
+
+            double midEnergy = 0.0;
+            double sideEnergy = 0.0;
+            for (int i = 0; i < 18000; ++i) {
+                const f32 sendL = (i == 0) ? sendScale : 0.0f;
+                const f32 sendR = (i == 0) ? sendScale * 0.25f : 0.0f;
+                const auto out = effects.ProcessSample(0.0f, 0.0f, sendL, sendR, sendL, sendR);
+                midEnergy += std::fabs((out.wetL + out.wetR) * 0.5f);
+                sideEnergy += std::fabs((out.wetL - out.wetR) * 0.5f);
+            }
+
+            Require(midEnergy > 0.0 && sideEnergy > 0.0,
+                "Post-mix linked wet-return shape should preserve asymmetric wet energy");
+            return sideEnergy / midEnergy;
+        };
+
+        const double normalRatio = measureSideToMid(1.0f);
+        const double hotRatio = measureSideToMid(16.0f);
+
+        Require(hotRatio < normalRatio * 1.20,
+            "Post-mix linked wet-return shape should avoid exaggerating stereo imbalance on hot returns");
+    }
+
     void TestPostMixEffectsWetReturnDcBlockResetsCleanly() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3925,6 +3952,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
     RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
     RUN_TEST(TestPostMixEffectsWetReturnWidthLimitsSideBias);
+    RUN_TEST(TestPostMixEffectsWetReturnShapeUsesLinkedStereoGain);
     RUN_TEST(TestPostMixEffectsWetReturnDcBlockResetsCleanly);
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);

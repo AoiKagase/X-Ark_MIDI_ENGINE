@@ -215,10 +215,9 @@ public:
             output.wetR += reverbWet.wetR * (kReverbWetMix * reverbWetScale);
         }
         const auto widenedWet = ApplyWetReturnWidth(output.wetL, output.wetR);
-        output.wetL = ApplyWetReturnDcBlock(ShapeWetReturn(widenedWet.wetL),
-                                            wetReturnDcInputL_, wetReturnDcOutputL_);
-        output.wetR = ApplyWetReturnDcBlock(ShapeWetReturn(widenedWet.wetR),
-                                            wetReturnDcInputR_, wetReturnDcOutputR_);
+        const auto shapedWet = ShapeWetReturn(widenedWet.wetL, widenedWet.wetR);
+        output.wetL = ApplyWetReturnDcBlock(shapedWet.wetL, wetReturnDcInputL_, wetReturnDcOutputL_);
+        output.wetR = ApplyWetReturnDcBlock(shapedWet.wetR, wetReturnDcInputR_, wetReturnDcOutputR_);
         return output;
     }
 
@@ -325,8 +324,13 @@ private:
         return current;
     }
 
-    static f32 ShapeWetReturn(f32 sample) {
-        return FlushTiny(sample / (1.0f + std::fabs(sample) * kWetReturnShape));
+    static WetPair ShapeWetReturn(f32 wetL, f32 wetR) {
+        const f32 peak = std::max(std::fabs(wetL), std::fabs(wetR));
+        const f32 gain = 1.0f / (1.0f + peak * kWetReturnShape);
+        return {
+            FlushTiny(wetL * gain),
+            FlushTiny(wetR * gain),
+        };
     }
 
     static f32 ShapeEffectInput(f32 sample) {
