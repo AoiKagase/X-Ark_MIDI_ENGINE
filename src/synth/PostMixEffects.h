@@ -85,6 +85,8 @@ public:
         chorusCos_ = 1.0f;
         chorusDampL_ = 0.0f;
         chorusDampR_ = 0.0f;
+        chorusToneL_ = 0.0f;
+        chorusToneR_ = 0.0f;
     }
 
     void ResetGsState() {
@@ -195,6 +197,7 @@ private:
     static constexpr f32 kChorusToReverb = 0.30f;
     static constexpr f32 kChorusDamping = 0.52f;
     static constexpr f32 kChorusSecondaryMix = 0.34f;
+    static constexpr f32 kChorusToneDamping = 0.76f;
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
@@ -280,9 +283,13 @@ private:
         const f32 nextCos = chorusCos_ * phaseStepCos - chorusSin_ * phaseStepSin;
         chorusSin_ = nextSin;
         chorusCos_ = nextCos;
+        const f32 mixedWetL = chorusWetL + chorusSecondaryWetL * kChorusSecondaryMix;
+        const f32 mixedWetR = chorusWetR + chorusSecondaryWetR * kChorusSecondaryMix;
+        chorusToneL_ += (mixedWetL - chorusToneL_) * kChorusToneDamping;
+        chorusToneR_ += (mixedWetR - chorusToneR_) * kChorusToneDamping;
         return {
-            chorusWetL + chorusSecondaryWetL * kChorusSecondaryMix,
-            chorusWetR + chorusSecondaryWetR * kChorusSecondaryMix,
+            chorusToneL_,
+            chorusToneR_,
         };
     }
 
@@ -418,6 +425,8 @@ private:
     f32 chorusCos_ = 1.0f;
     f32 chorusDampL_ = 0.0f;
     f32 chorusDampR_ = 0.0f;
+    f32 chorusToneL_ = 0.0f;
+    f32 chorusToneR_ = 0.0f;
     f32 gsReverbWetScale_ = 1.0f;
     f32 gsReverbFeedbackScale_ = 1.0f;
     f32 gsMasterReverbSendScale_ = 1.0f;

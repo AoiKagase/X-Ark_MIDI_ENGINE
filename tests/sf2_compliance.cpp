@@ -1312,6 +1312,39 @@ namespace {
             "Post-mix chorus secondary tap should add a later thickening reflection");
     }
 
+    void TestPostMixEffectsChorusToneDampingSmoothsReturn() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        int observedFrames = 0;
+        double maxStep = 0.0;
+        f32 previous = 0.0f;
+        bool havePrevious = false;
+        for (int i = 0; i < 1200; ++i) {
+            const f32 chorusSend = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, chorusSend, chorusSend);
+            const f32 wet = (out.wetL + out.wetR) * 0.5f;
+            if (std::fabs(wet) > 1.0e-7f) {
+                if (havePrevious) {
+                    maxStep = std::max<double>(maxStep, std::fabs(wet - previous));
+                }
+                previous = wet;
+                havePrevious = true;
+                ++observedFrames;
+            }
+        }
+
+        Require(observedFrames > 4,
+            "Post-mix chorus tone damping should preserve chorus return energy");
+        Require(maxStep < 0.40,
+            "Post-mix chorus tone damping should avoid abrupt chorus-return jumps");
+
+        effects.ResetState();
+        const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
+            "Post-mix effects reset should clear chorus tone damping state");
+    }
+
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {
         PostMixEffects effects;
         effects.Init(44100);
@@ -3187,6 +3220,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsProducesAndResetsTail);
     RUN_TEST(TestPostMixEffectsProcessesChorusSend);
     RUN_TEST(TestPostMixEffectsChorusSecondaryTapThickensReturn);
+    RUN_TEST(TestPostMixEffectsChorusToneDampingSmoothsReturn);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
