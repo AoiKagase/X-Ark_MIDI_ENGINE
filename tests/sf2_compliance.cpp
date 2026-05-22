@@ -1383,6 +1383,25 @@ namespace {
             "Post-mix wet return shaping should keep excessive effect-send peaks bounded");
     }
 
+    void TestPostMixEffectsWetReturnKeepsStereoWidth() {
+        PostMixEffects effects;
+        effects.Init(44100);
+
+        double midEnergy = 0.0;
+        double sideEnergy = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            const f32 dry = (i == 0) ? 1.0f : 0.0f;
+            const auto out = effects.ProcessSample(dry, dry, 0.0f, 0.0f, 0.0f, 0.0f);
+            midEnergy += std::fabs(out.wetL + out.wetR);
+            sideEnergy += std::fabs(out.wetL - out.wetR);
+        }
+
+        Require(midEnergy > 0.0,
+            "Post-mix wet return width should preserve mono-compatible effect energy");
+        Require(sideEnergy > 0.0,
+            "Post-mix wet return width should preserve stereo spread from the effect tank");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3117,6 +3136,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsEarlyReflectionsArriveQuickly);
     RUN_TEST(TestPostMixEffectsReverbPredelaySeparatesOnset);
     RUN_TEST(TestPostMixEffectsWetReturnShapeKeepsPeaksBounded);
+    RUN_TEST(TestPostMixEffectsWetReturnKeepsStereoWidth);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);

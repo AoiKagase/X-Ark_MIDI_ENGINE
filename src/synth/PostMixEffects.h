@@ -159,8 +159,9 @@ public:
             output.wetL += reverbWet.wetL * (kReverbWetMix * gsReverbWetScale_);
             output.wetR += reverbWet.wetR * (kReverbWetMix * gsReverbWetScale_);
         }
-        output.wetL = ShapeWetReturn(output.wetL);
-        output.wetR = ShapeWetReturn(output.wetR);
+        const auto widenedWet = ApplyWetReturnWidth(output.wetL, output.wetR);
+        output.wetL = ShapeWetReturn(widenedWet.wetL);
+        output.wetR = ShapeWetReturn(widenedWet.wetR);
         return output;
     }
 
@@ -191,6 +192,7 @@ private:
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
     static constexpr f32 kEarlyReflectionMix = 0.16f;
+    static constexpr f32 kWetReturnWidth = 1.14f;
     static constexpr f32 kWetReturnShape = 0.18f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kChorusPhaseStepSin = 0.000369999991558f;
@@ -211,6 +213,12 @@ private:
 
     static f32 ShapeWetReturn(f32 sample) {
         return sample / (1.0f + std::fabs(sample) * kWetReturnShape);
+    }
+
+    static WetPair ApplyWetReturnWidth(f32 wetL, f32 wetR) {
+        const f32 mid = (wetL + wetR) * 0.5f;
+        const f32 side = (wetL - wetR) * (0.5f * kWetReturnWidth);
+        return { mid + side, mid - side };
     }
 
     size_t DelaySamples(f32 ms) const {
