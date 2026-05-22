@@ -1284,6 +1284,11 @@ namespace {
             "Post-mix effects should accept GS chorus level parameter");
         Require(!effects.ApplyGsParameter(0x7F, 64),
             "Post-mix effects should reject unknown GS effect parameters");
+
+        effects.ResetState();
+        const auto silentAfterReset = effects.ProcessSample(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        Require(silentAfterReset.wetL == 0.0f && silentAfterReset.wetR == 0.0f,
+            "Post-mix effects reset should clear chorus damping state");
     }
 
     void TestPostMixEffectsReverbDiffusionCreatesDenseTail() {

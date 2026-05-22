@@ -63,6 +63,8 @@ public:
         chorusIndex_ = 0;
         chorusSin_ = 0.0f;
         chorusCos_ = 1.0f;
+        chorusDampL_ = 0.0f;
+        chorusDampR_ = 0.0f;
     }
 
     void ResetGsState() {
@@ -166,6 +168,7 @@ private:
     static constexpr f32 kChorusFeedback = 0.22f;
     static constexpr f32 kChorusWetMix = 0.45f;
     static constexpr f32 kChorusToReverb = 0.30f;
+    static constexpr f32 kChorusDamping = 0.52f;
     static constexpr f32 kReverbFeedback = 0.58f;
     static constexpr f32 kReverbWetMix = 0.95f;
     static constexpr f32 kReverbDamping = 0.38f;
@@ -212,8 +215,10 @@ private:
         const size_t idxR1 = (chorusIndex_ >= wR1) ? (chorusIndex_ - wR1) : (chorusIndex_ + size - wR1);
         const f32 chorusWetL = chorusDelayL_[idxL0] * (1.0f - fracL) + chorusDelayL_[idxL1] * fracL;
         const f32 chorusWetR = chorusDelayR_[idxR0] * (1.0f - fracR) + chorusDelayR_[idxR1] * fracR;
-        chorusDelayL_[chorusIndex_] = chorusInL + chorusWetR * (kChorusFeedback * gsChorusFeedbackScale_);
-        chorusDelayR_[chorusIndex_] = chorusInR + chorusWetL * (kChorusFeedback * gsChorusFeedbackScale_);
+        chorusDampL_ += (chorusWetL - chorusDampL_) * kChorusDamping;
+        chorusDampR_ += (chorusWetR - chorusDampR_) * kChorusDamping;
+        chorusDelayL_[chorusIndex_] = chorusInL + chorusDampR_ * (kChorusFeedback * gsChorusFeedbackScale_);
+        chorusDelayR_[chorusIndex_] = chorusInR + chorusDampL_ * (kChorusFeedback * gsChorusFeedbackScale_);
         ++chorusIndex_;
         if (chorusIndex_ == size) {
             chorusIndex_ = 0;
@@ -298,6 +303,8 @@ private:
     size_t chorusDepthTapR_ = 0;
     f32 chorusSin_ = 0.0f;
     f32 chorusCos_ = 1.0f;
+    f32 chorusDampL_ = 0.0f;
+    f32 chorusDampR_ = 0.0f;
     f32 gsReverbWetScale_ = 1.0f;
     f32 gsReverbFeedbackScale_ = 1.0f;
     f32 gsMasterReverbSendScale_ = 1.0f;
