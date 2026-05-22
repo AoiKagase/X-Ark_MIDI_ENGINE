@@ -5,6 +5,7 @@
 #include "../src/synth/Synthesizer.h"
 #include "../src/synth/Voice.h"
 #include "../src/synth/VoicePool.h"
+#include "../include/XArkMidiEngine.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -2206,6 +2207,25 @@ namespace {
             "Synth compatibility options should expose internal effects disable switch");
     }
 
+    void TestPublicCompatibilityFlagsRemainStable() {
+        Require(XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER == (1u << 0),
+            "Public SF2 zero-length loop compatibility flag value should remain stable");
+        Require(XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION == (1u << 1),
+            "Public SF2 sample pitch correction flag value should remain stable");
+        Require(XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS == (1u << 2),
+            "Public SF2/MIDI effects-send multiply flag value should remain stable");
+        Require(XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS == (1u << 3),
+            "Public SF2 channel default modulator flag value should remain stable");
+        Require(XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE == (1u << 4),
+            "Public enhanced output-stage flag value should remain stable");
+        Require(XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL == (1u << 5),
+            "Public natural output-stage preset flag value should remain stable");
+        Require(XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM == (1u << 6),
+            "Public warm output-stage preset flag value should remain stable");
+        Require(XAME_COMPAT_DISABLE_INTERNAL_EFFECTS == (1u << 7),
+            "Public internal effects disable flag value should remain stable");
+    }
+
     void TestNegativeSampleOffsetsArePreserved() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_StartAddrsOffset, -4));
@@ -3966,6 +3986,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbToneDampingSmoothsTail);
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestSynthCompatCanDisableInternalEffects);
+    RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
