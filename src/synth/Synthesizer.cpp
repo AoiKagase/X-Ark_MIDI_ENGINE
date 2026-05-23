@@ -62,6 +62,10 @@ f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompat
     return static_cast<f64>(sample->pitchCorrection);
 }
 
+f64 FilterCentsToHertz(i32 cents) {
+    return 8.176 * std::pow(2.0, static_cast<f64>(cents) / 1200.0);
+}
+
 void ApplyChannelMix(VoicePool& voicePool, u8 ch, const ChannelState& state) {
     voicePool.UpdateChannelMix(ch, state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
@@ -221,6 +225,12 @@ void AppendProgramDebugLog(u16 requestedBank,
         << " channel_pan=" << static_cast<int>(state.pan32 >> 25)      // 32-bit→7-bit表示
         << " channel_reverb=" << static_cast<int>(state.reverbSend32 >> 25)
         << " channel_chorus=" << static_cast<int>(state.chorusSend32 >> 25)
+        << " sf2_nrpn_mode=" << (state.sf2Nrpn.sf2Mode ? 1 : 0)
+        << " sf2_nrpn_selected_gen=" << state.sf2Nrpn.generatorIndex
+        << " sf2_nrpn_data_msb=" << static_cast<int>(state.dataEntryMSB)
+        << " sf2_nrpn_data_lsb=" << static_cast<int>(state.dataEntryLSB)
+        << " sf2_nrpn_raw14=" << ((static_cast<int>(state.dataEntryMSB) << 7) | state.dataEntryLSB)
+        << " sf2_nrpn_initial_filter_fc_offset=" << state.sf2Nrpn.generatorOffsets[GEN_InitialFilterFc]
         << " zones=" << zones.size()
         << '\n';
 
@@ -252,6 +262,8 @@ void AppendProgramDebugLog(u16 requestedBank,
                 static_cast<f64>(sample->sampleRate) /
                 static_cast<f64>(outputSampleRate);
         }
+        const i32 filterFcOffset = state.sf2Nrpn.generatorOffsets[GEN_InitialFilterFc];
+        const i32 filterFcBaseEstimate = gen[GEN_InitialFilterFc] - filterFcOffset;
         log << "  zone[" << i << "]"
             << " sample_start=" << (sample ? sample->start : 0)
             << " sample_end=" << (sample ? sample->end : 0)
@@ -271,7 +283,10 @@ void AppendProgramDebugLog(u16 requestedBank,
             << " computed_final_semitones=" << computedFinalSemitones
             << " computed_sample_step=" << computedSampleStep
             << " initial_atten_cb=" << gen[GEN_InitialAttenuation]
+            << " filter_fc_base_est=" << filterFcBaseEstimate
+            << " filter_fc_nrpn_offset=" << filterFcOffset
             << " filter_fc=" << gen[GEN_InitialFilterFc]
+            << " filter_fc_hz=" << FilterCentsToHertz(gen[GEN_InitialFilterFc])
             << " filter_q=" << gen[GEN_InitialFilterQ]
             << " mod_env_to_fc=" << gen[GEN_ModEnvToFilterFc]
             << " mod_lfo_to_fc=" << gen[GEN_ModLfoToFilterFc]

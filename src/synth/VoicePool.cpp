@@ -38,6 +38,10 @@ f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompat
     return static_cast<f64>(sample->pitchCorrection);
 }
 
+f64 FilterCentsToHertz(i32 cents) {
+    return 8.176 * std::pow(2.0, static_cast<f64>(cents) / 1200.0);
+}
+
 f32 EstimateVoiceAudibility(const Voice& voice) {
     const f32 channelGain = std::max(voice.channelGainL, voice.channelGainR);
     return voice.envLevel * voice.attenuation * channelGain;
@@ -560,6 +564,7 @@ void AppendVoiceDebugLog(size_t zoneIndex,
         << " attenuation=" << voice.attenuation
         << " filter_enabled=" << (voice.filterEnabled ? 1 : 0)
         << " filter_fc_cents=" << voice.filterCurrentFcCents
+        << " filter_fc_hz=" << FilterCentsToHertz(voice.filterCurrentFcCents)
         << " filter_q_cb=" << voice.filterQCb
         << " base_gain_l=" << voice.baseGainL
         << " base_gain_r=" << voice.baseGainR
