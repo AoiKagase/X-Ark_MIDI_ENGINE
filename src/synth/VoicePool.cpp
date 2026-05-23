@@ -20,7 +20,7 @@ namespace XArkMidi {
 namespace {
 
 constexpr const char* kProgramDebugLogPath = "./diagnostics/program_focus.log";
-constexpr bool kEnableSpecialSf2Route = true;
+constexpr bool kEnableSpecialSf2Route = false;
 constexpr f64 kSpecialLayerCenterPanThreshold = 0.05;
 constexpr f64 kSpecialLayerFifthSemitones = 7.0;
 constexpr f64 kSpecialLayerFifthTolerance = 0.35;

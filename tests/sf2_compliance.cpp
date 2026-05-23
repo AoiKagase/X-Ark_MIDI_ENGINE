@@ -2452,7 +2452,7 @@ namespace {
             "Negative loop-end offset should move the loop end earlier");
     }
 
-    void TestSpecialSf2RoutePreservesIndependentDetune() {
+    void TestSf2FifthLayerStaysIndependent() {
         std::array<i16, 96> sampleData{};
         for (size_t i = 0; i < sampleData.size(); ++i) {
             sampleData[i] = static_cast<i16>(1000 + static_cast<i16>(i * 32));
@@ -2476,6 +2476,8 @@ namespace {
         zone1.sample = &sample;
         zone1.generators[GEN_CoarseTune] = 7;
         zone1.generators[GEN_KeyRange] = 0x6400;
+        zone1.generators[GEN_InitialAttenuation] = 175;
+        zone1.generators[GEN_StartloopAddrsOffset] = 3;
 
         std::vector<ResolvedZone> zones = { zone0, zone1 };
         VoicePool pool;
@@ -2498,12 +2500,16 @@ namespace {
                     SynthCompatOptions{});
 
         auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
-        Require(probe.activeCount_ == 1, "Special SF2 route should aggregate into one root voice");
+        Require(probe.activeCount_ == 2, "SF2 fifth layers should remain independent program layers");
         Voice& root = probe.voices_[probe.activeIndices_[0]];
-        Require(root.HasLinkedVoice(), "Aggregated special route should still create a linked voice");
-        Voice& linked = probe.voices_[root.linkedVoiceIndex];
-        Require(root.sampleStepFixed != linked.sampleStepFixed,
-            "Special-route linked voice should keep its own detuned playback step");
+        Voice& layerB = probe.voices_[probe.activeIndices_[1]];
+        Require(!root.HasLinkedVoice(), "Independent SF2 fifth layers should not be linked voices");
+        Require(root.sampleStepFixed != layerB.sampleStepFixed,
+            "Layer B should preserve its +7 semitone playback step");
+        Require(layerB.attenuation < root.attenuation * 0.2f,
+            "Layer B should preserve its -17.5 dB attenuation");
+        Require(layerB.loopStart == sample.loopStart + 3,
+            "Layer B should preserve its loop start offset");
     }
 
     void TestSpecialSf2RouteClampSurvivesControllerRefresh() {
@@ -4182,7 +4188,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSynthesizerCanDisableInternalEffectsTail);
     RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
-    RUN_TEST(TestSpecialSf2RoutePreservesIndependentDetune);
+    RUN_TEST(TestSf2FifthLayerStaysIndependent);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
     RUN_TEST(TestSf2PitchPrecedence);
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
