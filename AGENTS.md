@@ -64,3 +64,5 @@ C# wrapper: `XArkMidiEngine.cs` with `Engine` class and `RenderAll()` helper.
 - `numChannels` must be 1 or 2
 - Default sample rate: 44100Hz
 - AVX2 が利用可能な場合は自動的に有効化される（ランタイム検出）
+
+@RTK.md
