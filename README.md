@@ -128,11 +128,6 @@ cmake --build build/cmake
 
 - `XAmeRender()`
   - `short*` のインターリーブ PCM バッファへ最大 `numFrames` フレームを書き込みます。
-- `XAmeReset()`
-  - 読み込み済み MIDI / サウンドバンクとユーザー設定を保持したまま、再生位置を先頭へ戻します。
-- `XAmeSeekFrames()`
-  - `XAmeGetCurrentFramePosition()` と同じ出力フレーム単位でシークします。
-  - v1 実装では、内部でリセット後に目的位置まで空レンダリングします。
 - `XAmeIsFinished()`
   - 全音声のレンダリング完了後に非 0 を返します。
 - `XAmeDestroyEngine()`
@@ -229,9 +224,6 @@ int main(void) {
 
 - UTF-8 API を使ったエンジン生成
 - `Render()`
-- `Reset()`
-- `SeekFrames()`
-- `SeekSeconds()`
 - `RenderAll()`
 - `RenderAllBytes()`
 - `IsFinished`
