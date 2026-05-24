@@ -1111,6 +1111,26 @@ namespace {
             "Spec resolver opt-in should add preset modulators to instrument modulators");
     }
 
+    void TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+        ctx.pitchBend = 8191;
+        ctx.pitchWheelSensitivitySemitones = 2;
+        ctx.pitchWheelSensitivityCents = 0;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        const i32 totalCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune];
+        Require(totalCents == 200,
+            "Spec resolver pitch wheel default should map +8191 at 2 semitones to about +200 cents");
+    }
+
     void TestBagIndexHelpersSkipGlobalZones() {
         MinimalSf2Config config;
         config.presetGlobalGens.push_back(MakeSignedGen(GEN_CoarseTune, 1));
@@ -1220,18 +1240,27 @@ namespace {
     }
 
     void TestSf2ModulatorResolverSameZoneDuplicateRule() {
-        // According to Section 1075/1227, uniqueness is based on (Src, Dest, AmtSrc).
-        // If these 3 match, the first definition is ignored, even if Transform is different.
         const SFModList mods[] = {
-            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0), // Mod 1: Linear
-            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2), // Mod 2: Absolute
+            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 2),
+            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
         };
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
         const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
 
-        Require(resolved.size() == 1, "Duplicate (Src, Dest, AmtSrc) within a zone should result in only one effective modulator");
+        Require(resolved.size() == 1, "Duplicate modulator identity within a zone should result in one effective modulator");
         Require(resolved[0].mod.modAmount == 300, "The last definition of a duplicate modulator should be kept");
         Require(resolved[0].mod.sfModTransOper == 2, "The transform of the last definition should be preserved");
+    }
+
+    void TestSf2ModulatorResolverTransformSeparatesIdentity() {
+        const SFModList mods[] = {
+            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
+            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+
+        Require(resolved.size() == 2, "Different transforms should not collapse otherwise matching modulators");
     }
 
     void TestLinkedModulatorsFeedTargetSource() {
@@ -4571,6 +4600,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverChainWithInvalidNodeIsIgnored);
     RUN_TEST(TestSf2SpecResolverOptInAppliesImplicitDefaults);
     RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
+    RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);
     RUN_TEST(TestAbsoluteTransformSupport);
     RUN_TEST(TestPresetZoneTerminalInstrumentRule);
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);
@@ -4674,6 +4704,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
+    RUN_TEST(TestSf2ModulatorResolverTransformSeparatesIdentity);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST
     std::printf("sf2_compliance: all tests passed\n");

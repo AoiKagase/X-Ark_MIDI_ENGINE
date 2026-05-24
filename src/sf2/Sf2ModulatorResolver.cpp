@@ -194,8 +194,8 @@ DecodeSourceResult DecodeSource(u16 sourceOper, u8 key, u16 velocity, const Modu
                 return result;
             }
             x = std::clamp((static_cast<double>(ctx->pitchWheelSensitivitySemitones) +
-                            static_cast<double>(ctx->pitchWheelSensitivityCents) / 100.0) / 128.0,
-                           0.0, 127.0 / 128.0);
+                            static_cast<double>(ctx->pitchWheelSensitivityCents) / 100.0) / 127.0,
+                           0.0, 1.0);
             result.dependencies = Sf2ModulatorDependency::PitchWheelSensitivity;
             break;
         default:
@@ -246,7 +246,7 @@ Sf2ModulatorValidity ValidateModulatorDefinition(const SFModList& mod, Sf2Modula
 std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
     std::vector<WorkingModulator> entries;
     entries.reserve(zone.count);
-    std::map<std::tuple<u16, u16, u16>, int> duplicateMap;
+    std::map<std::tuple<u16, u16, u16, u16>, int> duplicateMap;
     std::map<int, int> rawToEntry;
 
     for (size_t i = 0; i < zone.count; ++i) {
@@ -264,8 +264,9 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
         entries.push_back(entry);
         const int entryIndex = static_cast<int>(entries.size()) - 1;
         rawToEntry[entry.rawIndex] = entryIndex;
+
         const auto key = std::make_tuple(mod.sfModSrcOper, mod.sfModDestOper,
-                                         mod.sfModAmtSrcOper);
+                                         mod.sfModAmtSrcOper, mod.sfModTransOper);
         const auto duplicate = duplicateMap.find(key);
         if (duplicate != duplicateMap.end()) {
             entries[duplicate->second].ignored = true;
