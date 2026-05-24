@@ -850,8 +850,13 @@ namespace {
         const std::string error = sf2.ErrorMessage();
         Require(loaded, error.c_str());
 
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.applySf2ChannelDefaults = true;
+        ctx.applySf2VelocityToInitialAttenuation = true;
+
         std::vector<ResolvedZone> zones;
-        if (!sf2.FindZones(0, 0, 60, 50000, zones, nullptr)) {
+        if (!sf2.FindZones(0, 0, 60, 50000, zones, &ctx)) {
             int globalPresetBag = -1;
             int localPresetBag = -1;
             std::fprintf(stderr, "diagnostic: presets=%zu instruments=%zu samples=%zu\n",
@@ -890,6 +895,8 @@ namespace {
 
         ModulatorContext ctx{};
         SetDefaultMidiControllers(ctx);
+        ctx.applySf2ChannelDefaults = true;
+        ctx.applySf2VelocityToInitialAttenuation = true;
         ctx.pitchWheelSensitivitySemitones = 24;
 
         std::vector<ResolvedZone> zones;
@@ -1113,8 +1120,10 @@ namespace {
         sf2Compat.presetReverbSend = 0.25f;
         sf2Compat.presetChorusSend = 0.4f;
         sf2Compat.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
-        Require(std::fabs(sf2Compat.channelGainL - 1.0f) < 1.0e-4f, "Strict SF2 channel defaults should bypass post-mix channel volume on the left lane");
-        Require(std::fabs(sf2Compat.channelGainR - 1.0f) < 1.0e-4f, "Strict SF2 channel defaults should bypass post-mix channel volume on the right lane");
+        Require(std::fabs(sf2Compat.channelGainL - sf2Compat.channelGainR) < 0.01f,
+            "SF2 channel defaults should keep normal channel pan in the mixer");
+        Require(sf2Compat.channelGainL < 1.0f && sf2Compat.channelGainR < 1.0f,
+            "SF2 channel defaults should keep normal channel volume in the mixer");
         Require(std::fabs(sf2Compat.reverbSend - 0.125f) < 1.0e-4f, "SF2 compatibility mode should multiply reverb sends");
         Require(std::fabs(sf2Compat.chorusSend - 0.1f) < 1.0e-4f, "SF2 compatibility mode should multiply chorus sends");
         sf2Compat.SetSf2EffectSendScale(2.0f, 0.5f);
@@ -2894,6 +2903,7 @@ namespace {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
             ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc7ToInitialAttenuation = true;
             ctx.ccValues[7] = 0;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
@@ -2905,6 +2915,7 @@ namespace {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
             ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc10ToPan = true;
             ctx.ccValues[10] = 127;
             ctx.ccValues[91] = 127;
             ctx.ccValues[93] = 127;
@@ -2922,6 +2933,7 @@ namespace {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
             ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc11ToInitialAttenuation = true;
             ctx.ccValues[11] = 0;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
@@ -2954,6 +2966,7 @@ namespace {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
             ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc10ToPan = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
@@ -2972,6 +2985,7 @@ namespace {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
             ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc10ToPan = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);

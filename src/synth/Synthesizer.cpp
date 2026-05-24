@@ -909,6 +909,13 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
     ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
+    ctx.applySf2VelocityToInitialAttenuation = compatOptions_.applySf2VelocityToInitialAttenuation;
+    ctx.applySf2VelocityToFilterCutoff = compatOptions_.applySf2VelocityToFilterCutoff;
+    ctx.applySf2Cc7ToInitialAttenuation = compatOptions_.applySf2Cc7ToInitialAttenuation;
+    ctx.applySf2Cc10ToPan = compatOptions_.applySf2Cc10ToPan;
+    ctx.applySf2Cc11ToInitialAttenuation = compatOptions_.applySf2Cc11ToInitialAttenuation;
+    ctx.applySf2Cc91ToReverbSend = compatOptions_.applySf2Cc91ToReverbSend;
+    ctx.applySf2Cc93ToChorusSend = compatOptions_.applySf2Cc93ToChorusSend;
 
     u8 resolvedProgram = state.program;
     auto tryResolveZones = [&](u16 bankToTry, u8 programToTry) -> bool {
@@ -1428,6 +1435,13 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
     ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
+    ctx.applySf2VelocityToInitialAttenuation = compatOptions_.applySf2VelocityToInitialAttenuation;
+    ctx.applySf2VelocityToFilterCutoff = compatOptions_.applySf2VelocityToFilterCutoff;
+    ctx.applySf2Cc7ToInitialAttenuation = compatOptions_.applySf2Cc7ToInitialAttenuation;
+    ctx.applySf2Cc10ToPan = compatOptions_.applySf2Cc10ToPan;
+    ctx.applySf2Cc11ToInitialAttenuation = compatOptions_.applySf2Cc11ToInitialAttenuation;
+    ctx.applySf2Cc91ToReverbSend = compatOptions_.applySf2Cc91ToReverbSend;
+    ctx.applySf2Cc93ToChorusSend = compatOptions_.applySf2Cc93ToChorusSend;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }

@@ -1545,12 +1545,16 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     const u8 effectiveKey = ResolveForcedKey(key, outZone);
     const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
 
-    if (!defaultState.hasVelocityToAttenuationMod) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2VelocityToInitialAttenuation &&
+        !defaultState.hasVelocityToAttenuationMod) {
         const i32 delta = ComputeDefaultVelocityAttenuationCb(effectiveVelocity);
         outZone.generators[GEN_InitialAttenuation] =
             ClampGeneratorValue(GEN_InitialAttenuation, outZone.generators[GEN_InitialAttenuation] + delta);
     }
-    if (!defaultState.hasVelocityToFilterFcMod) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2VelocityToFilterCutoff &&
+        !defaultState.hasVelocityToFilterFcMod) {
         ApplyModulatorDelta(outZone, GEN_InitialFilterFc, ComputeDefaultVelocityFilterCutoffDelta(effectiveVelocity));
     }
     if (ctx && !defaultState.hasChannelPressureToVibLfoPitchMod && ctx->channelPressure != 0) {
@@ -1565,31 +1569,41 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             (static_cast<double>(ctx->ccValues[1]) / 127.0)));
         ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
     }
-    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc7ToInitialAttenuationMod) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2Cc7ToInitialAttenuation &&
+        !defaultState.hasCc7ToInitialAttenuationMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc7ToInitialAttenuationCb) *
             std::sin((1.0 - static_cast<double>(ctx->ccValues[7]) / 127.0) * (3.14159265358979323846 / 2.0))));
         ApplyModulatorDelta(outZone, GEN_InitialAttenuation, delta);
     }
-    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc10ToPanMod) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2Cc10ToPan &&
+        !defaultState.hasCc10ToPanMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc10ToPan) *
             (2.0 * (static_cast<double>(ctx->ccValues[10]) / 127.0) - 1.0)));
         ApplyModulatorDelta(outZone, GEN_Pan, delta);
     }
-    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasCc11ToInitialAttenuationMod) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2Cc11ToInitialAttenuation &&
+        !defaultState.hasCc11ToInitialAttenuationMod) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc11ToInitialAttenuationCb) *
             std::sin((1.0 - static_cast<double>(ctx->ccValues[11]) / 127.0) * (3.14159265358979323846 / 2.0))));
         ApplyModulatorDelta(outZone, GEN_InitialAttenuation, delta);
     }
-    if (ctx && !defaultState.hasCc91ToReverbSendMod && ctx->ccValues[91] != 0) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2Cc91ToReverbSend &&
+        !defaultState.hasCc91ToReverbSendMod && ctx->ccValues[91] != 0) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc91ToReverbSend) *
             (static_cast<double>(ctx->ccValues[91]) / 127.0)));
         ApplyModulatorDelta(outZone, GEN_ReverbEffectsSend, delta);
     }
-    if (ctx && !defaultState.hasCc93ToChorusSendMod && ctx->ccValues[93] != 0) {
+    if (ctx && ctx->applySf2ChannelDefaults &&
+        ctx->applySf2Cc93ToChorusSend &&
+        !defaultState.hasCc93ToChorusSendMod && ctx->ccValues[93] != 0) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultCc93ToChorusSend) *
             (static_cast<double>(ctx->ccValues[93]) / 127.0)));
