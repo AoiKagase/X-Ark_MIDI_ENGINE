@@ -1361,11 +1361,22 @@ namespace {
         config.presetGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -6));
         config.presetGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, 4));
         config.presetGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -4));
+        config.presetMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 5, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -5, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_SampleModes, 1, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_OverridingRootKey, 7, 0, 0));
         config.instGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 60));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+        {
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                "Preset-level sample generator modulators should be reported as unsupported (actual=%u)",
+                sf2.UnsupportedModulatorCount());
+            Require(sf2.UnsupportedModulatorCount() == 4, message);
+        }
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
@@ -2957,27 +2968,57 @@ namespace {
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
-        Require(sf2.UnsupportedModulatorCount() == 5,
-            "Sample generator modulator destinations should be reported as unsupported");
+        Require(sf2.UnsupportedModulatorCount() == 0,
+            "Instrument-level sample generator modulators should be supported in legacy mode");
 
         std::vector<ResolvedZone> zones;
-        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_StartAddrsOffset] == 0,
-            "Start address modulator destination should be ignored in spec-compliant mode");
-        Require(zone.generators[GEN_EndAddrsOffset] == 0,
-            "End address modulator destination should be ignored in spec-compliant mode");
-        Require(zone.generators[GEN_StartloopAddrsOffset] == 0,
-            "Loop-start modulator destination should be ignored in spec-compliant mode");
-        Require(zone.generators[GEN_EndloopAddrsOffset] == 0,
-            "Loop-end modulator destination should be ignored in spec-compliant mode");
-        Require(zone.generators[GEN_SampleModes] == 0,
-            "SampleModes modulator destination should be ignored in spec-compliant mode");
+        const ResolvedZone& legacyZone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(legacyZone.generators[GEN_StartAddrsOffset] == 2,
+            "Legacy resolver should apply start address modulator destination");
+        Require(legacyZone.generators[GEN_EndAddrsOffset] == -3,
+            "Legacy resolver should apply end address modulator destination");
+        Require(legacyZone.generators[GEN_StartloopAddrsOffset] == 1,
+            "Legacy resolver should apply loop-start modulator destination");
+        Require(legacyZone.generators[GEN_EndloopAddrsOffset] == -2,
+            "Legacy resolver should apply loop-end modulator destination");
+        Require(legacyZone.generators[GEN_SampleModes] == 1,
+            "Legacy resolver should apply sampleModes modulator destination");
 
-        Voice voice;
-        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
-                     SoundBankKind::Sf2, SynthCompatOptions{});
-        Require(voice.active, "Voice with ignored sample generator modulators should activate");
-        Require(!voice.looping, "Ignored sampleModes modulator should not enable looping");
+        Voice legacyVoice;
+        legacyVoice.NoteOn(legacyZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                           SoundBankKind::Sf2, SynthCompatOptions{});
+        Require(legacyVoice.active, "Voice with legacy sample generator modulators should activate");
+        Require(legacyVoice.looping, "Legacy sampleModes modulator should enable looping");
+        Require(legacyVoice.samplePosFixed == static_cast<i64>(sf2.SampleHeaders(0)->start + 2) * (1ll << 32),
+            "Legacy start-address modulator should shift voice start position");
+        Require(legacyVoice.sampleEnd == sf2.SampleHeaders(0)->end - 3,
+            "Legacy end-address modulator should shift voice end position");
+        Require(legacyVoice.loopStart == sf2.SampleHeaders(0)->loopStart + 1,
+            "Legacy loop-start modulator should shift loop start");
+        Require(legacyVoice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 2,
+            "Legacy loop-end modulator should shift loop end");
+
+        ModulatorContext specCtx{};
+        SetDefaultMidiControllers(specCtx);
+        specCtx.useSf2SpecModulatorResolver = true;
+        zones.clear();
+        const ResolvedZone& specZone = RequireSingleZone(sf2, 60, 65535, &specCtx, zones);
+        Require(specZone.generators[GEN_StartAddrsOffset] == 0,
+            "Spec resolver should ignore start address modulator destination");
+        Require(specZone.generators[GEN_EndAddrsOffset] == 0,
+            "Spec resolver should ignore end address modulator destination");
+        Require(specZone.generators[GEN_StartloopAddrsOffset] == 0,
+            "Spec resolver should ignore loop-start modulator destination");
+        Require(specZone.generators[GEN_EndloopAddrsOffset] == 0,
+            "Spec resolver should ignore loop-end modulator destination");
+        Require(specZone.generators[GEN_SampleModes] == 0,
+            "Spec resolver should ignore sampleModes modulator destination");
+
+        Voice specVoice;
+        specVoice.NoteOn(specZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                         SoundBankKind::Sf2, SynthCompatOptions{});
+        Require(specVoice.active, "Voice with spec-ignored sample generator modulators should activate");
+        Require(!specVoice.looping, "Ignored spec sampleModes modulator should not enable looping");
     }
 
     void TestSf2FifthLayerStaysIndependent() {

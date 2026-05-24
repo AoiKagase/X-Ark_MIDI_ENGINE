@@ -122,10 +122,12 @@ private:
                      ResolvedZone& outZone) const;
 
     bool ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                         u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const;
+                         u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
+                         bool allowInstrumentOnlyDestinations) const;
     void ApplyModulatorEntries(const std::vector<SFModList>& mods, int modStart, int modEnd,
                                u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
-                               DefaultModulatorState* outDefaultState) const;
+                               DefaultModulatorState* outDefaultState,
+                               bool allowInstrumentOnlyDestinations) const;
     bool AnalyzePresetBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,
                           u8& outVelLo, u8& outVelHi, int& outInstrumentIdx) const;
     bool AnalyzeInstrumentBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& outKeyHi,

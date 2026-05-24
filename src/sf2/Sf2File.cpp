@@ -418,6 +418,25 @@ bool IsSupportedModSourceOperDefinition(u16 oper) {
     }
 }
 
+bool IsInstrumentOnlySampleGeneratorModDestination(u16 dest) {
+    switch (dest) {
+    case GEN_StartAddrsOffset:
+    case GEN_EndAddrsOffset:
+    case GEN_StartloopAddrsOffset:
+    case GEN_EndloopAddrsOffset:
+    case GEN_StartAddrsCoarseOffset:
+    case GEN_EndAddrsCoarseOffset:
+    case GEN_StartloopAddrsCoarse:
+    case GEN_EndloopAddrsCoarse:
+    case GEN_SampleModes:
+    case GEN_ExclusiveClass:
+    case GEN_OverridingRootKey:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool IsSupportedModTransform(u16 oper) {
     return oper == kModTransformLinear || oper == kModTransformAbsolute;
 }
@@ -521,6 +540,14 @@ void ApplyInitialPitchDelta(ResolvedZone& zone, i32 deltaCents) {
 
 void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     switch (dest) {
+    case GEN_StartAddrsOffset:
+    case GEN_EndAddrsOffset:
+    case GEN_StartloopAddrsOffset:
+    case GEN_EndloopAddrsOffset:
+    case GEN_StartAddrsCoarseOffset:
+    case GEN_EndAddrsCoarseOffset:
+    case GEN_StartloopAddrsCoarse:
+    case GEN_EndloopAddrsCoarse:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
@@ -552,6 +579,7 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     case GEN_ReleaseVolEnv:
     case GEN_KeynumToVolEnvHold:
     case GEN_KeynumToVolEnvDecay:
+    case GEN_SampleModes:
     case GEN_Keynum:
     case GEN_Velocity:
     case GEN_InitialAttenuation:
@@ -570,7 +598,11 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     }
 }
 
-bool IsSupportedModulatorDestination(u16 dest) {
+bool IsSupportedModulatorDestination(u16 dest, bool allowInstrumentOnlyDestinations) {
+    if (allowInstrumentOnlyDestinations && IsInstrumentOnlySampleGeneratorModDestination(dest)) {
+        return true;
+    }
+
     switch (dest) {
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
@@ -609,8 +641,6 @@ bool IsSupportedModulatorDestination(u16 dest) {
     case GEN_CoarseTune:
     case GEN_FineTune:
     case GEN_ScaleTuning:
-    case GEN_ExclusiveClass:
-    case GEN_OverridingRootKey:
     case kModDestInitialPitch:
         return true;
     default:
@@ -1651,13 +1681,13 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         ApplyModulatorEntries(instMods_,
                               instBags_[globalInstBagIdx].wInstModNdx,
                               instBags_[globalInstBagIdx + 1].wInstModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState, true);
     }
     if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
         ApplyModulatorEntries(instMods_,
                               instBags_[instBagIdx].wInstModNdx,
                               instBags_[instBagIdx + 1].wInstModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState, true);
     }
 
     if (ctx && ctx->applySf2ChannelDefaults &&
@@ -1736,28 +1766,31 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         ApplyModulatorEntries(presetMods_,
                               presetBags_[globalPresetBagIdx].wModNdx,
                               presetBags_[globalPresetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr, false);
     }
     if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
         ApplyModulatorEntries(presetMods_,
                               presetBags_[presetBagIdx].wModNdx,
                               presetBags_[presetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr, false);
     }
 
     ApplySf2NrpnOffsets(outZone, ctx);
 }
 
 bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
-                              u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone) const {
+                              u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
+                              bool allowInstrumentOnlyDestinations) const {
     DefaultModulatorState defaultState;
-    ApplyModulatorEntries(mods, modStart, modEnd, key, velocity, ctx, zone, &defaultState);
+    ApplyModulatorEntries(mods, modStart, modEnd, key, velocity, ctx, zone, &defaultState,
+                          allowInstrumentOnlyDestinations);
     return defaultState.hasVelocityToAttenuationMod;
 }
 
 void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modStart, int modEnd,
                                     u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
-                                    DefaultModulatorState* outDefaultState) const {
+                                    DefaultModulatorState* outDefaultState,
+                                    bool allowInstrumentOnlyDestinations) const {
     std::vector<ZoneModEntry> entries = BuildEffectiveZoneModEntries(mods, modStart, modEnd);
     std::vector<int> state(entries.size(), 0);
     std::vector<bool> cycle(entries.size(), false);
@@ -1834,7 +1867,7 @@ void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modS
             continue;
         }
         if ((mod.sfModDestOper & 0x8000u) != 0) continue;
-        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
+        if (!IsSupportedModulatorDestination(mod.sfModDestOper, allowInstrumentOnlyDestinations)) continue;
         if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
 
         if (outDefaultState) {
@@ -1860,7 +1893,7 @@ void Sf2File::ScanUnsupportedModulators() {
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
 
-    auto scan = [&](const std::vector<SFModList>& mods) {
+    auto scan = [&](const std::vector<SFModList>& mods, bool allowInstrumentOnlyDestinations) {
         for (const auto& mod : mods) {
             const bool isTerminal =
                 mod.sfModSrcOper == 0 &&
@@ -1879,7 +1912,8 @@ void Sf2File::ScanUnsupportedModulators() {
             const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
             const bool unsupportedDestination =
                 ((mod.sfModDestOper & 0x8000u) == 0) &&
-                ((mod.sfModDestOper >= GEN_COUNT) || !IsSupportedModulatorDestination(mod.sfModDestOper));
+                ((mod.sfModDestOper >= GEN_COUNT) ||
+                 !IsSupportedModulatorDestination(mod.sfModDestOper, allowInstrumentOnlyDestinations));
             if (unsupportedTransform) {
                 ++unsupportedModulatorTransformCount_;
             }
@@ -1889,8 +1923,8 @@ void Sf2File::ScanUnsupportedModulators() {
         }
     };
 
-    scan(presetMods_);
-    scan(instMods_);
+    scan(presetMods_, false);
+    scan(instMods_, true);
 }
 
 
