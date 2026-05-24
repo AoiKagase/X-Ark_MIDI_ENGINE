@@ -510,6 +510,31 @@ void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
     }
 }
 
+void Voice::ApplyResolvedZoneDestinationClassState(const ResolvedZone& zone, i32 effectiveKey, u8 sf2DestinationClasses) {
+    const i32* gen = zone.generators;
+    const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
+    const u8 pitchMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch);
+    const u8 filterMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter);
+    const u8 envelopeMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope);
+    const u8 lfoMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo);
+
+    if ((sf2DestinationClasses & mixMask) != 0) {
+        ApplyResolvedZoneMixState(zone);
+    }
+    if ((sf2DestinationClasses & envelopeMask) != 0) {
+        ApplyResolvedZoneEnvelopeState(gen, effectiveKey);
+    }
+    if ((sf2DestinationClasses & lfoMask) != 0) {
+        ApplyResolvedZoneLfoState(gen);
+    }
+    if ((sf2DestinationClasses & filterMask) != 0) {
+        ApplyResolvedZoneFilterState(zone);
+    }
+    if ((sf2DestinationClasses & pitchMask) != 0) {
+        ApplyResolvedZonePitchState(gen, effectiveKey);
+    }
+}
+
 void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
     const i32* gen = zone.generators;
     ApplyResolvedZoneMixState(zone);
@@ -731,55 +756,14 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
     const u8 filterMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter);
     const u8 envelopeMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope);
     const u8 lfoMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo);
-    if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~mixMask)) == 0 &&
-        (sf2DestinationClasses & mixMask) != 0) {
-        ApplyResolvedZoneMixState(zone);
-        return;
-    }
-
+    const u8 knownMask = static_cast<u8>(mixMask | pitchMask | filterMask | envelopeMask | lfoMask);
     const i32* gen = zone.generators;
     const u8 effectiveKeyU8 = ResolveForcedKey(noteKey, gen);
     i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
     if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~pitchMask)) == 0 &&
-        (sf2DestinationClasses & pitchMask) != 0) {
-        ApplyResolvedZonePitchState(gen, effectiveKey);
-        return;
-    }
-    if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~(mixMask | pitchMask))) == 0 &&
-        (sf2DestinationClasses & mixMask) != 0 &&
-        (sf2DestinationClasses & pitchMask) != 0) {
-        ApplyResolvedZoneMixState(zone);
-        ApplyResolvedZonePitchState(gen, effectiveKey);
-        return;
-    }
-    if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~(mixMask | filterMask))) == 0 &&
-        (sf2DestinationClasses & mixMask) != 0 &&
-        (sf2DestinationClasses & filterMask) != 0) {
-        ApplyResolvedZoneMixState(zone);
-        ApplyResolvedZoneFilterState(zone);
-        return;
-    }
-    if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~filterMask)) == 0 &&
-        (sf2DestinationClasses & filterMask) != 0) {
-        ApplyResolvedZoneFilterState(zone);
-        return;
-    }
-    if (sf2DestinationClasses != 0xFFu &&
-        (sf2DestinationClasses & static_cast<u8>(~(envelopeMask | lfoMask))) == 0 &&
-        (sf2DestinationClasses & (envelopeMask | lfoMask)) != 0) {
-        const u8 envelopeOnly = sf2DestinationClasses & envelopeMask;
-        const u8 lfoOnly = sf2DestinationClasses & lfoMask;
-        if (envelopeOnly != 0) {
-            ApplyResolvedZoneEnvelopeState(gen, effectiveKey);
-        }
-        if (lfoOnly != 0) {
-            ApplyResolvedZoneLfoState(gen);
-        }
+        sf2DestinationClasses != 0 &&
+        (sf2DestinationClasses & static_cast<u8>(~knownMask)) == 0) {
+        ApplyResolvedZoneDestinationClassState(zone, effectiveKey, sf2DestinationClasses);
         return;
     }
 
