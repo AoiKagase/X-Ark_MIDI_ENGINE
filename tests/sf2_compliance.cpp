@@ -1390,6 +1390,21 @@ namespace {
             "Duplicate modulators should ignore the earlier definition");
     }
 
+    void TestDuplicateModulatorsWithDifferentTransformsRemainDistinct() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 100, 0, 0));
+        config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 300, 0, 2));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_InitialFilterQ] == 400,
+            "Different transforms should not collapse otherwise matching legacy modulators");
+    }
+
     void TestSf2ModulatorResolverSameZoneDuplicateRule() {
         const SFModList mods[] = {
             MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 2),
@@ -5360,6 +5375,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);
     RUN_TEST(TestPresetLevelIllegalSampleGeneratorsIgnored);
     RUN_TEST(TestDuplicateModulatorsUseLastDefinition);
+    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsRemainDistinct);
     RUN_TEST(TestLinkedModulatorsFeedTargetSource);
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);

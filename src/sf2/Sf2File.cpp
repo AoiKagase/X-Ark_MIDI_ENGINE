@@ -269,7 +269,7 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
 
     std::vector<ZoneModEntry> entries;
     entries.reserve(modEnd - modStart);
-    std::map<std::tuple<u16, u16, u16>, int> duplicateMap;
+    std::map<std::tuple<u16, u16, u16, u16>, int> duplicateMap;
 
     for (int i = modStart; i < modEnd; ++i) {
         const SFModList& mod = mods[i];
@@ -288,7 +288,7 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
         entry.ignored = IsLinkModSource(mod.sfModAmtSrcOper);
         entries.push_back(entry);
 
-        const auto key = std::make_tuple(mod.sfModSrcOper, mod.sfModDestOper, mod.sfModAmtSrcOper);
+        const auto key = std::make_tuple(mod.sfModSrcOper, mod.sfModDestOper, mod.sfModAmtSrcOper, mod.sfModTransOper);
         auto it = duplicateMap.find(key);
         if (it != duplicateMap.end()) {
             entries[it->second].ignored = true;
