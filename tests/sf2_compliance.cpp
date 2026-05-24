@@ -1263,7 +1263,7 @@ namespace {
             std::snprintf(message, sizeof(message),
                 "Spec resolver should own default modulators and avoid legacy default-modulator double application (actual=%d)",
                 zone.generators[GEN_Pan]);
-            Require(zone.generators[GEN_Pan] == 250, message);
+            Require(zone.generators[GEN_Pan] == 260, message);
         }
     }
 
@@ -4404,19 +4404,31 @@ namespace {
         SetDefaultMidiControllers(ctx);
         ctx.useSf2SpecModulatorResolver = true;
         ctx.ccValues[7] = 0;
+        ctx.ccValues[10] = 63;
         ctx.ccValues[1] = 64;
         ctx.ccValues[11] = 0;
         ctx.channelPressure = 64;
+        const i32 defaultPanOffset = static_cast<i32>(std::lround(1000.0 * (2.0 * (63.0 / 127.0) - 1.0)));
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& lowKeyZone = RequireSingleZone(sf2, 63, 65535, &ctx, zones);
-        Require(lowKeyZone.generators[GEN_Pan] == 0,
-            "Key-number switch curve should stay off below the midpoint");
+        {
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                "Key-number switch curve should stay off below the midpoint while preserving implicit CC10 pan (actual=%d expected=%d)",
+                lowKeyZone.generators[GEN_Pan], defaultPanOffset);
+            Require(lowKeyZone.generators[GEN_Pan] == defaultPanOffset, message);
+        }
 
         zones.clear();
         const ResolvedZone& highKeyZone = RequireSingleZone(sf2, 64, 65535, &ctx, zones);
-        Require(highKeyZone.generators[GEN_Pan] == 500,
-            "Key-number switch curve should turn on at the midpoint");
+        {
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                "Key-number switch curve should turn on at the midpoint (actual=%d expected=%d)",
+                highKeyZone.generators[GEN_Pan], defaultPanOffset + 500);
+            Require(highKeyZone.generators[GEN_Pan] == defaultPanOffset + 500, message);
+        }
         Require(highKeyZone.generators[GEN_InitialFilterQ] == 63,
             "CC1 concave curve should keep the current 7-bit controller scale");
         {
@@ -4424,7 +4436,7 @@ namespace {
             std::snprintf(message, sizeof(message),
                 "Channel pressure convex curve should mirror the SF2 log-based characteristic (actual=%d)",
                 highKeyZone.generators[GEN_ModEnvToPitch]);
-            Require(highKeyZone.generators[GEN_ModEnvToPitch] == 437, message);
+            Require(highKeyZone.generators[GEN_ModEnvToPitch] == 438, message);
         }
     }
 
@@ -4454,8 +4466,13 @@ namespace {
             const std::vector<Sf2ModulatorEvaluation> evaluated =
                 EvaluateSf2Modulators(resolved, 60, 65535, &ctx);
             Require(evaluated.size() == 1, "Linked source should still evaluate with controller context");
-            Require(evaluated[0].amount == 298,
-                "Linked source should sum all valid branches using the current 7-bit controller scale");
+            {
+                char message[160];
+                std::snprintf(message, sizeof(message),
+                    "Linked source should sum all valid branches using the current 7-bit controller scale (actual=%d)",
+                    evaluated[0].amount);
+                Require(evaluated[0].amount == 300, message);
+            }
         }
     }
 
@@ -5093,6 +5110,30 @@ namespace {
         }
     }
 
+    void TestStrictSpecComplianceRejectsMissingMandatoryInfoChunks() {
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "isng");
+
+            Sf2File sf2;
+            sf2.SetStrictSpecCompliance(true);
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Strict spec compliance should reject SF2 missing isng");
+        }
+
+        {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            RemoveInfoSubchunk(bytes, "INAM");
+
+            Sf2File sf2;
+            sf2.SetStrictSpecCompliance(true);
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Strict spec compliance should reject SF2 missing INAM");
+        }
+    }
+
     void TestMalformedInfoStringsIgnored() {
         {
             MinimalSf2Config config;
@@ -5226,6 +5267,73 @@ namespace {
             std::vector<ResolvedZone> zones;
             Require(!sf2.FindZones(0, 0, 60, 50000, zones, nullptr),
                 "ROM-backed zones should not resolve when iver is invalid");
+        }
+    }
+
+    void TestStrictSpecComplianceRejectsInvalidRomMetadata() {
+        auto makeRomSampleBank = [&]() -> std::vector<u8> {
+            MinimalSf2Config config;
+            std::vector<u8> bytes = BuildMinimalSf2(config);
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+
+            std::vector<u8> romInfo;
+            const std::vector<u8> iromData = { 'R','O','M',0 };
+            AppendChunk(romInfo, "irom", iromData);
+            std::vector<u8> iverData;
+            AppendU16LE(iverData, 2);
+            AppendU16LE(iverData, 0);
+            AppendChunk(romInfo, "iver", iverData);
+
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd), romInfo.begin(), romInfo.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(romInfo.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(romInfo.size()));
+
+            const size_t shdrPos = FindPdtaChunk(bytes, "shdr");
+            Require(shdrPos != std::numeric_limits<size_t>::max(), "shdr chunk should exist");
+            const size_t sampleTypeOffset = shdrPos + 8 + 44;
+            bytes[sampleTypeOffset] = 0x01;
+            bytes[sampleTypeOffset + 1] = 0x80;
+            return bytes;
+        };
+
+        {
+            std::vector<u8> bytes = makeRomSampleBank();
+            RemoveInfoSubchunk(bytes, "irom");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badIrom;
+            AppendChunk(badIrom, "irom", { 'R','O','M' });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badIrom.begin(), badIrom.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badIrom.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badIrom.size()));
+
+            Sf2File sf2;
+            sf2.SetStrictSpecCompliance(true);
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Strict spec compliance should reject ROM sample banks with invalid irom");
+        }
+
+        {
+            std::vector<u8> bytes = makeRomSampleBank();
+            RemoveInfoSubchunk(bytes, "iver");
+            const size_t infoPos = FindListChunk(bytes, "INFO");
+            Require(infoPos != std::numeric_limits<size_t>::max(), "INFO list should exist");
+            std::vector<u8> badIver;
+            AppendChunk(badIver, "iver", { 2, 0 });
+            const size_t infoPayloadEnd = infoPos + 8 + ReadLE32(bytes, infoPos + 4);
+            bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(infoPayloadEnd),
+                         badIver.begin(), badIver.end());
+            AddChunkSize(bytes, 4, static_cast<u32>(badIver.size()));
+            AddChunkSize(bytes, infoPos + 4, static_cast<u32>(badIver.size()));
+
+            Sf2File sf2;
+            sf2.SetStrictSpecCompliance(true);
+            Require(!sf2.LoadFromMemory(bytes.data(), bytes.size()),
+                "Strict spec compliance should reject ROM sample banks with invalid iver");
         }
     }
 
@@ -5580,6 +5688,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestBagIndexHelpersSkipGlobalZones);
     RUN_TEST(TestMissingIfilRejected);
     RUN_TEST(TestMissingMandatoryInfoChunksAccepted);
+    RUN_TEST(TestStrictSpecComplianceRejectsMissingMandatoryInfoChunks);
     RUN_TEST(TestMalformedInfoStringsIgnored);
     RUN_TEST(TestDuplicateMandatoryChunksRejected);
     RUN_TEST(TestDuplicateTopLevelListsRejected);
@@ -5590,6 +5699,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRomSampleUsesAttachedRomBank);
     RUN_TEST(TestRomMetadataWithoutRomSampleIgnored);
     RUN_TEST(TestRomSamplesRequireValidRomMetadata);
+    RUN_TEST(TestStrictSpecComplianceRejectsInvalidRomMetadata);
     RUN_TEST(TestIllegalOriginalPitchFallsBackTo60);
     RUN_TEST(TestTruncatedSmplChunkRejected);
     RUN_TEST(TestSampleGuardPaddingIsAccepted);

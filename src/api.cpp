@@ -238,6 +238,7 @@ XAmeResult XAmeCreateEngineWithOptions(
         if (resolvedKind == SoundBankKind::Sf2) {
             auto sf2 = std::make_unique<Sf2File>();
             sf2->SetResourceLimits(limits.maxSampleDataBytes, limits.maxSf2PdtaEntries);
+            sf2->SetStrictSpecCompliance(compatOptions.useSf2SpecModulatorResolver);
             if (!sf2->LoadFromFile(soundBankPath)) {
                 SetError("SF2 parse error: " + sf2->ErrorMessage());
                 delete eng;

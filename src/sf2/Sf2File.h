@@ -24,6 +24,7 @@ public:
     bool LoadRomSampleSourceFromMemory(const u8* data, size_t size);
     bool LoadRomSampleSourceFromFile(const std::wstring& path);
     void SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries);
+    void SetStrictSpecCompliance(bool enabled) { strictSpecCompliance_ = enabled; }
 
     // プリセット検索: bank/program/key/velocity に一致する ResolvedZone リストを返す
     bool FindZones(u16 bank, u8 program, u8 key, u16 velocity,
@@ -169,6 +170,7 @@ private:
     bool hasImod_ = false;
     bool hasIgen_ = false;
     bool hasShdr_ = false;
+    bool strictSpecCompliance_ = false;
 };
 
 } // namespace XArkMidi

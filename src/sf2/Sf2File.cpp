@@ -721,6 +721,7 @@ bool Sf2File::LoadFromFile(const std::wstring& path) {
 bool Sf2File::LoadRomSampleSourceFromMemory(const u8* data, size_t size) {
     auto romBank = std::make_shared<Sf2File>();
     romBank->SetResourceLimits(maxSampleDataBytes_, maxPdtaEntries_);
+    romBank->SetStrictSpecCompliance(strictSpecCompliance_);
     if (!romBank->LoadFromMemory(data, size)) {
         errorMsg_ = "SF2 ROM source parse error: " + romBank->ErrorMessage();
         return false;
@@ -855,10 +856,7 @@ bool Sf2File::ParseInfo(BinaryReader& r, u32 /*chunkSize*/) {
                 return false;
             }
             hasIsng_ = true;
-            std::string engineName;
-            if (IsValidInfoAsciiZstr(sub, subSize, &engineName) && engineName == "EMU8000") {
-                hasValidIsng_ = true;
-            }
+            hasValidIsng_ = IsValidInfoAsciiZstr(sub, subSize);
         } else if (subId == MakeFourCC("INAM")) {
             if (hasInam_) {
                 errorMsg_ = "SF2 duplicate INAM chunk";
@@ -1290,6 +1288,17 @@ bool Sf2File::ValidatePdtaStructures() {
 }
 
 bool Sf2File::ValidateInfoAndSdtaConsistency() {
+    if (strictSpecCompliance_) {
+        if (!hasIsng_ || !hasValidIsng_) {
+            errorMsg_ = "SF2 strict mode: missing or invalid mandatory isng chunk";
+            return false;
+        }
+        if (!hasInam_ || !hasValidInam_) {
+            errorMsg_ = "SF2 strict mode: missing or invalid mandatory INAM chunk";
+            return false;
+        }
+    }
+
     if (!hasSmpl_) {
         errorMsg_ = "SF2 missing mandatory smpl chunk";
         return false;
@@ -1321,6 +1330,10 @@ bool Sf2File::ValidateSampleHeaders() {
         auto& h = sampleHeaders_[i];
         const bool isTerminalSample = (i + 1 == sampleHeaders_.size());
         const bool isRomSample = (h.sampleType & 0x8000u) != 0;
+        if (strictSpecCompliance_ && isRomSample && (!hasValidIrom_ || !hasValidIver_)) {
+            errorMsg_ = "SF2 strict mode: ROM sample requires valid irom and iver metadata";
+            return false;
+        }
         if (h.start > h.end || (!isRomSample && h.end > sampleDataCount)) {
             errorMsg_ = "SF2 sample header points outside sample data";
             return false;
