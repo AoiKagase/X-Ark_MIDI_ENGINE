@@ -82,11 +82,13 @@ struct Sf2ModulatorIdentity {
     u16 source = 0;
     u16 destination = 0;
     u16 amountSource = 0;
+    u16 transform = 0;
 
     bool operator==(const Sf2ModulatorIdentity& other) const {
         return source == other.source &&
                destination == other.destination &&
-               amountSource == other.amountSource;
+               amountSource == other.amountSource &&
+               transform == other.transform;
     }
 };
 

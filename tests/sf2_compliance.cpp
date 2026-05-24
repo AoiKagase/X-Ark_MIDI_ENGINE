@@ -1416,7 +1416,7 @@ namespace {
             "Duplicate modulators should ignore the earlier definition");
     }
 
-    void TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition() {
+    void TestDuplicateModulatorsWithDifferentTransformsAreDistinct() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 100, 0, 0));
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 300, 0, 2));
@@ -1427,24 +1427,24 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_InitialFilterQ] == 300,
-            "Same source/destination/amountSource modulators should collapse even when transforms differ");
+        Require(zone.generators[GEN_InitialFilterQ] == 400,
+            "Different transform modulators should remain distinct and both apply");
     }
 
     void TestSf2ModulatorResolverSameZoneDuplicateRule() {
         const SFModList mods[] = {
             MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
-            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
+            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 0),
         };
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
         const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
 
         Require(resolved.size() == 1, "Duplicate modulator identity within a zone should result in one effective modulator");
         Require(resolved[0].mod.modAmount == 300, "The last definition of a duplicate modulator should be kept");
-        Require(resolved[0].mod.sfModTransOper == 2, "The transform of the last definition should be preserved");
+        Require(resolved[0].mod.sfModTransOper == 0, "The transform of the last duplicate definition should be preserved");
     }
 
-    void TestSf2ModulatorResolverDifferentTransformsShareIdentity() {
+    void TestSf2ModulatorResolverDifferentTransformsDoNotShareIdentity() {
         const SFModList mods[] = {
             MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
             MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
@@ -1452,9 +1452,7 @@ namespace {
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
         const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
 
-        Require(resolved.size() == 1, "Different transforms should still collapse to the same modulator identity");
-        Require(resolved[0].mod.modAmount == 300, "The later modulator should replace the earlier definition");
-        Require(resolved[0].mod.sfModTransOper == 2, "The later transform should be preserved");
+        Require(resolved.size() == 2, "Different transforms should not collapse to the same modulator identity");
     }
 
     void TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange() {
@@ -5681,7 +5679,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);
     RUN_TEST(TestPresetLevelIllegalSampleGeneratorsIgnored);
     RUN_TEST(TestDuplicateModulatorsUseLastDefinition);
-    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition);
+    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsAreDistinct);
     RUN_TEST(TestLinkedModulatorsFeedTargetSource);
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
@@ -5798,7 +5796,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
-    RUN_TEST(TestSf2ModulatorResolverDifferentTransformsShareIdentity);
+    RUN_TEST(TestSf2ModulatorResolverDifferentTransformsDoNotShareIdentity);
     RUN_TEST(TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST
