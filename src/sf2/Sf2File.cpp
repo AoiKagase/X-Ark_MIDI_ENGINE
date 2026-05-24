@@ -521,6 +521,14 @@ void ApplyInitialPitchDelta(ResolvedZone& zone, i32 deltaCents) {
 
 void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     switch (dest) {
+    case GEN_StartAddrsOffset:
+    case GEN_EndAddrsOffset:
+    case GEN_StartloopAddrsOffset:
+    case GEN_EndloopAddrsOffset:
+    case GEN_StartAddrsCoarseOffset:
+    case GEN_EndAddrsCoarseOffset:
+    case GEN_StartloopAddrsCoarse:
+    case GEN_EndloopAddrsCoarse:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
@@ -572,6 +580,14 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
 
 bool IsSupportedModulatorDestination(u16 dest) {
     switch (dest) {
+    case GEN_StartAddrsOffset:
+    case GEN_EndAddrsOffset:
+    case GEN_StartloopAddrsOffset:
+    case GEN_EndloopAddrsOffset:
+    case GEN_StartAddrsCoarseOffset:
+    case GEN_EndAddrsCoarseOffset:
+    case GEN_StartloopAddrsCoarse:
+    case GEN_EndloopAddrsCoarse:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:

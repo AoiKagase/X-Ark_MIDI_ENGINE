@@ -2437,6 +2437,10 @@ namespace {
         config.instGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -2));
         config.instGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, -3));
         config.instGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -1));
+        config.instMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 2, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -3, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_StartloopAddrsOffset, 1, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_EndloopAddrsOffset, -2, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -2444,14 +2448,14 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_StartAddrsOffset] == -4,
-            "Negative start address offsets should survive zone resolution");
-        Require(zone.generators[GEN_EndAddrsOffset] == -2,
-            "Negative end address offsets should survive zone resolution");
-        Require(zone.generators[GEN_StartloopAddrsOffset] == -3,
-            "Negative loop-start offsets should survive zone resolution");
-        Require(zone.generators[GEN_EndloopAddrsOffset] == -1,
-            "Negative loop-end offsets should survive zone resolution");
+        Require(zone.generators[GEN_StartAddrsOffset] == -2,
+            "Modulated negative start address offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndAddrsOffset] == -5,
+            "Modulated negative end address offsets should survive zone resolution");
+        Require(zone.generators[GEN_StartloopAddrsOffset] == -2,
+            "Modulated negative loop-start offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndloopAddrsOffset] == -3,
+            "Modulated negative loop-end offsets should survive zone resolution");
 
         Voice voice;
         voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
@@ -2459,11 +2463,11 @@ namespace {
         Require(voice.active, "Voice with negative sample offsets should still activate");
         Require(voice.samplePosFixed == static_cast<i64>(sf2.SampleHeaders(0)->start) * (1ll << 32),
             "Negative start offset should survive resolution without underflowing below sample start");
-        Require(voice.sampleEnd == sf2.SampleHeaders(0)->end - 2,
+        Require(voice.sampleEnd == sf2.SampleHeaders(0)->end - 5,
             "Negative end offset should shorten the playable sample end");
-        Require(voice.loopStart == sf2.SampleHeaders(0)->loopStart - 3,
+        Require(voice.loopStart == sf2.SampleHeaders(0)->loopStart - 2,
             "Negative loop-start offset should move the loop earlier");
-        Require(voice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 1,
+        Require(voice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 3,
             "Negative loop-end offset should move the loop end earlier");
     }
 
