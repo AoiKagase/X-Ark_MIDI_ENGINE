@@ -126,11 +126,14 @@ double Normalize7Bit(u8 value) {
 }
 
 double Normalize14BitBipolar(i16 value) {
-    return std::clamp(static_cast<double>(value) / 8192.0, -1.0, 8191.0 / 8192.0);
+    if (value >= 0) {
+        return std::clamp(static_cast<double>(value) / 8191.0, 0.0, 1.0);
+    }
+    return std::clamp(static_cast<double>(value) / 8192.0, -1.0, 0.0);
 }
 
 double NormalizeVelocity(u16 velocity) {
-    return std::clamp(static_cast<double>(velocity) / 65536.0, 0.0, 65535.0 / 65536.0);
+    return std::clamp(static_cast<double>(velocity) / 65535.0, 0.0, 1.0);
 }
 
 DecodeSourceResult DecodeSource(u16 sourceOper, u8 key, u16 velocity, const ModulatorContext* ctx, bool allowLinkSource) {
@@ -668,14 +671,18 @@ DecodeSourceResult EvaluateModulatorValue(const Sf2ResolvedModulator& modulator,
         }
         source.valid = true;
         source.value = 0.0;
+        bool hasValidInput = false;
         for (const auto& linkedInput : modulator.linkedInputs) {
             DecodeSourceResult res = EvaluateModulatorValue(linkedInput, key, velocity, ctx);
             if (!res.valid) {
-                source.valid = false;
-                break;
+                continue;
             }
+            hasValidInput = true;
             source.value += res.value;
             source.dependencies |= res.dependencies;
+        }
+        if (!hasValidInput) {
+            return { false, 0.0, Sf2ModulatorDependency::None };
         }
         source.value = ApplySourceShape(source.value, modulator.mod.sfModSrcOper);
     } else {

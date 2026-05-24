@@ -1178,8 +1178,8 @@ namespace {
 
     void TestSf2SpecResolverOptInPresetAddsToInstrument() {
         MinimalSf2Config config;
-        config.instMods.push_back(MakeMod(0, GEN_Pan, 100, 0, 0));
-        config.presetMods.push_back(MakeMod(0, GEN_Pan, 25, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_InitialFilterQ, 100, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_InitialFilterQ, 25, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -1191,7 +1191,7 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-        Require(zone.generators[GEN_Pan] == 125,
+        Require(zone.generators[GEN_InitialFilterQ] == 125,
             "Spec resolver opt-in should add preset modulators to instrument modulators");
     }
 
@@ -4316,6 +4316,37 @@ namespace {
             "Convex source curve should mirror the SF2 concave curve");
     }
 
+    void TestSf2SpecResolverLinkedBranchesSkipInvalidInputs() {
+        const SFModList mods[] = {
+            MakeMod(0, 0x8002u, 100, 0, 0),
+            MakeMod(0x0081u, 0x8002u, 200, 0, 0),
+            MakeMod(127, GEN_Pan, 1, 0, 0),
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 3 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+
+        {
+            const std::vector<Sf2ModulatorEvaluation> evaluated =
+                EvaluateSf2Modulators(resolved, 60, 65535, nullptr);
+            Require(evaluated.size() == 1, "Linked source should keep valid branches when one input lacks context");
+            Require(evaluated[0].destination == GEN_Pan, "Linked source should still resolve the final destination");
+            Require(evaluated[0].amount == 100,
+                "Linked source should ignore invalid inputs instead of failing the whole source");
+        }
+
+        {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[1] = 127;
+
+            const std::vector<Sf2ModulatorEvaluation> evaluated =
+                EvaluateSf2Modulators(resolved, 60, 65535, &ctx);
+            Require(evaluated.size() == 1, "Linked source should still evaluate with controller context");
+            Require(evaluated[0].amount == 298,
+                "Linked source should sum all valid branches using the current 7-bit controller scale");
+        }
+    }
+
     void TestSf2NrpnGeneratorOffsets() {
         ChannelState state{};
         state.HandleSf2NrpnControl(99, 120);
@@ -5368,6 +5399,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRomOverrideUsesOverrideSampleLimit);
     RUN_TEST(TestSourceCurvesSupport);
     RUN_TEST(TestSourceCurvesQuarterPoints);
+    RUN_TEST(TestSf2SpecResolverLinkedBranchesSkipInvalidInputs);
     RUN_TEST(TestSf2NrpnGeneratorOffsets);
     RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
     RUN_TEST(TestVelocityZoneBoundary);
