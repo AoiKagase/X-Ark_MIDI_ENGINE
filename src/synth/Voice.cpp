@@ -5,6 +5,7 @@
  */
 
 #include "Voice.h"
+#include "../sf2/Sf2ModulatorResolver.h"
 #include "SimdKernels.h"
 #include <cmath>
 #include <algorithm>
@@ -446,11 +447,25 @@ void Voice::ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey
     vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
 }
 
-void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
+void Voice::ApplyResolvedZoneMixState(const ResolvedZone& zone) {
     const i32* gen = zone.generators;
     const f64 attenCb = static_cast<f64>(gen[GEN_InitialAttenuation]);
     attenuation = static_cast<f32>(AttenuationToGain(static_cast<i32>(attenCb)));
     if (zone.sample) attenuation *= zone.sample->loudnessGain;
+
+    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
+    if (specialRoute.enabled) {
+        pan = specialRoute.pan;
+    }
+    ApplyPan(pan);
+    presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
+    presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
+    RefreshOutputGains();
+}
+
+void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
+    const i32* gen = zone.generators;
+    ApplyResolvedZoneMixState(zone);
 
     ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
 
@@ -464,13 +479,6 @@ void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effec
         ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
     }
 
-    f32 pan = std::clamp(static_cast<f32>(gen[GEN_Pan]) / 500.0f, -1.0f, 1.0f);
-    if (specialRoute.enabled) {
-        pan = specialRoute.pan;
-    }
-    ApplyPan(pan);
-    presetReverbSend = NormalizeSf2EffectsSend(gen[GEN_ReverbEffectsSend]);
-    presetChorusSend = NormalizeSf2EffectsSend(gen[GEN_ChorusEffectsSend]);
     exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
     RefreshOutputGains();
 }
@@ -678,8 +686,15 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
 }
 
 void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2DestinationClasses) {
-    (void)sf2DestinationClasses;
     if (!active || zone.sample != sampleHeader) {
+        return;
+    }
+
+    const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
+    if (sf2DestinationClasses != 0xFFu &&
+        (sf2DestinationClasses & static_cast<u8>(~mixMask)) == 0 &&
+        (sf2DestinationClasses & mixMask) != 0) {
+        ApplyResolvedZoneMixState(zone);
         return;
     }
 

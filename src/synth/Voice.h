@@ -235,6 +235,7 @@ public:
 
 private:
     void ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey);
+    void ApplyResolvedZoneMixState(const ResolvedZone& zone);
     void ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey);
     void ApplyPan(f32 pan);
     void RefreshEffectSends();
