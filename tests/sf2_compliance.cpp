@@ -1174,6 +1174,21 @@ namespace {
             "Duplicate modulators should ignore the earlier definition");
     }
 
+    void TestSf2ModulatorResolverSameZoneDuplicateRule() {
+        // According to Section 1075/1227, uniqueness is based on (Src, Dest, AmtSrc).
+        // If these 3 match, the first definition is ignored, even if Transform is different.
+        const SFModList mods[] = {
+            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0), // Mod 1: Linear
+            MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2), // Mod 2: Absolute
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+
+        Require(resolved.size() == 1, "Duplicate (Src, Dest, AmtSrc) within a zone should result in only one effective modulator");
+        Require(resolved[0].mod.modAmount == 300, "The last definition of a duplicate modulator should be kept");
+        Require(resolved[0].mod.sfModTransOper == 2, "The transform of the last definition should be preserved");
+    }
+
     void TestLinkedModulatorsFeedTargetSource() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(0, static_cast<u16>(0x8000u | 2u), 100, 0, 0));
@@ -4591,6 +4606,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestShortSampleIsAccepted);
     RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
+    RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST
     std::printf("sf2_compliance: all tests passed\n");
