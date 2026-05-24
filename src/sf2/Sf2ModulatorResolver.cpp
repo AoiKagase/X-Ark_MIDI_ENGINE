@@ -445,6 +445,54 @@ bool IsSf2SpecValueGeneratorDestination(u16 destination) {
     }
 }
 
+Sf2ModulatorDestinationClass ClassifySf2ModulatorDestination(u16 destination) {
+    switch (destination) {
+    case GEN_InitialAttenuation:
+    case GEN_Pan:
+    case GEN_ReverbEffectsSend:
+    case GEN_ChorusEffectsSend:
+        return Sf2ModulatorDestinationClass::Mix;
+    case GEN_InitialFilterFc:
+    case GEN_InitialFilterQ:
+    case GEN_ModLfoToFilterFc:
+    case GEN_ModEnvToFilterFc:
+        return Sf2ModulatorDestinationClass::Filter;
+    case GEN_ModLfoToPitch:
+    case GEN_VibLfoToPitch:
+    case GEN_ModEnvToPitch:
+    case GEN_CoarseTune:
+    case GEN_FineTune:
+    case GEN_ScaleTuning:
+    case kInternalInitialPitchDestination:
+        return Sf2ModulatorDestinationClass::Pitch;
+    case GEN_DelayModEnv:
+    case GEN_AttackModEnv:
+    case GEN_HoldModEnv:
+    case GEN_DecayModEnv:
+    case GEN_SustainModEnv:
+    case GEN_ReleaseModEnv:
+    case GEN_KeynumToModEnvHold:
+    case GEN_KeynumToModEnvDecay:
+    case GEN_DelayVolEnv:
+    case GEN_AttackVolEnv:
+    case GEN_HoldVolEnv:
+    case GEN_DecayVolEnv:
+    case GEN_SustainVolEnv:
+    case GEN_ReleaseVolEnv:
+    case GEN_KeynumToVolEnvHold:
+    case GEN_KeynumToVolEnvDecay:
+        return Sf2ModulatorDestinationClass::Envelope;
+    case GEN_ModLfoToVolume:
+    case GEN_DelayModLFO:
+    case GEN_FreqModLFO:
+    case GEN_DelayVibLFO:
+    case GEN_FreqVibLFO:
+        return Sf2ModulatorDestinationClass::Lfo;
+    default:
+        return Sf2ModulatorDestinationClass::Ignored;
+    }
+}
+
 bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource) {
     if (source == 0) {
         return true;

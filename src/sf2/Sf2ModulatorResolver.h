@@ -40,6 +40,15 @@ enum class Sf2ModulatorDependency : u16 {
     PitchWheelSensitivity = 1u << 5,
 };
 
+enum class Sf2ModulatorDestinationClass : u8 {
+    Ignored,
+    Mix,
+    Filter,
+    Pitch,
+    Envelope,
+    Lfo,
+};
+
 inline Sf2ModulatorDependency operator|(Sf2ModulatorDependency a, Sf2ModulatorDependency b) {
     return static_cast<Sf2ModulatorDependency>(static_cast<u16>(a) | static_cast<u16>(b));
 }
@@ -85,6 +94,7 @@ struct Sf2ModulatorZone {
 };
 
 bool IsSf2SpecValueGeneratorDestination(u16 destination);
+Sf2ModulatorDestinationClass ClassifySf2ModulatorDestination(u16 destination);
 bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource);
 bool IsSf2SpecModulatorTransform(u16 transform);
 Sf2ModulatorIdentity MakeSf2ModulatorIdentity(const SFModList& mod);

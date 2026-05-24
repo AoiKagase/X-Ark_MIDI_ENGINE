@@ -935,6 +935,25 @@ namespace {
         Require(!IsSf2SpecValueGeneratorDestination(59), "Generator 59 unused5 should not be a mod destination");
     }
 
+    void TestSf2ModulatorResolverDestinationClasses() {
+        Require(ClassifySf2ModulatorDestination(GEN_InitialAttenuation) == Sf2ModulatorDestinationClass::Mix,
+            "InitialAttenuation should be classified as mix refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_InitialFilterFc) == Sf2ModulatorDestinationClass::Filter,
+            "InitialFilterFc should be classified as filter refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_CoarseTune) == Sf2ModulatorDestinationClass::Pitch,
+            "CoarseTune should be classified as pitch refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_AttackVolEnv) == Sf2ModulatorDestinationClass::Envelope,
+            "Volume envelope attack should be classified as envelope refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_FreqModLFO) == Sf2ModulatorDestinationClass::Lfo,
+            "Mod LFO frequency should be classified as LFO refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_StartAddrsOffset) == Sf2ModulatorDestinationClass::Ignored,
+            "Sample offset generators should remain ignored for modulator refresh");
+        Require(ClassifySf2ModulatorDestination(GEN_SampleModes) == Sf2ModulatorDestinationClass::Ignored,
+            "sampleModes should remain ignored for modulator refresh");
+        Require(ClassifySf2ModulatorDestination(59) == Sf2ModulatorDestinationClass::Ignored,
+            "unused5 should remain ignored for modulator refresh");
+    }
+
     void TestSf2ModulatorResolverHierarchySemantics() {
         const SFModList instReplace = MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0);
         const SFModList presetAdd = MakeMod(0x0502u, GEN_InitialAttenuation, 25, 0, 0);
@@ -4591,6 +4610,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestForcedVelocityDefaultModulators);
     RUN_TEST(TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods);
     RUN_TEST(TestSf2ModulatorResolverDefaultTableAndDestinations);
+    RUN_TEST(TestSf2ModulatorResolverDestinationClasses);
     RUN_TEST(TestSf2ModulatorResolverHierarchySemantics);
     RUN_TEST(TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults);
     RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
