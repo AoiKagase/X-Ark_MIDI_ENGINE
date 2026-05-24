@@ -463,6 +463,25 @@ void Voice::ApplyResolvedZoneMixState(const ResolvedZone& zone) {
     RefreshOutputGains();
 }
 
+void Voice::ApplyResolvedZonePitchState(const i32* gen, i32 effectiveKey) {
+    const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
+    const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
+    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sampleHeader, compatOptions);
+    const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
+    if (specialRoute.enabled && specialRoute.clampAboveRoot &&
+        specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
+        effectiveKey = specialRoute.clampRootKey;
+    }
+    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
+    if (specialRoute.enabled) {
+        baseSemitones += specialRoute.detuneSemitones;
+    }
+    baseSampleStep = std::pow(2.0, baseSemitones / 12.0) *
+                     static_cast<f64>(sampleHeader->sampleRate) / static_cast<f64>(outputSampleRate);
+    sampleStepFixed = static_cast<i64>(std::llround(
+        baseSampleStep * std::pow(2.0, (pitchBendSemitones + perNotePitchSemitones) / 12.0) * 4294967296.0));
+}
+
 void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
     const i32* gen = zone.generators;
     ApplyResolvedZoneMixState(zone);
@@ -691,6 +710,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
     }
 
     const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
+    const u8 pitchMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch);
     if (sf2DestinationClasses != 0xFFu &&
         (sf2DestinationClasses & static_cast<u8>(~mixMask)) == 0 &&
         (sf2DestinationClasses & mixMask) != 0) {
@@ -701,24 +721,16 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
     const i32* gen = zone.generators;
     const u8 effectiveKeyU8 = ResolveForcedKey(noteKey, gen);
     i32 effectiveKey = static_cast<i32>(effectiveKeyU8);
+    if (sf2DestinationClasses != 0xFFu &&
+        (sf2DestinationClasses & static_cast<u8>(~pitchMask)) == 0 &&
+        (sf2DestinationClasses & pitchMask) != 0) {
+        ApplyResolvedZonePitchState(gen, effectiveKey);
+        return;
+    }
+
     ApplyResolvedZoneControllerState(zone, effectiveKey);
 
-    const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
-    const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sampleHeader, compatOptions);
-    const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
-    if (specialRoute.enabled && specialRoute.clampAboveRoot &&
-        specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
-        effectiveKey = specialRoute.clampRootKey;
-    }
-    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
-    if (specialRoute.enabled) {
-        baseSemitones += specialRoute.detuneSemitones;
-    }
-    baseSampleStep = std::pow(2.0, baseSemitones / 12.0) *
-                     static_cast<f64>(sampleHeader->sampleRate) / static_cast<f64>(outputSampleRate);
-    sampleStepFixed = static_cast<i64>(std::llround(
-        baseSampleStep * std::pow(2.0, (pitchBendSemitones + perNotePitchSemitones) / 12.0) * 4294967296.0));
+    ApplyResolvedZonePitchState(gen, effectiveKey);
     RefreshOutputGains();
 }
 
