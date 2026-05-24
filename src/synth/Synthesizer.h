@@ -139,7 +139,7 @@ private:
     void HandlePerNotePitchBend(u8 ch, u8 key, u32 pb32);
     void HandlePerNoteRegCtrl(u8 ch, u8 key, u8 index, u32 value);
     void HandlePerNoteManagement(u8 ch, u8 key, u8 flags);
-    void RefreshSf2ControllersForChannel(u8 ch);
+    void RefreshSf2ControllersForChannel(u8 ch, u16 changedModulatorDependencies);
     bool HasAudibleEffectTail() const;
     bool TryRestartLoop();
     void ResetPlaybackState(bool resetLoopProgress);

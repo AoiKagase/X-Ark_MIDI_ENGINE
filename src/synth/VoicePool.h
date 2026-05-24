@@ -68,6 +68,7 @@ public:
     void UpdateChannelMix(u8 channel, f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
     void SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale);
     void RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
+                               u16 changedModulatorDependencies,
                                f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32);
 
     // 全ボイスをレンダリング（outL, outR に加算）

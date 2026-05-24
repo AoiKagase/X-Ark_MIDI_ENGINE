@@ -5,6 +5,7 @@
  */
 
 #include "Synthesizer.h"
+#include "../sf2/Sf2ModulatorResolver.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -70,12 +71,48 @@ void ApplyChannelMix(VoicePool& voicePool, u8 ch, const ChannelState& state) {
     voicePool.UpdateChannelMix(ch, state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
 
+constexpr u16 Sf2DependencyMask(Sf2ModulatorDependency dependency) {
+    return static_cast<u16>(dependency);
+}
+
+constexpr u16 kSf2AllRuntimeModulatorDependencies =
+    Sf2DependencyMask(Sf2ModulatorDependency::ChannelController) |
+    Sf2DependencyMask(Sf2ModulatorDependency::ChannelPressure) |
+    Sf2DependencyMask(Sf2ModulatorDependency::PolyPressure) |
+    Sf2DependencyMask(Sf2ModulatorDependency::PitchWheel) |
+    Sf2DependencyMask(Sf2ModulatorDependency::PitchWheelSensitivity);
+
 bool IsRpnSelected(const ChannelState& state) {
     return state.rpnMSB != 0x7F || state.rpnLSB != 0x7F;
 }
 
 bool IsNrpnSelected(const ChannelState& state) {
     return state.nrpnMSB != 0x7F || state.nrpnLSB != 0x7F;
+}
+
+bool IsPitchWheelSensitivityRpnSelected(const ChannelState& state) {
+    return state.rpnMSB == 0 && state.rpnLSB == 0;
+}
+
+u16 Sf2ChangedDependenciesForControlChange(const ChannelState& state, u8 cc) {
+    if (cc == 121) {
+        return kSf2AllRuntimeModulatorDependencies;
+    }
+
+    u16 dependencies = Sf2DependencyMask(Sf2ModulatorDependency::ChannelController);
+    switch (cc) {
+    case 6:
+    case 38:
+    case 96:
+    case 97:
+        if (IsPitchWheelSensitivityRpnSelected(state)) {
+            dependencies |= Sf2DependencyMask(Sf2ModulatorDependency::PitchWheelSensitivity);
+        }
+        break;
+    default:
+        break;
+    }
+    return dependencies;
 }
 
 void ApplyCurrentPitchToChannel(VoicePool& voicePool, u8 ch, const ChannelState& state) {
@@ -1278,7 +1315,7 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
     case 123:
         break;
     default:
-        RefreshSf2ControllersForChannel(ch);
+        RefreshSf2ControllersForChannel(ch, Sf2ChangedDependenciesForControlChange(state, cc));
         break;
     }
     PublishChannelControllerView(ch);
@@ -1291,12 +1328,12 @@ void Synthesizer::HandleProgramChange(u8 ch, u8 program) {
 
 void Synthesizer::HandlePolyPressure(u8 ch, u8 key, u8 pressure) {
     channels_[ch].polyPressure[key] = pressure;
-    RefreshSf2ControllersForChannel(ch);
+    RefreshSf2ControllersForChannel(ch, Sf2DependencyMask(Sf2ModulatorDependency::PolyPressure));
 }
 
 void Synthesizer::HandleChannelPressure(u8 ch, u8 pressure) {
     channels_[ch].channelPressure = pressure;
-    RefreshSf2ControllersForChannel(ch);
+    RefreshSf2ControllersForChannel(ch, Sf2DependencyMask(Sf2ModulatorDependency::ChannelPressure));
 }
 
 void Synthesizer::HandlePitchBend(u8 ch, u32 bend32) {
@@ -1305,7 +1342,7 @@ void Synthesizer::HandlePitchBend(u8 ch, u32 bend32) {
     if (channels_[ch].isDrum) return;
     // 現在鳴っているボイスのピッチをリアルタイム更新
     voicePool_.UpdateChannelPitch(ch, channels_[ch]);
-    RefreshSf2ControllersForChannel(ch);
+    RefreshSf2ControllersForChannel(ch, Sf2DependencyMask(Sf2ModulatorDependency::PitchWheel));
 }
 
 void Synthesizer::HandlePerNotePitchBend(u8 ch, u8 key, u32 pb32) {
@@ -1394,7 +1431,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
         }
         for (int ch = 0; ch < MIDI_CHANNEL_COUNT; ++ch) {
             ApplyCurrentPitchToChannel(voicePool_, static_cast<u8>(ch), channels_[ch]);
-            RefreshSf2ControllersForChannel(static_cast<u8>(ch));
+            RefreshSf2ControllersForChannel(static_cast<u8>(ch), kSf2AllRuntimeModulatorDependencies);
         }
         return;
     }
@@ -1420,7 +1457,7 @@ void Synthesizer::HandleSysEx(const MidiEvent& ev) {
     }
 }
 
-void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
+void Synthesizer::RefreshSf2ControllersForChannel(u8 ch, u16 changedModulatorDependencies) {
     if (!soundBank_ || soundBank_->Kind() != SoundBankKind::Sf2) {
         return;
     }
@@ -1444,7 +1481,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.applySf2Cc91ToReverbSend = compatOptions_.applySf2Cc91ToReverbSend;
     ctx.applySf2Cc93ToChorusSend = compatOptions_.applySf2Cc93ToChorusSend;
     ctx.useSf2SpecModulatorResolver = compatOptions_.useSf2SpecModulatorResolver;
-    voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
+    voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx, changedModulatorDependencies,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }
 

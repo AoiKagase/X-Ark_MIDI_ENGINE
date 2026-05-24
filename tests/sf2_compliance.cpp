@@ -3036,7 +3036,7 @@ namespace {
 
         ModulatorContext ctx{};
         SetDefaultMidiControllers(ctx);
-        pool.RefreshSf2Controllers(0, sf2, ctx, 1.0f, 0x81020408u, 0x50A14285u, 0u);
+        pool.RefreshSf2Controllers(0, sf2, ctx, 0xFFFFu, 1.0f, 0x81020408u, 0x50A14285u, 0u);
 
         const bool hasLeftRightAfter =
             (first.baseGainL > first.baseGainR && second.baseGainR > second.baseGainL) ||

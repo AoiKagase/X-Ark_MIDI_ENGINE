@@ -31,6 +31,16 @@ constexpr u16 kSf2SampleTypeRight = 2u;
 constexpr u16 kSf2SampleTypeLeft = 4u;
 constexpr u16 kSf2SampleTypeLinked = 8u;
 
+bool ShouldRefreshSf2ResolvedZoneControllers(const ResolvedZone& zone, u16 changedModulatorDependencies) {
+    if (zone.sf2ModulatorDependencies == 0) {
+        return true;
+    }
+    if (changedModulatorDependencies == 0) {
+        return true;
+    }
+    return (zone.sf2ModulatorDependencies & changedModulatorDependencies) != 0;
+}
+
 f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
     if (!sample || !compatOptions.enableSf2SamplePitchCorrection) {
         return 0.0;
@@ -1499,6 +1509,7 @@ void VoicePool::SetSf2EffectSendScale(f32 reverbScale, f32 chorusScale) {
 }
 
 void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, const ModulatorContext& ctx,
+                                      u16 changedModulatorDependencies,
                                       f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 chorusSend32) {
     std::vector<ResolvedZone> zones;
     for (u16 i = 0; i < activeCount_; ++i) {
@@ -1514,12 +1525,16 @@ void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, co
                 if (v.HasLinkedVoice()) {
                     auto& linked = voices_[v.linkedVoiceIndex];
                     if (linked.MatchesResolvedZone(zone)) {
-                        linked.RefreshResolvedZoneControllers(zone);
+                        if (ShouldRefreshSf2ResolvedZoneControllers(zone, changedModulatorDependencies)) {
+                            linked.RefreshResolvedZoneControllers(zone);
+                        }
                     }
                 }
                 continue;
             }
-            v.RefreshResolvedZoneControllers(zone);
+            if (ShouldRefreshSf2ResolvedZoneControllers(zone, changedModulatorDependencies)) {
+                v.RefreshResolvedZoneControllers(zone);
+            }
         }
         v.UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
         if (v.HasLinkedVoice()) {
