@@ -482,12 +482,8 @@ void Voice::ApplyResolvedZonePitchState(const i32* gen, i32 effectiveKey) {
         baseSampleStep * std::pow(2.0, (pitchBendSemitones + perNotePitchSemitones) / 12.0) * 4294967296.0));
 }
 
-void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
+void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
     const i32* gen = zone.generators;
-    ApplyResolvedZoneMixState(zone);
-
-    ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
-
     filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
     filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
@@ -497,6 +493,14 @@ void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effec
     if (filterEnabled) {
         ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
     }
+}
+
+void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
+    const i32* gen = zone.generators;
+    ApplyResolvedZoneMixState(zone);
+
+    ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
+    ApplyResolvedZoneFilterState(zone);
 
     exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
     RefreshOutputGains();
@@ -711,6 +715,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
 
     const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
     const u8 pitchMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch);
+    const u8 filterMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter);
     if (sf2DestinationClasses != 0xFFu &&
         (sf2DestinationClasses & static_cast<u8>(~mixMask)) == 0 &&
         (sf2DestinationClasses & mixMask) != 0) {
@@ -725,6 +730,12 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
         (sf2DestinationClasses & static_cast<u8>(~pitchMask)) == 0 &&
         (sf2DestinationClasses & pitchMask) != 0) {
         ApplyResolvedZonePitchState(gen, effectiveKey);
+        return;
+    }
+    if (sf2DestinationClasses != 0xFFu &&
+        (sf2DestinationClasses & static_cast<u8>(~filterMask)) == 0 &&
+        (sf2DestinationClasses & filterMask) != 0) {
+        ApplyResolvedZoneFilterState(zone);
         return;
     }
 
