@@ -541,7 +541,6 @@ void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effec
     ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
     ApplyResolvedZoneFilterState(zone);
     exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
-    RefreshOutputGains();
 }
 
 void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmData24, size_t pcmDataSize,
