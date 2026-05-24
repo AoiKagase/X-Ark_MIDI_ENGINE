@@ -226,6 +226,8 @@ struct ResolvedZone {
     i32 presetBagIndex = -1;
     i32 instrumentBagIndex = -1;
     i32 sampleId = -1;
+    u16 sf2ModulatorDependencies = 0;
+    u8 sf2ModulatorDestinationClasses = 0;
 };
 
 } // namespace XArkMidi

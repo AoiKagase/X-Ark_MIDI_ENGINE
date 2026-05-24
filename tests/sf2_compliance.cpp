@@ -1195,6 +1195,40 @@ namespace {
             "Spec resolver opt-in should add preset modulators to instrument modulators");
     }
 
+    void TestSf2SpecResolverCarriesRefreshMetadata() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0x0081u, GEN_Pan, 100, 0, 0));
+        config.instMods.push_back(MakeMod(0x000Eu, GEN_InitialFilterFc, 100, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> legacyZones;
+        const ResolvedZone& legacyZone = RequireSingleZone(sf2, 60, 65535, nullptr, legacyZones);
+        Require(legacyZone.sf2ModulatorDependencies == 0,
+            "Legacy resolver zones should not carry spec resolver dependency metadata");
+        Require(legacyZone.sf2ModulatorDestinationClasses == 0,
+            "Legacy resolver zones should not carry spec resolver destination metadata");
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        Require((zone.sf2ModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::ChannelController)) != 0,
+            "Spec resolver zones should carry channel controller dependencies");
+        Require((zone.sf2ModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::ChannelPressure)) != 0,
+            "Spec resolver zones should carry pressure dependencies");
+        Require((zone.sf2ModulatorDestinationClasses & static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix)) != 0,
+            "Spec resolver zones should carry mix refresh destination metadata");
+        Require((zone.sf2ModulatorDestinationClasses & static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter)) != 0,
+            "Spec resolver zones should carry filter refresh destination metadata");
+        Require((zone.sf2ModulatorDestinationClasses & static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch)) != 0,
+            "Spec resolver zones should carry implicit pitch refresh destination metadata");
+    }
+
     void TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -4706,6 +4740,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverChainWithInvalidNodeIsIgnored);
     RUN_TEST(TestSf2SpecResolverOptInAppliesImplicitDefaults);
     RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
+    RUN_TEST(TestSf2SpecResolverCarriesRefreshMetadata);
     RUN_TEST(TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap);
     RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);
     RUN_TEST(TestAbsoluteTransformSupport);

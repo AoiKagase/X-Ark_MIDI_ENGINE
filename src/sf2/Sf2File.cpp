@@ -1574,6 +1574,14 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         const std::vector<Sf2ResolvedModulator> modulators = BuildSf2EffectiveModulators(zones, true);
         const std::vector<Sf2ModulatorEvaluation> evaluations =
             EvaluateSf2Modulators(modulators, effectiveKey, effectiveVelocity, ctx);
+        Sf2ModulatorDependency dependencies = Sf2ModulatorDependency::None;
+        for (const auto& evaluation : evaluations) {
+            dependencies |= evaluation.dependencies;
+        }
+        outZone.sf2ModulatorDependencies = static_cast<u16>(dependencies);
+        outZone.sf2ModulatorDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, dependencies));
+
         for (const auto& evaluation : evaluations) {
             if (evaluation.amount == 0) {
                 continue;
