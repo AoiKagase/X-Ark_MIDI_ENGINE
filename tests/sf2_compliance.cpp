@@ -1130,6 +1130,25 @@ namespace {
             "Spec resolver opt-in should add preset modulators to instrument modulators");
     }
 
+    void TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.ccValues[10] = 80;
+        ctx.applySf2ChannelDefaults = true;
+        ctx.applySf2Cc10ToPan = true;
+        ctx.useSf2SpecModulatorResolver = true;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        Require(zone.generators[GEN_Pan] == 250,
+            "Spec resolver should own default modulators and avoid legacy default-modulator double application");
+    }
+
     void TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -4620,6 +4639,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverChainWithInvalidNodeIsIgnored);
     RUN_TEST(TestSf2SpecResolverOptInAppliesImplicitDefaults);
     RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
+    RUN_TEST(TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap);
     RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);
     RUN_TEST(TestAbsoluteTransformSupport);
     RUN_TEST(TestPresetZoneTerminalInstrumentRule);

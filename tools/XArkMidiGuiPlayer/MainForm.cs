@@ -394,9 +394,9 @@ public sealed class MainForm : Form
         _optionToolTip.SetToolTip(_multiplySf2MidiEffectsSendsCheckBox,
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
-            "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
+            "旧互換経路で CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にします。SF2 2.04 modulator resolver が ON の場合は resolver 側が default modulators を扱うため無効化されます。");
         _optionToolTip.SetToolTip(_useSf2SpecModulatorResolverCheckBox,
-            "SoundFont 2.04 仕様寄りの modulator resolver を使います。旧互換動作と比較するための明示的な opt-in です。停止後の次回再生から反映されます。");
+            "SoundFont 2.04 仕様寄りの modulator resolver を使います。implicit default modulators も resolver 側で扱います。停止後の次回再生から反映されます。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,
             "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
         _optionToolTip.SetToolTip(_sf2ReverbSendScaleUpDown,
@@ -526,6 +526,12 @@ public sealed class MainForm : Form
         _loopCountUpDown.ValueChanged += (_, _) => ApplyLoopToPlayer();
         _sf2ReverbSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
         _sf2ChorusSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
+        _useSf2SpecModulatorResolverCheckBox.CheckedChanged += (_, _) => {
+            if (_useSf2SpecModulatorResolverCheckBox.Checked) {
+                _applySf2ChannelDefaultModulatorsCheckBox.Checked = false;
+            }
+            UpdateCreateOptionsEnabledState();
+        };
         _reverbReturnScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
         _chorusReturnScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
         _masterReverbSendScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
@@ -1036,7 +1042,8 @@ public sealed class MainForm : Form
         if (_multiplySf2MidiEffectsSendsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.MultiplySf2MidiEffectsSends;
         }
-        if (_applySf2ChannelDefaultModulatorsCheckBox.Checked) {
+        if (_applySf2ChannelDefaultModulatorsCheckBox.Checked &&
+            !_useSf2SpecModulatorResolverCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
         }
         if (_useSf2SpecModulatorResolverCheckBox.Checked) {
@@ -1069,8 +1076,9 @@ public sealed class MainForm : Form
         _sf2ZeroLengthLoopRetriggerCheckBox.Enabled = idle;
         _enableSf2SamplePitchCorrectionCheckBox.Enabled = idle;
         _multiplySf2MidiEffectsSendsCheckBox.Enabled = idle;
-        _applySf2ChannelDefaultModulatorsCheckBox.Enabled = idle;
         _useSf2SpecModulatorResolverCheckBox.Enabled = idle;
+        _applySf2ChannelDefaultModulatorsCheckBox.Enabled =
+            idle && !_useSf2SpecModulatorResolverCheckBox.Checked;
         _internalEffectsCheckBox.Enabled = idle;
         _outputStageComboBox.Enabled = idle;
         _sf2ReverbSendScaleUpDown.Enabled = !_exportInFlight;

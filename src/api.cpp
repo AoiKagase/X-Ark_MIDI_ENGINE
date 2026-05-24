@@ -91,6 +91,9 @@ SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
             (flags & XAME_COMPAT_DISABLE_INTERNAL_EFFECTS) != 0;
         compatOptions.useSf2SpecModulatorResolver =
             (flags & XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER) != 0;
+        if (compatOptions.useSf2SpecModulatorResolver) {
+            compatOptions.applySf2ChannelDefaults = false;
+        }
     }
     return compatOptions;
 }
