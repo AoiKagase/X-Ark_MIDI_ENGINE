@@ -235,6 +235,8 @@ public:
 
 private:
     void ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey);
+    void ApplyResolvedZoneEnvelopeState(const i32* gen, i32 effectiveKey);
+    void ApplyResolvedZoneLfoState(const i32* gen);
     void ApplyResolvedZoneMixState(const ResolvedZone& zone);
     void ApplyResolvedZonePitchState(const i32* gen, i32 effectiveKey);
     void ApplyResolvedZoneFilterState(const ResolvedZone& zone);

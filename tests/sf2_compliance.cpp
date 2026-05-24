@@ -3283,6 +3283,114 @@ namespace {
             "Filter-only refresh should not update attenuation");
     }
 
+    void TestSf2EnvelopeOnlyRefreshPreservesMixPitchFilterAndLfoState() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        const f64 originalBaseSampleStep = voice.baseSampleStep;
+        const i64 originalSampleStepFixed = voice.sampleStepFixed;
+        const f32 originalBaseGainL = voice.baseGainL;
+        const f32 originalAttenuation = voice.attenuation;
+        const u32 originalModLfoDelayEnd = voice.modLfoDelayEnd;
+        const f32 originalModLfoPhaseStep = voice.modLfoPhaseStep;
+        const u32 originalVibLfoDelayEnd = voice.vibLfoDelayEnd;
+        const f32 originalVibLfoPhaseStep = voice.vibLfoPhaseStep;
+
+        ResolvedZone refreshed = zone;
+        refreshed.generators[GEN_ReleaseVolEnv] = -1200;
+        refreshed.generators[GEN_AttackModEnv] = -600;
+        refreshed.generators[GEN_ModEnvToPitch] = 900;
+        voice.RefreshResolvedZoneControllers(
+            refreshed, static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope));
+
+        Require(voice.useModEnv, "Envelope-only refresh should keep mod env enabled when ModEnvToPitch is present");
+        Require(voice.modEnvToPitchCents == 900.0f,
+            "Envelope-only refresh should update ModEnvToPitch");
+        Require(voice.envReleaseTimeSeconds > 0.0f,
+            "Envelope-only refresh should update volume envelope release time");
+        Require(NearlyEqual(voice.baseSampleStep, originalBaseSampleStep, 1.0e-12),
+            "Envelope-only refresh should not recompute base pitch state");
+        Require(voice.sampleStepFixed == originalSampleStepFixed,
+            "Envelope-only refresh should not recompute sample step");
+        Require(voice.baseGainL == originalBaseGainL,
+            "Envelope-only refresh should not update pan-dependent base gain");
+        Require(voice.attenuation == originalAttenuation,
+            "Envelope-only refresh should not update attenuation");
+        Require(voice.modLfoDelayEnd == originalModLfoDelayEnd,
+            "Envelope-only refresh should not update modulation LFO delay");
+        Require(voice.modLfoPhaseStep == originalModLfoPhaseStep,
+            "Envelope-only refresh should not update modulation LFO rate");
+        Require(voice.vibLfoDelayEnd == originalVibLfoDelayEnd,
+            "Envelope-only refresh should not update vibrato LFO delay");
+        Require(voice.vibLfoPhaseStep == originalVibLfoPhaseStep,
+            "Envelope-only refresh should not update vibrato LFO rate");
+    }
+
+    void TestSf2LfoOnlyRefreshPreservesMixPitchEnvelopeAndFilterState() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        const f64 originalBaseSampleStep = voice.baseSampleStep;
+        const i64 originalSampleStepFixed = voice.sampleStepFixed;
+        const f32 originalBaseGainL = voice.baseGainL;
+        const f32 originalAttenuation = voice.attenuation;
+        const i32 originalFilterBaseFc = voice.filterBaseFcCents;
+        const bool originalFilterEnabled = voice.filterEnabled;
+
+        ResolvedZone refreshed = zone;
+        refreshed.generators[GEN_DelayModLFO] = -600;
+        refreshed.generators[GEN_FreqModLFO] = 1200;
+        refreshed.generators[GEN_ModLfoToPitch] = 200;
+        refreshed.generators[GEN_ModLfoToFilterFc] = 600;
+        refreshed.generators[GEN_ModLfoToVolume] = 300;
+        refreshed.generators[GEN_DelayVibLFO] = -1200;
+        refreshed.generators[GEN_FreqVibLFO] = 1200;
+        refreshed.generators[GEN_VibLfoToPitch] = 75;
+        voice.RefreshResolvedZoneControllers(
+            refreshed, static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo));
+
+        Require(voice.modLfoDelayEnd > 0, "LFO-only refresh should update modulation LFO delay");
+        Require(voice.modLfoPhaseStep > 0.0f, "LFO-only refresh should update modulation LFO rate");
+        Require(voice.modLfoToPitchCents == 200.0f,
+            "LFO-only refresh should update modulation LFO pitch depth");
+        Require(voice.modLfoToFilterFcCents == 600.0f,
+            "LFO-only refresh should update modulation LFO filter depth");
+        Require(voice.modLfoToVolumeCb == 300.0f,
+            "LFO-only refresh should update tremolo depth");
+        Require(voice.vibLfoDelayEnd > 0, "LFO-only refresh should update vibrato LFO delay");
+        Require(voice.vibLfoPhaseStep > 0.0f, "LFO-only refresh should update vibrato LFO rate");
+        Require(voice.vibLfoToPitchCents == 75.0f,
+            "LFO-only refresh should update vibrato pitch depth");
+        Require(NearlyEqual(voice.baseSampleStep, originalBaseSampleStep, 1.0e-12),
+            "LFO-only refresh should not recompute base pitch state");
+        Require(voice.sampleStepFixed == originalSampleStepFixed,
+            "LFO-only refresh should not recompute sample step");
+        Require(voice.baseGainL == originalBaseGainL,
+            "LFO-only refresh should not update pan-dependent base gain");
+        Require(voice.attenuation == originalAttenuation,
+            "LFO-only refresh should not update attenuation");
+        Require(voice.filterBaseFcCents == originalFilterBaseFc,
+            "LFO-only refresh should not change filter base cutoff");
+        Require(voice.filterEnabled,
+            "LFO-only refresh should enable the filter path when ModLfoToFilterFc is present");
+    }
+
     void TestEnvelopePitchAndKeynumScaling() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_ModEnvToPitch, 600));
@@ -4934,6 +5042,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2MixOnlyRefreshPreservesPitchAndFilterState);
     RUN_TEST(TestSf2PitchOnlyRefreshPreservesMixAndFilterState);
     RUN_TEST(TestSf2FilterOnlyRefreshPreservesMixAndPitchState);
+    RUN_TEST(TestSf2EnvelopeOnlyRefreshPreservesMixPitchFilterAndLfoState);
+    RUN_TEST(TestSf2LfoOnlyRefreshPreservesMixPitchEnvelopeAndFilterState);
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
     RUN_TEST(TestEnvelopeReleaseRecalculation);
     RUN_TEST(TestFilterAndLfoInitialization);

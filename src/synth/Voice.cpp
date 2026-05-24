@@ -387,6 +387,11 @@ void AdvanceEnvelope(EnvPhase& phase,
 }
 
 void Voice::ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey) {
+    ApplyResolvedZoneEnvelopeState(gen, effectiveKey);
+    ApplyResolvedZoneLfoState(gen);
+}
+
+void Voice::ApplyResolvedZoneEnvelopeState(const i32* gen, i32 effectiveKey) {
     const f64 outputRate = static_cast<f64>(outputSampleRate);
 
     f64 delayTime   = TimecentsToSeconds(gen[GEN_DelayVolEnv]);
@@ -434,17 +439,27 @@ void Voice::ApplyResolvedZoneEnvelopeParameters(const i32* gen, i32 effectiveKey
     }
     modEnvReleaseTimeSeconds = static_cast<f32>(modReleaseTime);
     modEnvReleaseRate = ComputeReleaseRate(1.0f, modEnvReleaseTimeSeconds, outputSampleRate);
+    modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
+    useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
+}
+
+void Voice::ApplyResolvedZoneLfoState(const i32* gen) {
+    const f64 outputRate = static_cast<f64>(outputSampleRate);
 
     modLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayModLFO]) * outputRate));
     modLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqModLFO]), outputSampleRate);
     modLfoToPitchCents = static_cast<f32>(gen[GEN_ModLfoToPitch]);
     modLfoToFilterFcCents = static_cast<f32>(gen[GEN_ModLfoToFilterFc]);
     modLfoToVolumeCb = static_cast<f32>(gen[GEN_ModLfoToVolume]);
-    modEnvToPitchCents = static_cast<f32>(gen[GEN_ModEnvToPitch]);
 
     vibLfoDelayEnd = static_cast<u32>(std::max(0.0, TimecentsToSeconds(gen[GEN_DelayVibLFO]) * outputRate));
     vibLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqVibLFO]), outputSampleRate);
     vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
+
+    filterEnabled = (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
+    if (filterEnabled) {
+        ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
+    }
 }
 
 void Voice::ApplyResolvedZoneMixState(const ResolvedZone& zone) {
@@ -498,10 +513,8 @@ void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
 void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
     const i32* gen = zone.generators;
     ApplyResolvedZoneMixState(zone);
-
     ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
     ApplyResolvedZoneFilterState(zone);
-
     exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
     RefreshOutputGains();
 }
@@ -716,6 +729,8 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
     const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
     const u8 pitchMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch);
     const u8 filterMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter);
+    const u8 envelopeMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope);
+    const u8 lfoMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo);
     if (sf2DestinationClasses != 0xFFu &&
         (sf2DestinationClasses & static_cast<u8>(~mixMask)) == 0 &&
         (sf2DestinationClasses & mixMask) != 0) {
@@ -736,6 +751,19 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
         (sf2DestinationClasses & static_cast<u8>(~filterMask)) == 0 &&
         (sf2DestinationClasses & filterMask) != 0) {
         ApplyResolvedZoneFilterState(zone);
+        return;
+    }
+    if (sf2DestinationClasses != 0xFFu &&
+        (sf2DestinationClasses & static_cast<u8>(~(envelopeMask | lfoMask))) == 0 &&
+        (sf2DestinationClasses & (envelopeMask | lfoMask)) != 0) {
+        const u8 envelopeOnly = sf2DestinationClasses & envelopeMask;
+        const u8 lfoOnly = sf2DestinationClasses & lfoMask;
+        if (envelopeOnly != 0) {
+            ApplyResolvedZoneEnvelopeState(gen, effectiveKey);
+        }
+        if (lfoOnly != 0) {
+            ApplyResolvedZoneLfoState(gen);
+        }
         return;
     }
 
