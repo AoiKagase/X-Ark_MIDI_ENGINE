@@ -565,6 +565,7 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     case GEN_InitialAttenuation:
     case GEN_CoarseTune:
     case GEN_FineTune:
+    case GEN_SampleModes:
     case GEN_ScaleTuning:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
@@ -624,6 +625,7 @@ bool IsSupportedModulatorDestination(u16 dest) {
     case GEN_InitialAttenuation:
     case GEN_CoarseTune:
     case GEN_FineTune:
+    case GEN_SampleModes:
     case GEN_ScaleTuning:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:

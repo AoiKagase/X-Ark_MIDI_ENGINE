@@ -2471,6 +2471,27 @@ namespace {
             "Negative loop-end offset should move the loop end earlier");
     }
 
+    void TestSampleModesModulatorControlsLooping() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0, GEN_SampleModes, 1, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_SampleModes] == 1,
+            "SampleModes should accept modulator deltas during zone resolution");
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        Require(voice.active, "Voice with modulated sampleModes should activate");
+        Require(voice.looping, "SampleModes modulator should enable continuous looping");
+        Require(!voice.loopUntilRelease, "SampleModes=1 should not enable loop-until-release");
+    }
+
     void TestSf2FifthLayerStaysIndependent() {
         std::array<i16, 96> sampleData{};
         for (size_t i = 0; i < sampleData.size(); ++i) {
@@ -4298,6 +4319,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSynthesizerCanDisableInternalEffectsTail);
     RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
+    RUN_TEST(TestSampleModesModulatorControlsLooping);
     RUN_TEST(TestSf2FifthLayerStaysIndependent);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
     RUN_TEST(TestSf2PitchPrecedence);
