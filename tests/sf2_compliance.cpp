@@ -4316,6 +4316,48 @@ namespace {
             "Convex source curve should mirror the SF2 concave curve");
     }
 
+    void TestSourceFamiliesAndCurves() {
+        const u16 keySwitch = static_cast<u16>(3u | (3u << 10));
+        const u16 cc1Concave = static_cast<u16>(0x0081u | (1u << 10));
+        const u16 channelPressureConvex = static_cast<u16>(13u | (2u << 10));
+
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(keySwitch, GEN_Pan, 500, 0, 0));
+        config.instMods.push_back(MakeMod(cc1Concave, GEN_InitialFilterQ, 500, 0, 0));
+        config.instMods.push_back(MakeMod(channelPressureConvex, GEN_ModEnvToPitch, 500, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+        ctx.ccValues[7] = 0;
+        ctx.ccValues[1] = 64;
+        ctx.ccValues[11] = 0;
+        ctx.channelPressure = 64;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& lowKeyZone = RequireSingleZone(sf2, 63, 65535, &ctx, zones);
+        Require(lowKeyZone.generators[GEN_Pan] == 0,
+            "Key-number switch curve should stay off below the midpoint");
+
+        zones.clear();
+        const ResolvedZone& highKeyZone = RequireSingleZone(sf2, 64, 65535, &ctx, zones);
+        Require(highKeyZone.generators[GEN_Pan] == 500,
+            "Key-number switch curve should turn on at the midpoint");
+        Require(highKeyZone.generators[GEN_InitialFilterQ] == 63,
+            "CC1 concave curve should keep the current 7-bit controller scale");
+        {
+            char message[128];
+            std::snprintf(message, sizeof(message),
+                "Channel pressure convex curve should mirror the SF2 log-based characteristic (actual=%d)",
+                highKeyZone.generators[GEN_ModEnvToPitch]);
+            Require(highKeyZone.generators[GEN_ModEnvToPitch] == 437, message);
+        }
+    }
+
     void TestSf2SpecResolverLinkedBranchesSkipInvalidInputs() {
         const SFModList mods[] = {
             MakeMod(0, 0x8002u, 100, 0, 0),
@@ -5399,6 +5441,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestRomOverrideUsesOverrideSampleLimit);
     RUN_TEST(TestSourceCurvesSupport);
     RUN_TEST(TestSourceCurvesQuarterPoints);
+    RUN_TEST(TestSourceFamiliesAndCurves);
     RUN_TEST(TestSf2SpecResolverLinkedBranchesSkipInvalidInputs);
     RUN_TEST(TestSf2NrpnGeneratorOffsets);
     RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
