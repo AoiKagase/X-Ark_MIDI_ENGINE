@@ -3503,21 +3503,25 @@ namespace {
 
         {
             MinimalSf2Config config;
-            config.instMods.push_back(MakeMod(velocityConcave, GEN_Pan, 500, 0, 0));
-            config.instMods.push_back(MakeMod(velocityConvex, GEN_ModEnvToPitch, 500, 0, 0));
-            config.instMods.push_back(MakeMod(velocitySwitch, GEN_InitialFilterQ, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocityConcave, GEN_InitialFilterQ, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocityConvex, GEN_ModLfoToPitch, 500, 0, 0));
+            config.instMods.push_back(MakeMod(velocitySwitch, GEN_ChorusEffectsSend, 500, 0, 0));
 
             const std::vector<u8> bytes = BuildMinimalSf2(config);
             Sf2File sf2;
             Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.useSf2SpecModulatorResolver = true;
+
             std::vector<ResolvedZone> zones;
-            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, nullptr, zones);
-            Require(zone.generators[GEN_Pan] == 354,
-                "Concave source curve should map mid velocity to sin(pi/4)");
-            Require(zone.generators[GEN_ModEnvToPitch] == 146,
-                "Convex source curve should map mid velocity to 1-cos(pi/4)");
-            Require(zone.generators[GEN_InitialFilterQ] == 500,
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, &ctx, zones);
+            Require(zone.generators[GEN_InitialFilterQ] == 63,
+                "Concave source curve should map mid velocity to ~0.125 (96dB scale)");
+            Require(zone.generators[GEN_ModLfoToPitch] == 437,
+                "Convex source curve should map mid velocity to ~0.875 (96dB scale)");
+            Require(zone.generators[GEN_ChorusEffectsSend] == 500,
                 "Switch source curve should step to 1.0 at mid velocity");
         }
     }
@@ -3527,22 +3531,38 @@ namespace {
         const u16 velocityConvex = static_cast<u16>(2u | (2u << 10));
 
         MinimalSf2Config config;
-        config.instMods.push_back(MakeMod(velocityConcave, GEN_Pan, 500, 0, 0));
-        config.instMods.push_back(MakeMod(velocityConvex, GEN_ModEnvToPitch, 500, 0, 0));
+        config.instMods.push_back(MakeMod(velocityConcave, GEN_InitialFilterQ, 500, 0, 0));
+        config.instMods.push_back(MakeMod(velocityConvex, GEN_ModLfoToPitch, 500, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
 
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+
         std::vector<ResolvedZone> zones;
         const u16 quarterVelocity = 16384;
-        const ResolvedZone& zone = RequireSingleZone(sf2, 60, quarterVelocity, nullptr, zones);
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, quarterVelocity, &ctx, zones);
         const double x = static_cast<double>(quarterVelocity) / 65535.0;
-        const i32 expectedConcave = static_cast<i32>(std::lround(500.0 * std::sqrt(x)));
-        const i32 expectedConvex = static_cast<i32>(std::lround(500.0 * (1.0 - std::sqrt(1.0 - x))));
-        Require(zone.generators[GEN_Pan] == expectedConcave,
-            "Concave source curve should follow the SF2 amplitude-squared characteristic");
-        Require(zone.generators[GEN_ModEnvToPitch] == expectedConvex,
+        
+        auto concaveFunc = [](double v) {
+            if (v <= 0.0) return 0.0;
+            if (v >= 1.0) return 1.0;
+            return std::min(1.0, -40.0 / 96.0 * std::log10(1.0 - v));
+        };
+        auto convexFunc = [](double v) {
+            if (v <= 0.0) return 0.0;
+            if (v >= 1.0) return 1.0;
+            return std::max(0.0, 1.0 + 40.0 / 96.0 * std::log10(v));
+        };
+
+        const i32 expectedConcave = static_cast<i32>(std::lround(500.0 * concaveFunc(x)));
+        const i32 expectedConvex = static_cast<i32>(std::lround(500.0 * convexFunc(x)));
+        Require(zone.generators[GEN_InitialFilterQ] == expectedConcave,
+            "Concave source curve should follow the SF2 log-based characteristic");
+        Require(zone.generators[GEN_ModLfoToPitch] == expectedConvex,
             "Convex source curve should mirror the SF2 concave curve");
     }
 

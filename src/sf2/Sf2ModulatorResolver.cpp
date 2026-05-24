@@ -84,38 +84,41 @@ double Clamp01(double x) {
     return std::clamp(x, 0.0, 1.0);
 }
 
-double ConcaveCurve(double x) {
-    return std::sqrt(Clamp01(x));
-}
-
-double ConvexCurve(double x) {
-    return 1.0 - std::sqrt(1.0 - Clamp01(x));
-}
-
-double ApplySourceShape(double x, u16 sourceOper) {
-    const u16 type = (sourceOper >> kSourceTypeShift) & 0x3Fu;
+double ApplyType(double v, u16 type) {
     switch (type) {
-    case 0:
-        break;
-    case 1:
-        x = ConcaveCurve(x);
-        break;
-    case 2:
-        x = ConvexCurve(x);
-        break;
-    case 3:
-        x = (x >= 0.5) ? 1.0 : 0.0;
-        break;
+    case 0: // Linear
+        return v;
+    case 1: // Concave
+        if (v <= 0.0) return 0.0;
+        if (v >= 1.0) return 1.0;
+        return std::min(1.0, -40.0 / 96.0 * std::log10(1.0 - v));
+    case 2: // Convex
+        if (v <= 0.0) return 0.0;
+        if (v >= 1.0) return 1.0;
+        return std::max(0.0, 1.0 + 40.0 / 96.0 * std::log10(v));
+    case 3: // Switch
+        return (v >= 0.5) ? 1.0 : 0.0;
     default:
         return 0.0;
     }
+}
 
+double ApplySourceShape(double x, u16 sourceOper) {
     const bool negative = (sourceOper & kSourceDirectionNegative) != 0;
     const bool bipolar = (sourceOper & kSourceBipolar) != 0;
-    if (!bipolar) {
-        return negative ? (1.0 - x) : x;
+    const u16 type = (sourceOper >> kSourceTypeShift) & 0x3Fu;
+
+    const double x_dir = negative ? (1.0 - x) : x;
+
+    if (bipolar) {
+        if (x_dir >= 0.5) {
+            return ApplyType(2.0 * x_dir - 1.0, type);
+        } else {
+            return -ApplyType(1.0 - 2.0 * x_dir, type);
+        }
+    } else {
+        return ApplyType(x_dir, type);
     }
-    return negative ? (1.0 - 2.0 * x) : (2.0 * x - 1.0);
 }
 
 double Normalize7Bit(u8 value) {
