@@ -493,6 +493,48 @@ Sf2ModulatorDestinationClass ClassifySf2ModulatorDestination(u16 destination) {
     }
 }
 
+Sf2ModulatorDestinationClassMask ToSf2ModulatorDestinationClassMask(Sf2ModulatorDestinationClass cls) {
+    switch (cls) {
+    case Sf2ModulatorDestinationClass::Mix:
+        return Sf2ModulatorDestinationClassMask::Mix;
+    case Sf2ModulatorDestinationClass::Filter:
+        return Sf2ModulatorDestinationClassMask::Filter;
+    case Sf2ModulatorDestinationClass::Pitch:
+        return Sf2ModulatorDestinationClassMask::Pitch;
+    case Sf2ModulatorDestinationClass::Envelope:
+        return Sf2ModulatorDestinationClassMask::Envelope;
+    case Sf2ModulatorDestinationClass::Lfo:
+        return Sf2ModulatorDestinationClassMask::Lfo;
+    case Sf2ModulatorDestinationClass::Ignored:
+    default:
+        return Sf2ModulatorDestinationClassMask::None;
+    }
+}
+
+bool HasSf2ModulatorDestinationClass(Sf2ModulatorDestinationClassMask mask, Sf2ModulatorDestinationClass cls) {
+    const u8 maskValue = static_cast<u8>(mask);
+    const u8 classValue = static_cast<u8>(ToSf2ModulatorDestinationClassMask(cls));
+    return classValue != 0 && (maskValue & classValue) != 0;
+}
+
+Sf2ModulatorDestinationClassMask ClassifySf2ModulatorRefreshDestinations(
+    const std::vector<Sf2ModulatorEvaluation>& evaluations,
+    Sf2ModulatorDependency changedDependencies) {
+    const u16 changed = static_cast<u16>(changedDependencies);
+    if (changed == 0) {
+        return Sf2ModulatorDestinationClassMask::None;
+    }
+
+    Sf2ModulatorDestinationClassMask mask = Sf2ModulatorDestinationClassMask::None;
+    for (const auto& evaluation : evaluations) {
+        if ((static_cast<u16>(evaluation.dependencies) & changed) == 0) {
+            continue;
+        }
+        mask |= ToSf2ModulatorDestinationClassMask(evaluation.destinationClass);
+    }
+    return mask;
+}
+
 bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource) {
     if (source == 0) {
         return true;

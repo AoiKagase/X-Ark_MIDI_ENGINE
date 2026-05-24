@@ -1052,6 +1052,43 @@ namespace {
         Require(sawPitchWheel, "Implicit pitch wheel default should produce an internal pitch evaluation");
     }
 
+    void TestSf2ModulatorResolverRefreshDestinationMask() {
+        Sf2ModulatorEvaluation mix{};
+        mix.destination = GEN_Pan;
+        mix.destinationClass = Sf2ModulatorDestinationClass::Mix;
+        mix.dependencies = Sf2ModulatorDependency::ChannelController;
+
+        Sf2ModulatorEvaluation pitch{};
+        pitch.destination = GEN_COUNT;
+        pitch.destinationClass = Sf2ModulatorDestinationClass::Pitch;
+        pitch.dependencies = Sf2ModulatorDependency::PitchWheel | Sf2ModulatorDependency::PitchWheelSensitivity;
+
+        Sf2ModulatorEvaluation ignored{};
+        ignored.destination = GEN_StartAddrsOffset;
+        ignored.destinationClass = Sf2ModulatorDestinationClass::Ignored;
+        ignored.dependencies = Sf2ModulatorDependency::ChannelController;
+
+        const std::vector<Sf2ModulatorEvaluation> evaluations{ mix, pitch, ignored };
+        const Sf2ModulatorDestinationClassMask channelMask =
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::ChannelController);
+        Require(HasSf2ModulatorDestinationClass(channelMask, Sf2ModulatorDestinationClass::Mix),
+            "Channel controller refresh mask should include mix destinations");
+        Require(!HasSf2ModulatorDestinationClass(channelMask, Sf2ModulatorDestinationClass::Pitch),
+            "Channel controller refresh mask should not include unrelated pitch destinations");
+        Require(!HasSf2ModulatorDestinationClass(channelMask, Sf2ModulatorDestinationClass::Ignored),
+            "Ignored destinations should not appear in refresh masks");
+
+        const Sf2ModulatorDestinationClassMask pitchMask =
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::PitchWheelSensitivity);
+        Require(HasSf2ModulatorDestinationClass(pitchMask, Sf2ModulatorDestinationClass::Pitch),
+            "Pitch wheel sensitivity refresh mask should include pitch destinations");
+
+        const Sf2ModulatorDestinationClassMask noneMask =
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::ChannelPressure);
+        Require(static_cast<u8>(noneMask) == 0,
+            "Unmatched dependency refresh mask should be empty");
+    }
+
     void TestSf2ModulatorResolverLinkCyclesAreIgnored() {
         const SFModList cycleMods[] = {
             MakeMod(0x0081u, 0x8001u, 100, 0, 0),
@@ -4662,6 +4699,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults);
     RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
     RUN_TEST(TestSf2ModulatorResolverPitchEvaluationMetadata);
+    RUN_TEST(TestSf2ModulatorResolverRefreshDestinationMask);
     RUN_TEST(TestSf2ModulatorResolverLinkCyclesAreIgnored);
     RUN_TEST(TestSf2ModulatorResolverLinkedInputsEvaluate);
     RUN_TEST(TestSf2ModulatorResolverLinkedChains);
