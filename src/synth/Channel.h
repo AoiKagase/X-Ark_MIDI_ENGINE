@@ -6,6 +6,7 @@
 
 #pragma once
 #include "../common/Types.h"
+#include "../sf2/Sf2ModulatorResolver.h"
 #include "../sf2/Sf2Types.h"
 #include <algorithm>
 #include <cmath>
@@ -87,8 +88,12 @@ struct ChannelState {
         if (sf2Nrpn.generatorIndex < 0 || sf2Nrpn.generatorIndex >= GEN_COUNT) {
             return;
         }
-        const i32 raw14 = (static_cast<i32>(dataEntryMSB) << 7) | dataEntryLSB;
-        sf2Nrpn.generatorOffsets[sf2Nrpn.generatorIndex] = std::clamp(raw14 - 8192, -8192, 8191);
+        const u16 generator = static_cast<u16>(sf2Nrpn.generatorIndex);
+        if (!IsSf2SpecNrpnRealtimeGenerator(generator)) {
+            return;
+        }
+        sf2Nrpn.generatorOffsets[sf2Nrpn.generatorIndex] =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(generator, dataEntryMSB, dataEntryLSB);
     }
 
     void IncrementNrpnDataEntry() {
@@ -113,7 +118,6 @@ struct ChannelState {
             break;
         case 38:
             dataEntryLSB = val;
-            ApplySf2NrpnDataEntry();
             break;
         case 98:
             nrpnLSB = val;
@@ -121,7 +125,11 @@ struct ChannelState {
             rpnLSB = 0x7F;
             if (sf2Nrpn.sf2Mode) {
                 if (val < 100) {
-                    sf2Nrpn.generatorIndex = sf2Nrpn.generatorSelectBase + val;
+                    const i32 candidate = sf2Nrpn.generatorSelectBase + val;
+                    if (candidate >= 0 && candidate < GEN_COUNT &&
+                        IsSf2SpecNrpnRealtimeGenerator(static_cast<u16>(candidate))) {
+                        sf2Nrpn.generatorIndex = candidate;
+                    }
                     sf2Nrpn.generatorSelectBase = 0;
                 } else if (val == 100) {
                     sf2Nrpn.generatorSelectBase = 100;

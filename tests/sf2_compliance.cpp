@@ -1258,8 +1258,13 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-        Require(zone.generators[GEN_Pan] == 250,
-            "Spec resolver should own default modulators and avoid legacy default-modulator double application");
+        {
+            char message[192];
+            std::snprintf(message, sizeof(message),
+                "Spec resolver should own default modulators and avoid legacy default-modulator double application (actual=%d)",
+                zone.generators[GEN_Pan]);
+            Require(zone.generators[GEN_Pan] == 250, message);
+        }
     }
 
     void TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents() {
@@ -4486,6 +4491,60 @@ namespace {
             "Reset All Controllers should clear SF2 NRPN offsets");
     }
 
+    void TestSf2NrpnAppliesOnMsbOnly() {
+        ChannelState state{};
+        state.HandleSf2NrpnControl(99, 120);
+        state.HandleSf2NrpnControl(98, static_cast<u8>(GEN_InitialAttenuation));
+        state.HandleSf2NrpnControl(38, 72);
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 0,
+            "Data Entry LSB alone should not apply SF2 NRPN offset before MSB");
+        state.HandleSf2NrpnControl(6, 65);
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 200,
+            "Data Entry MSB should apply the centered SF2 NRPN offset");
+    }
+
+    void TestSf2NrpnIgnoresNonRealtimeGenerators() {
+        ChannelState state{};
+        state.HandleSf2NrpnControl(99, 120);
+
+        // First select a valid real-time generator and apply a baseline offset.
+        state.HandleSf2NrpnControl(98, static_cast<u8>(GEN_InitialAttenuation));
+        state.HandleSf2NrpnControl(38, 0);
+        state.HandleSf2NrpnControl(6, 65);
+        Require(state.sf2Nrpn.generatorIndex == GEN_InitialAttenuation,
+            "Realtime generator selection should succeed");
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 128,
+            "Baseline offset should apply to realtime generator");
+
+        // Try selecting a non-real-time generator (overridingRootKey = 58).
+        state.HandleSf2NrpnControl(98, static_cast<u8>(GEN_OverridingRootKey));
+        Require(state.sf2Nrpn.generatorIndex == GEN_InitialAttenuation,
+            "Non-realtime generator selection should be ignored and keep the previous selection");
+        state.HandleSf2NrpnControl(38, 0);
+        state.HandleSf2NrpnControl(6, 66);
+        Require(state.sf2Nrpn.generatorOffsets[GEN_OverridingRootKey] == 0,
+            "Non-realtime generator should not receive NRPN offsets");
+        Require(state.sf2Nrpn.generatorOffsets[GEN_InitialAttenuation] == 256,
+            "Ignored non-realtime selection should continue controlling the previous realtime generator");
+
+        // Even if an out-of-band non-realtime offset exists, zone resolution should ignore it.
+        state.sf2Nrpn.generatorOffsets[GEN_OverridingRootKey] = 777;
+
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        Require(zone.generators[GEN_OverridingRootKey] == -1,
+            "Non-realtime overridingRootKey NRPN offset should be ignored during zone resolution");
+    }
+
     void TestSoftPedalAffectsNewNoteOnOnly() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -5510,6 +5569,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSourceFamiliesAndCurves);
     RUN_TEST(TestSf2SpecResolverLinkedBranchesSkipInvalidInputs);
     RUN_TEST(TestSf2NrpnGeneratorOffsets);
+    RUN_TEST(TestSf2NrpnAppliesOnMsbOnly);
+    RUN_TEST(TestSf2NrpnIgnoresNonRealtimeGenerators);
     RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
     RUN_TEST(TestVelocityZoneBoundary);
     RUN_TEST(TestSm24Detection);

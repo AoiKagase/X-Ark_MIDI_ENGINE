@@ -116,6 +116,11 @@ bool IsSf2SpecValueGeneratorDestination(u16 destination);
 Sf2ModulatorDestinationClass ClassifySf2ModulatorDestination(u16 destination);
 bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource);
 bool IsSf2SpecModulatorTransform(u16 transform);
+bool IsSf2SpecNrpnRealtimeGenerator(u16 generator);
+// Converts Data Entry MSB/LSB to a centered additive generator delta.
+i32 ConvertSf2NrpnDataEntryToGeneratorOffset(u16 generator, u8 dataEntryMsb, u8 dataEntryLsb);
+// Returns destination-class bits touched by non-zero NRPN generator offsets.
+u8 ClassifySf2NrpnOffsetDestinationClasses(const i32* nrpnOffsets, size_t count);
 Sf2ModulatorIdentity MakeSf2ModulatorIdentity(const SFModList& mod);
 Sf2ModulatorDestinationClassMask ToSf2ModulatorDestinationClassMask(Sf2ModulatorDestinationClass cls);
 bool HasSf2ModulatorDestinationClass(Sf2ModulatorDestinationClassMask mask, Sf2ModulatorDestinationClass cls);

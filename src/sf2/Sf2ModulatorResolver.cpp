@@ -572,6 +572,110 @@ bool IsSf2SpecModulatorTransform(u16 transform) {
     return transform == kTransformLinear || transform == kTransformAbsolute;
 }
 
+namespace {
+
+i32 Sf2NrpnUsefulRange(u16 generator) {
+    switch (generator) {
+    case GEN_ModLfoToPitch:
+    case GEN_VibLfoToPitch:
+    case GEN_ModEnvToPitch:
+    case GEN_ModLfoToFilterFc:
+    case GEN_ModEnvToFilterFc:
+        return 24000;
+    case GEN_InitialFilterFc:
+        return 12000;
+    case GEN_InitialFilterQ:
+        return 960;
+    case GEN_ModLfoToVolume:
+        return 1920;
+    case GEN_ChorusEffectsSend:
+    case GEN_ReverbEffectsSend:
+    case GEN_Pan:
+        return 1000;
+    case GEN_DelayModLFO:
+    case GEN_DelayVibLFO:
+    case GEN_DelayModEnv:
+    case GEN_HoldModEnv:
+    case GEN_DelayVolEnv:
+    case GEN_HoldVolEnv:
+        return 17000;
+    case GEN_FreqModLFO:
+    case GEN_FreqVibLFO:
+        return 20500;
+    case GEN_AttackModEnv:
+    case GEN_DecayModEnv:
+    case GEN_ReleaseModEnv:
+    case GEN_AttackVolEnv:
+    case GEN_DecayVolEnv:
+    case GEN_ReleaseVolEnv:
+        return 20000;
+    case GEN_SustainModEnv:
+    case GEN_KeynumToModEnvHold:
+    case GEN_KeynumToModEnvDecay:
+    case GEN_KeynumToVolEnvHold:
+    case GEN_KeynumToVolEnvDecay:
+    case GEN_SustainVolEnv:
+    case GEN_InitialAttenuation:
+    case GEN_CoarseTune:
+    case GEN_FineTune:
+        return 2400;
+    default:
+        return 0;
+    }
+}
+
+} // namespace
+
+bool IsSf2SpecNrpnRealtimeGenerator(u16 generator) {
+    if (!IsSf2SpecValueGeneratorDestination(generator)) {
+        return false;
+    }
+    // SF2 2.01 table marks scaleTuning as non-real-time.
+    return generator != GEN_ScaleTuning;
+}
+
+i32 ConvertSf2NrpnDataEntryToGeneratorOffset(u16 generator, u8 dataEntryMsb, u8 dataEntryLsb) {
+    if (!IsSf2SpecNrpnRealtimeGenerator(generator)) {
+        return 0;
+    }
+
+    const i32 raw14 = (static_cast<i32>(dataEntryMsb) << 7) | static_cast<i32>(dataEntryLsb);
+    i32 centered = std::clamp(raw14, 0, 16383) - 8192;
+    i32 usefulRange = Sf2NrpnUsefulRange(generator);
+    i32 divisor = 1;
+    while (usefulRange > 8192 && divisor < 16384) {
+        usefulRange = (usefulRange + 1) / 2;
+        divisor <<= 1;
+    }
+    if (divisor <= 1) {
+        return centered;
+    }
+    return (centered >= 0)
+        ? (centered + (divisor / 2)) / divisor
+        : (centered - (divisor / 2)) / divisor;
+}
+
+u8 ClassifySf2NrpnOffsetDestinationClasses(const i32* nrpnOffsets, size_t count) {
+    if (!nrpnOffsets || count == 0) {
+        return 0;
+    }
+
+    const size_t scanCount = std::min<size_t>(count, GEN_COUNT);
+    u8 destinationClasses = 0;
+    for (size_t i = 0; i < scanCount; ++i) {
+        if (nrpnOffsets[i] == 0) {
+            continue;
+        }
+        const u16 generator = static_cast<u16>(i);
+        if (!IsSf2SpecNrpnRealtimeGenerator(generator)) {
+            continue;
+        }
+        const Sf2ModulatorDestinationClass cls = ClassifySf2ModulatorDestination(generator);
+        destinationClasses |= static_cast<u8>(ToSf2ModulatorDestinationClassMask(cls));
+    }
+    return destinationClasses;
+}
+
 Sf2ModulatorIdentity MakeSf2ModulatorIdentity(const SFModList& mod) {
     Sf2ModulatorIdentity identity;
     identity.source = mod.sfModSrcOper;

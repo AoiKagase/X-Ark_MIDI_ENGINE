@@ -1104,8 +1104,6 @@ void Synthesizer::HandleControlChange(u8 ch, u8 cc, u32 val32) {
         state.dataEntryLSB = val;
         if (IsRpnSelected(state)) {
             ApplyRpnValue(state);
-        } else if (state.sf2Nrpn.sf2Mode) {
-            state.ApplySf2NrpnDataEntry();
         }
         break;
     case 5:  // Portamento Time

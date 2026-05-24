@@ -618,6 +618,32 @@ bool IsSupportedModulatorDestination(u16 dest) {
     }
 }
 
+void ApplySf2NrpnOffsets(ResolvedZone& zone, const ModulatorContext* ctx) {
+    if (!ctx || !ctx->nrpnOffsets) {
+        return;
+    }
+
+    for (int g = 0; g < GEN_COUNT; ++g) {
+        if (ctx->nrpnOffsets[g] == 0) {
+            continue;
+        }
+        const u16 generator = static_cast<u16>(g);
+        if (!IsSf2SpecNrpnRealtimeGenerator(generator)) {
+            continue;
+        }
+        zone.generators[g] = ClampGeneratorValue(generator, zone.generators[g] + ctx->nrpnOffsets[g]);
+    }
+
+    const u8 nrpnDestinationClasses = ClassifySf2NrpnOffsetDestinationClasses(ctx->nrpnOffsets, GEN_COUNT);
+    if (nrpnDestinationClasses == 0) {
+        return;
+    }
+    const u16 channelControllerDependency = static_cast<u16>(Sf2ModulatorDependency::ChannelController);
+    zone.sf2ModulatorDependencies |= channelControllerDependency;
+    zone.sf2ModulatorDestinationClasses |= nrpnDestinationClasses;
+    zone.sf2ModulatorChannelControllerDestinationClasses |= nrpnDestinationClasses;
+}
+
 } // namespace
 
 void Sf2File::SetResourceLimits(size_t maxSampleDataBytes, u32 maxPdtaEntries) {
@@ -1603,15 +1629,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             }
         }
 
-        if (ctx->nrpnOffsets) {
-            for (int g = 0; g < GEN_COUNT; ++g) {
-                if (ctx->nrpnOffsets[g] == 0) {
-                    continue;
-                }
-                outZone.generators[g] = ClampGeneratorValue(
-                    static_cast<u16>(g), outZone.generators[g] + ctx->nrpnOffsets[g]);
-            }
-        }
+        ApplySf2NrpnOffsets(outZone, ctx);
         return;
     }
 
@@ -1714,15 +1732,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                               effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
     }
 
-    if (ctx && ctx->nrpnOffsets) {
-        for (int g = 0; g < GEN_COUNT; ++g) {
-            if (ctx->nrpnOffsets[g] == 0) {
-                continue;
-            }
-            outZone.generators[g] = ClampGeneratorValue(
-                static_cast<u16>(g), outZone.generators[g] + ctx->nrpnOffsets[g]);
-        }
-    }
+    ApplySf2NrpnOffsets(outZone, ctx);
 }
 
 bool Sf2File::ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
