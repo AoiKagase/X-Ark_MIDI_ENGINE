@@ -1895,6 +1895,36 @@ void Sf2File::ScanUnsupportedModulators() {
     unsupportedModulatorCount_ = 0;
     unsupportedModulatorTransformCount_ = 0;
 
+    if (strictSpecCompliance_) {
+        std::vector<Sf2ModulatorZone> zones;
+        for (size_t i = 0; i + 1 < presetBags_.size(); ++i) {
+            const u16 start = presetBags_[i].wModNdx;
+            const u16 end = presetBags_[i + 1].wModNdx;
+            if (start < end && start < presetMods_.size()) {
+                Sf2ModulatorZone zone;
+                zone.level = Sf2ModulatorLevel::PresetLocal;
+                zone.mods = presetMods_.data() + start;
+                zone.count = static_cast<size_t>(std::min<size_t>(end, presetMods_.size()) - start);
+                zones.push_back(zone);
+            }
+        }
+        for (size_t i = 0; i + 1 < instBags_.size(); ++i) {
+            const u16 start = instBags_[i].wInstModNdx;
+            const u16 end = instBags_[i + 1].wInstModNdx;
+            if (start < end && start < instMods_.size()) {
+                Sf2ModulatorZone zone;
+                zone.level = Sf2ModulatorLevel::InstrumentLocal;
+                zone.mods = instMods_.data() + start;
+                zone.count = static_cast<size_t>(std::min<size_t>(end, instMods_.size()) - start);
+                zones.push_back(zone);
+            }
+        }
+        CountSf2SpecUnsupportedModulators(zones,
+                                          unsupportedModulatorCount_,
+                                          unsupportedModulatorTransformCount_);
+        return;
+    }
+
     auto scan = [&](const std::vector<SFModList>& mods, bool allowInstrumentOnlyDestinations) {
         for (const auto& mod : mods) {
             const bool isTerminal =
@@ -1906,32 +1936,16 @@ void Sf2File::ScanUnsupportedModulators() {
             if (isTerminal) {
                 continue;
             }
-            bool unsupportedTransform = false;
-            bool unsupportedSource = false;
-            bool unsupportedAmountSource = false;
-            bool unsupportedDestination = false;
-
-            if (strictSpecCompliance_) {
-                const bool isLinkDestination = (mod.sfModDestOper & 0x8000u) != 0;
-                unsupportedTransform = !IsSf2SpecModulatorTransform(mod.sfModTransOper);
-                unsupportedSource = !IsSf2SpecModulatorSourceDefinition(mod.sfModSrcOper, true);
-                unsupportedAmountSource =
-                    IsLinkModSource(mod.sfModAmtSrcOper) ||
-                    !IsSf2SpecModulatorSourceDefinition(mod.sfModAmtSrcOper, false);
-                unsupportedDestination =
-                    !isLinkDestination && !IsSf2SpecValueGeneratorDestination(mod.sfModDestOper);
-            } else {
-                unsupportedTransform = !IsSupportedModTransform(mod.sfModTransOper);
-                const bool sourceIsValidLink =
-                    IsLinkModSource(mod.sfModSrcOper) && ((mod.sfModDestOper & 0x8000u) != 0);
-                unsupportedSource =
-                    !sourceIsValidLink && !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
-                unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
-                unsupportedDestination =
-                    ((mod.sfModDestOper & 0x8000u) == 0) &&
-                    ((mod.sfModDestOper >= GEN_COUNT) ||
-                     !IsSupportedModulatorDestination(mod.sfModDestOper, allowInstrumentOnlyDestinations));
-            }
+            const bool unsupportedTransform = !IsSupportedModTransform(mod.sfModTransOper);
+            const bool sourceIsValidLink =
+                IsLinkModSource(mod.sfModSrcOper) && ((mod.sfModDestOper & 0x8000u) != 0);
+            const bool unsupportedSource =
+                !sourceIsValidLink && !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
+            const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
+            const bool unsupportedDestination =
+                ((mod.sfModDestOper & 0x8000u) == 0) &&
+                ((mod.sfModDestOper >= GEN_COUNT) ||
+                 !IsSupportedModulatorDestination(mod.sfModDestOper, allowInstrumentOnlyDestinations));
             if (unsupportedTransform) {
                 ++unsupportedModulatorTransformCount_;
             }

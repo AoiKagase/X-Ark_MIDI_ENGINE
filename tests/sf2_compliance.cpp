@@ -1589,10 +1589,32 @@ namespace {
         Require(sf2.UnsupportedModulatorTransformCount() == 0,
             "Invalid link source should not increment transform count");
 
+        Sf2File strictSf2;
+        strictSf2.SetStrictSpecCompliance(true);
+        Require(strictSf2.LoadFromMemory(bytes.data(), bytes.size()), strictSf2.ErrorMessage().c_str());
+        Require(strictSf2.UnsupportedModulatorCount() == 1,
+            "Strict spec mode should report a link source with no linked input as unsupported");
+        Require(strictSf2.UnsupportedModulatorTransformCount() == 0,
+            "Strict spec link structure errors should not increment transform count");
+
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
         Require(zone.generators[GEN_Pan] == 0,
             "Invalid link source should be ignored during zone resolution");
+    }
+
+    void TestStrictSpecDanglingLinkDestinationReported() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0, static_cast<u16>(0x8000u | 7u), 100, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        sf2.SetStrictSpecCompliance(true);
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+        Require(sf2.UnsupportedModulatorCount() == 1,
+            "Strict spec mode should report link destinations targeting missing raw modulator indices");
+        Require(sf2.UnsupportedModulatorTransformCount() == 0,
+            "Dangling link destinations should not increment transform count");
     }
 
     void TestEffectsSendMixPolicy() {
@@ -5664,6 +5686,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
     RUN_TEST(TestInvalidLinkSourceIsReported);
+    RUN_TEST(TestStrictSpecDanglingLinkDestinationReported);
     RUN_TEST(TestEffectsSendMixPolicy);
     RUN_TEST(TestOutputLimiterAvoidsCrossSampleDucking);
     RUN_TEST(TestOutputLimiterUsesLinkedStereoGain);

@@ -294,6 +294,16 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
         entries[target->second].incomingLinks.push_back(i);
     }
 
+    for (auto& entry : entries) {
+        if (entry.ignored || entry.validity != Sf2ModulatorValidity::Valid) {
+            continue;
+        }
+        if (IsLinkSource(entry.mod.sfModSrcOper) && entry.incomingLinks.empty()) {
+            entry.validity = Sf2ModulatorValidity::InvalidLink;
+            entry.ignored = true;
+        }
+    }
+
     std::vector<int> state(entries.size(), 0);
     std::vector<bool> inCycle(entries.size(), false);
     std::vector<int> stack;
@@ -570,6 +580,26 @@ bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource) {
 
 bool IsSf2SpecModulatorTransform(u16 transform) {
     return transform == kTransformLinear || transform == kTransformAbsolute;
+}
+
+void CountSf2SpecUnsupportedModulators(const std::vector<Sf2ModulatorZone>& zones,
+                                       u32& unsupportedCount,
+                                       u32& unsupportedTransformCount) {
+    unsupportedCount = 0;
+    unsupportedTransformCount = 0;
+
+    for (const auto& zone : zones) {
+        const std::vector<WorkingModulator> normalized = NormalizeZone(zone);
+        for (const auto& entry : normalized) {
+            const bool unsupportedTransform = !IsSf2SpecModulatorTransform(entry.mod.sfModTransOper);
+            if (unsupportedTransform) {
+                ++unsupportedTransformCount;
+            }
+            if (unsupportedTransform || entry.validity != Sf2ModulatorValidity::Valid) {
+                ++unsupportedCount;
+            }
+        }
+    }
 }
 
 namespace {

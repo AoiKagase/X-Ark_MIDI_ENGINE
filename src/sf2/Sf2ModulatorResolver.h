@@ -116,6 +116,9 @@ bool IsSf2SpecValueGeneratorDestination(u16 destination);
 Sf2ModulatorDestinationClass ClassifySf2ModulatorDestination(u16 destination);
 bool IsSf2SpecModulatorSourceDefinition(u16 source, bool allowLinkSource);
 bool IsSf2SpecModulatorTransform(u16 transform);
+void CountSf2SpecUnsupportedModulators(const std::vector<Sf2ModulatorZone>& zones,
+                                       u32& unsupportedCount,
+                                       u32& unsupportedTransformCount);
 bool IsSf2SpecNrpnRealtimeGenerator(u16 generator);
 // Converts Data Entry MSB/LSB to a centered additive generator delta.
 i32 ConvertSf2NrpnDataEntryToGeneratorOffset(u16 generator, u8 dataEntryMsb, u8 dataEntryLsb);
