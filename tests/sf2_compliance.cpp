@@ -1210,6 +1210,8 @@ namespace {
             "Legacy resolver zones should not carry spec resolver dependency metadata");
         Require(legacyZone.sf2ModulatorDestinationClasses == 0,
             "Legacy resolver zones should not carry spec resolver destination metadata");
+        Require(legacyZone.sf2ModulatorChannelControllerDestinationClasses == 0,
+            "Legacy resolver zones should not carry spec resolver per-dependency destination metadata");
 
         ModulatorContext ctx{};
         SetDefaultMidiControllers(ctx);
@@ -1227,6 +1229,18 @@ namespace {
             "Spec resolver zones should carry filter refresh destination metadata");
         Require((zone.sf2ModulatorDestinationClasses & static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch)) != 0,
             "Spec resolver zones should carry implicit pitch refresh destination metadata");
+        Require((zone.sf2ModulatorChannelControllerDestinationClasses &
+                 static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix)) != 0,
+            "Spec resolver zones should classify channel-controller refresh destinations");
+        Require((zone.sf2ModulatorChannelPressureDestinationClasses &
+                 static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch)) != 0,
+            "Spec resolver zones should classify channel-pressure refresh destinations");
+        Require((zone.sf2ModulatorPitchWheelDestinationClasses &
+                 static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch)) != 0,
+            "Spec resolver zones should classify pitch-wheel refresh destinations");
+        Require((zone.sf2ModulatorPitchWheelSensitivityDestinationClasses &
+                 static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch)) != 0,
+            "Spec resolver zones should classify pitch-wheel sensitivity refresh destinations");
     }
 
     void TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap() {

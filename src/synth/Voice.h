@@ -194,6 +194,7 @@ public:
     void LinkVoice(u16 index) { linkedVoiceIndex = index; }
     void ClearLinkedVoice() { linkedVoiceIndex = kInvalidLinkedVoice; }
     void RefreshResolvedZoneControllers(const ResolvedZone& zone);
+    void RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2DestinationClasses);
 
     // チャンネルレベルのピッチベンドをリアルタイムで更新（per-note 分を加算）
     void UpdatePitchBend(f64 channelPitchSemitones) {

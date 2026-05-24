@@ -1581,6 +1581,16 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         outZone.sf2ModulatorDependencies = static_cast<u16>(dependencies);
         outZone.sf2ModulatorDestinationClasses = static_cast<u8>(
             ClassifySf2ModulatorRefreshDestinations(evaluations, dependencies));
+        outZone.sf2ModulatorChannelControllerDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::ChannelController));
+        outZone.sf2ModulatorChannelPressureDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::ChannelPressure));
+        outZone.sf2ModulatorPolyPressureDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::PolyPressure));
+        outZone.sf2ModulatorPitchWheelDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::PitchWheel));
+        outZone.sf2ModulatorPitchWheelSensitivityDestinationClasses = static_cast<u8>(
+            ClassifySf2ModulatorRefreshDestinations(evaluations, Sf2ModulatorDependency::PitchWheelSensitivity));
 
         for (const auto& evaluation : evaluations) {
             if (evaluation.amount == 0) {

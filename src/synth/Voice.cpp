@@ -674,6 +674,11 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
 }
 
 void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone) {
+    RefreshResolvedZoneControllers(zone, 0xFFu);
+}
+
+void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2DestinationClasses) {
+    (void)sf2DestinationClasses;
     if (!active || zone.sample != sampleHeader) {
         return;
     }

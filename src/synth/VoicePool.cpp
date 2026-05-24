@@ -6,6 +6,7 @@
 
 #include "VoicePool.h"
 #include "SimdKernels.h"
+#include "../sf2/Sf2ModulatorResolver.h"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -31,6 +32,30 @@ constexpr u16 kSf2SampleTypeRight = 2u;
 constexpr u16 kSf2SampleTypeLeft = 4u;
 constexpr u16 kSf2SampleTypeLinked = 8u;
 
+u8 Sf2DestinationClassesForChangedDependencies(const ResolvedZone& zone, u16 changedModulatorDependencies) {
+    if (zone.sf2ModulatorDependencies == 0 || changedModulatorDependencies == 0) {
+        return zone.sf2ModulatorDestinationClasses;
+    }
+
+    u8 destinationClasses = 0;
+    if ((changedModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::ChannelController)) != 0) {
+        destinationClasses |= zone.sf2ModulatorChannelControllerDestinationClasses;
+    }
+    if ((changedModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::ChannelPressure)) != 0) {
+        destinationClasses |= zone.sf2ModulatorChannelPressureDestinationClasses;
+    }
+    if ((changedModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::PolyPressure)) != 0) {
+        destinationClasses |= zone.sf2ModulatorPolyPressureDestinationClasses;
+    }
+    if ((changedModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::PitchWheel)) != 0) {
+        destinationClasses |= zone.sf2ModulatorPitchWheelDestinationClasses;
+    }
+    if ((changedModulatorDependencies & static_cast<u16>(Sf2ModulatorDependency::PitchWheelSensitivity)) != 0) {
+        destinationClasses |= zone.sf2ModulatorPitchWheelSensitivityDestinationClasses;
+    }
+    return destinationClasses;
+}
+
 bool ShouldRefreshSf2ResolvedZoneControllers(const ResolvedZone& zone, u16 changedModulatorDependencies) {
     if (zone.sf2ModulatorDependencies == 0) {
         return true;
@@ -38,7 +63,8 @@ bool ShouldRefreshSf2ResolvedZoneControllers(const ResolvedZone& zone, u16 chang
     if (changedModulatorDependencies == 0) {
         return true;
     }
-    return (zone.sf2ModulatorDependencies & changedModulatorDependencies) != 0;
+    return (zone.sf2ModulatorDependencies & changedModulatorDependencies) != 0 &&
+           Sf2DestinationClassesForChangedDependencies(zone, changedModulatorDependencies) != 0;
 }
 
 f64 EffectiveSamplePitchCorrection(const SampleHeader* sample, const SynthCompatOptions& compatOptions) {
@@ -1526,14 +1552,16 @@ void VoicePool::RefreshSf2Controllers(u8 channel, const SoundBank& soundBank, co
                     auto& linked = voices_[v.linkedVoiceIndex];
                     if (linked.MatchesResolvedZone(zone)) {
                         if (ShouldRefreshSf2ResolvedZoneControllers(zone, changedModulatorDependencies)) {
-                            linked.RefreshResolvedZoneControllers(zone);
+                            linked.RefreshResolvedZoneControllers(
+                                zone, Sf2DestinationClassesForChangedDependencies(zone, changedModulatorDependencies));
                         }
                     }
                 }
                 continue;
             }
             if (ShouldRefreshSf2ResolvedZoneControllers(zone, changedModulatorDependencies)) {
-                v.RefreshResolvedZoneControllers(zone);
+                v.RefreshResolvedZoneControllers(
+                    zone, Sf2DestinationClassesForChangedDependencies(zone, changedModulatorDependencies));
             }
         }
         v.UpdateChannelMix(volumeFactor, pan32, reverbSend32, chorusSend32);
