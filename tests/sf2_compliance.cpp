@@ -1390,7 +1390,7 @@ namespace {
             "Duplicate modulators should ignore the earlier definition");
     }
 
-    void TestDuplicateModulatorsWithDifferentTransformsRemainDistinct() {
+    void TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 100, 0, 0));
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 300, 0, 2));
@@ -1401,13 +1401,13 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_InitialFilterQ] == 400,
-            "Different transforms should not collapse otherwise matching legacy modulators");
+        Require(zone.generators[GEN_InitialFilterQ] == 300,
+            "Same source/destination/amountSource modulators should collapse even when transforms differ");
     }
 
     void TestSf2ModulatorResolverSameZoneDuplicateRule() {
         const SFModList mods[] = {
-            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 2),
+            MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
             MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
         };
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
@@ -1418,7 +1418,7 @@ namespace {
         Require(resolved[0].mod.sfModTransOper == 2, "The transform of the last definition should be preserved");
     }
 
-    void TestSf2ModulatorResolverTransformSeparatesIdentity() {
+    void TestSf2ModulatorResolverDifferentTransformsShareIdentity() {
         const SFModList mods[] = {
             MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
             MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
@@ -1426,7 +1426,57 @@ namespace {
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
         const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
 
-        Require(resolved.size() == 2, "Different transforms should not collapse otherwise matching modulators");
+        Require(resolved.size() == 1, "Different transforms should still collapse to the same modulator identity");
+        Require(resolved[0].mod.modAmount == 300, "The later modulator should replace the earlier definition");
+        Require(resolved[0].mod.sfModTransOper == 2, "The later transform should be preserved");
+    }
+
+    void TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange() {
+        const SFModList cc127Mods[] = {
+            MakeMod(static_cast<u16>(0x80u | 7u), GEN_Pan, 1, 0, 0),
+        };
+        const SFModList keyMods[] = {
+            MakeMod(3u, GEN_InitialAttenuation, 1, 0, 0),
+        };
+        const SFModList channelPressureMods[] = {
+            MakeMod(13u, GEN_InitialFilterQ, 1, 0, 0),
+        };
+
+        const Sf2ModulatorZone ccZone{ Sf2ModulatorLevel::InstrumentLocal, cc127Mods, 1 };
+        const Sf2ModulatorZone keyZone{ Sf2ModulatorLevel::InstrumentLocal, keyMods, 1 };
+        const Sf2ModulatorZone channelPressureZone{ Sf2ModulatorLevel::InstrumentLocal, channelPressureMods, 1 };
+
+        ModulatorContext ctx{};
+        ctx.ccValues[7] = 127;
+        ctx.channelPressure = 127;
+
+        const auto cc127Resolved = BuildSf2EffectiveModulators({ ccZone }, false);
+        const auto keyResolved = BuildSf2EffectiveModulators({ keyZone }, false);
+        const auto channelPressureResolved = BuildSf2EffectiveModulators({ channelPressureZone }, false);
+
+        const auto cc127Evaluated = EvaluateSf2Modulators(cc127Resolved, 60, 65535, &ctx);
+        const auto key127Evaluated = EvaluateSf2Modulators(keyResolved, 127, 65535, &ctx);
+        const auto channelPressure127Evaluated = EvaluateSf2Modulators(channelPressureResolved, 60, 65535, &ctx);
+
+        Require(cc127Evaluated.size() == 1 && cc127Evaluated[0].amount == 1,
+            "CC127 should decode to a source value of 1.0");
+        Require(key127Evaluated.size() == 1 && key127Evaluated[0].amount == 1,
+            "Key127 should decode to a source value of 1.0");
+        Require(channelPressure127Evaluated.size() == 1 && channelPressure127Evaluated[0].amount == 1,
+            "Channel pressure 127 should decode to a source value of 1.0");
+
+        ctx.ccValues[7] = 0;
+        ctx.channelPressure = 0;
+        const auto cc0Evaluated = EvaluateSf2Modulators(cc127Resolved, 60, 65535, &ctx);
+        const auto key0Evaluated = EvaluateSf2Modulators(keyResolved, 0, 65535, &ctx);
+        const auto channelPressure0Evaluated = EvaluateSf2Modulators(channelPressureResolved, 60, 65535, &ctx);
+
+        Require(cc0Evaluated.size() == 1 && cc0Evaluated[0].amount == 0,
+            "CC0 should remain a source value of 0.0");
+        Require(key0Evaluated.size() == 1 && key0Evaluated[0].amount == 0,
+            "Key0 should remain a source value of 0.0");
+        Require(channelPressure0Evaluated.size() == 1 && channelPressure0Evaluated[0].amount == 0,
+            "Channel pressure 0 should remain a source value of 0.0");
     }
 
     void TestLinkedModulatorsFeedTargetSource() {
@@ -5375,7 +5425,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);
     RUN_TEST(TestPresetLevelIllegalSampleGeneratorsIgnored);
     RUN_TEST(TestDuplicateModulatorsUseLastDefinition);
-    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsRemainDistinct);
+    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition);
     RUN_TEST(TestLinkedModulatorsFeedTargetSource);
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
@@ -5487,7 +5537,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
-    RUN_TEST(TestSf2ModulatorResolverTransformSeparatesIdentity);
+    RUN_TEST(TestSf2ModulatorResolverDifferentTransformsShareIdentity);
+    RUN_TEST(TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST
     std::printf("sf2_compliance: all tests passed\n");
