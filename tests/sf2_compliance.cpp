@@ -2456,10 +2456,6 @@ namespace {
         config.instGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -2));
         config.instGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, -3));
         config.instGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -1));
-        config.instMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 2, 0, 0));
-        config.instMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -3, 0, 0));
-        config.instMods.push_back(MakeMod(0, GEN_StartloopAddrsOffset, 1, 0, 0));
-        config.instMods.push_back(MakeMod(0, GEN_EndloopAddrsOffset, -2, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -2467,14 +2463,14 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_StartAddrsOffset] == -2,
-            "Modulated negative start address offsets should survive zone resolution");
-        Require(zone.generators[GEN_EndAddrsOffset] == -5,
-            "Modulated negative end address offsets should survive zone resolution");
-        Require(zone.generators[GEN_StartloopAddrsOffset] == -2,
-            "Modulated negative loop-start offsets should survive zone resolution");
-        Require(zone.generators[GEN_EndloopAddrsOffset] == -3,
-            "Modulated negative loop-end offsets should survive zone resolution");
+        Require(zone.generators[GEN_StartAddrsOffset] == -4,
+            "Negative start address offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndAddrsOffset] == -2,
+            "Negative end address offsets should survive zone resolution");
+        Require(zone.generators[GEN_StartloopAddrsOffset] == -3,
+            "Negative loop-start offsets should survive zone resolution");
+        Require(zone.generators[GEN_EndloopAddrsOffset] == -1,
+            "Negative loop-end offsets should survive zone resolution");
 
         Voice voice;
         voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
@@ -2482,33 +2478,46 @@ namespace {
         Require(voice.active, "Voice with negative sample offsets should still activate");
         Require(voice.samplePosFixed == static_cast<i64>(sf2.SampleHeaders(0)->start) * (1ll << 32),
             "Negative start offset should survive resolution without underflowing below sample start");
-        Require(voice.sampleEnd == sf2.SampleHeaders(0)->end - 5,
+        Require(voice.sampleEnd == sf2.SampleHeaders(0)->end - 2,
             "Negative end offset should shorten the playable sample end");
-        Require(voice.loopStart == sf2.SampleHeaders(0)->loopStart - 2,
+        Require(voice.loopStart == sf2.SampleHeaders(0)->loopStart - 3,
             "Negative loop-start offset should move the loop earlier");
-        Require(voice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 3,
+        Require(voice.loopEnd == sf2.SampleHeaders(0)->loopEnd - 1,
             "Negative loop-end offset should move the loop end earlier");
     }
 
-    void TestSampleModesModulatorControlsLooping() {
+    void TestSampleGeneratorModulatorDestinationsIgnored() {
         MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 2, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -3, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_StartloopAddrsOffset, 1, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_EndloopAddrsOffset, -2, 0, 0));
         config.instMods.push_back(MakeMod(0, GEN_SampleModes, 1, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
         Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+        Require(sf2.UnsupportedModulatorCount() == 5,
+            "Sample generator modulator destinations should be reported as unsupported");
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_SampleModes] == 1,
-            "SampleModes should accept modulator deltas during zone resolution");
+        Require(zone.generators[GEN_StartAddrsOffset] == 0,
+            "Start address modulator destination should be ignored in spec-compliant mode");
+        Require(zone.generators[GEN_EndAddrsOffset] == 0,
+            "End address modulator destination should be ignored in spec-compliant mode");
+        Require(zone.generators[GEN_StartloopAddrsOffset] == 0,
+            "Loop-start modulator destination should be ignored in spec-compliant mode");
+        Require(zone.generators[GEN_EndloopAddrsOffset] == 0,
+            "Loop-end modulator destination should be ignored in spec-compliant mode");
+        Require(zone.generators[GEN_SampleModes] == 0,
+            "SampleModes modulator destination should be ignored in spec-compliant mode");
 
         Voice voice;
         voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
                      SoundBankKind::Sf2, SynthCompatOptions{});
-        Require(voice.active, "Voice with modulated sampleModes should activate");
-        Require(voice.looping, "SampleModes modulator should enable continuous looping");
-        Require(!voice.loopUntilRelease, "SampleModes=1 should not enable loop-until-release");
+        Require(voice.active, "Voice with ignored sample generator modulators should activate");
+        Require(!voice.looping, "Ignored sampleModes modulator should not enable looping");
     }
 
     void TestSf2FifthLayerStaysIndependent() {
@@ -3090,7 +3099,7 @@ namespace {
             "SF2 defaults ON should expose the CC93 default as final chorus send");
     }
 
-    void TestDefaultModulatorSupersedeSemantics() {
+    void TestDefaultModulatorHierarchySemantics() {
         {
             MinimalSf2Config config;
             config.instMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 0));
@@ -3125,8 +3134,47 @@ namespace {
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 26,
-                "Preset-level explicit default mod should supersede the implicit default");
+            Require(zone.generators[GEN_Pan] == 286,
+                "Preset-level explicit default mod should add to the implicit default");
+        }
+
+        {
+            MinimalSf2Config config;
+            config.instMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 0));
+            config.presetMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 0));
+
+            const std::vector<u8> bytes = BuildMinimalSf2(config);
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc10ToPan = true;
+            ctx.ccValues[10] = 80;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_Pan] == 52,
+                "Preset-level identical mod should add to the instrument-level mod amount");
+        }
+
+        {
+            MinimalSf2Config config;
+            config.instMods.push_back(MakeMod(0x028A, GEN_Pan, 100, 0, 7));
+
+            const std::vector<u8> bytes = BuildMinimalSf2(config);
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.applySf2ChannelDefaults = true;
+            ctx.applySf2Cc10ToPan = true;
+            ctx.ccValues[10] = 80;
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+            Require(zone.generators[GEN_Pan] == 260,
+                "Invalid or unevaluated instrument modulator should not suppress the implicit default");
         }
     }
 
@@ -4339,7 +4387,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSynthesizerCanDisableInternalEffectsTail);
     RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
-    RUN_TEST(TestSampleModesModulatorControlsLooping);
+    RUN_TEST(TestSampleGeneratorModulatorDestinationsIgnored);
     RUN_TEST(TestSf2FifthLayerStaysIndependent);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
     RUN_TEST(TestSf2PitchPrecedence);
@@ -4350,7 +4398,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPitchWheelSensitivityAmountSource);
     RUN_TEST(TestRemainingDefaultModulators);
     RUN_TEST(TestSf2SplitDefaultModulatorCompatibility);
-    RUN_TEST(TestDefaultModulatorSupersedeSemantics);
+    RUN_TEST(TestDefaultModulatorHierarchySemantics);
     RUN_TEST(TestStereoSampleLinks);
     RUN_TEST(TestParallelRenderClearsFinishedLinkedVoice);
     RUN_TEST(TestProgramLayerRefreshMatchesZoneIdentity);

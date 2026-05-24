@@ -520,14 +520,6 @@ void ApplyInitialPitchDelta(ResolvedZone& zone, i32 deltaCents) {
 
 void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     switch (dest) {
-    case GEN_StartAddrsOffset:
-    case GEN_EndAddrsOffset:
-    case GEN_StartloopAddrsOffset:
-    case GEN_EndloopAddrsOffset:
-    case GEN_StartAddrsCoarseOffset:
-    case GEN_EndAddrsCoarseOffset:
-    case GEN_StartloopAddrsCoarse:
-    case GEN_EndloopAddrsCoarse:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
@@ -564,7 +556,6 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
     case GEN_InitialAttenuation:
     case GEN_CoarseTune:
     case GEN_FineTune:
-    case GEN_SampleModes:
     case GEN_ScaleTuning:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
@@ -580,14 +571,6 @@ void ApplyModulatorDelta(ResolvedZone& zone, u16 dest, i32 delta) {
 
 bool IsSupportedModulatorDestination(u16 dest) {
     switch (dest) {
-    case GEN_StartAddrsOffset:
-    case GEN_EndAddrsOffset:
-    case GEN_StartloopAddrsOffset:
-    case GEN_EndloopAddrsOffset:
-    case GEN_StartAddrsCoarseOffset:
-    case GEN_EndAddrsCoarseOffset:
-    case GEN_StartloopAddrsCoarse:
-    case GEN_EndloopAddrsCoarse:
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
@@ -624,7 +607,6 @@ bool IsSupportedModulatorDestination(u16 dest) {
     case GEN_InitialAttenuation:
     case GEN_CoarseTune:
     case GEN_FineTune:
-    case GEN_SampleModes:
     case GEN_ScaleTuning:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
@@ -1562,19 +1544,6 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     const u8 effectiveKey = ResolveForcedKey(key, outZone);
     const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
 
-    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        ApplyModulatorEntries(presetMods_,
-                              presetBags_[globalPresetBagIdx].wModNdx,
-                              presetBags_[globalPresetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
-    }
-    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        ApplyModulatorEntries(presetMods_,
-                              presetBags_[presetBagIdx].wModNdx,
-                              presetBags_[presetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
-    }
-
     if (ctx && ctx->applySf2ChannelDefaults &&
         ctx->applySf2VelocityToInitialAttenuation &&
         !defaultState.hasVelocityToAttenuationMod) {
@@ -1645,6 +1614,19 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         const double bend = std::clamp(static_cast<double>(ctx->pitchBend) / 8192.0, -1.0, 8191.0 / 8192.0);
         ApplyModulatorDelta(outZone, kModDestInitialPitch,
                             static_cast<i32>(std::lround(static_cast<double>(rangeCents) * bend)));
+    }
+
+    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[globalPresetBagIdx].wModNdx,
+                              presetBags_[globalPresetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
+    }
+    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[presetBagIdx].wModNdx,
+                              presetBags_[presetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
     }
 
     if (ctx && ctx->nrpnOffsets) {
