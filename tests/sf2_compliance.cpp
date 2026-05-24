@@ -1028,6 +1028,31 @@ namespace {
             "Linked input output should feed the target source");
     }
 
+    void TestSf2ModulatorResolverLinkedChains() {
+        // Test chain: Mod 0 -> Mod 1 -> Mod 2 -> GEN_Pan
+        // Mod 0: Const 100 -> Dest 0x8001
+        // Mod 1: Link (Mod 0) * 2 -> Dest 0x8002
+        // Mod 2: Link (Mod 1) * 3 -> GEN_Pan
+        const SFModList mods[] = {
+            MakeMod(0, 0x8001u, 100, 0, 0),
+            MakeMod(127, 0x8002u, 2, 0, 0),
+            MakeMod(127, GEN_Pan, 3, 0, 0),
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 3 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+
+        ModulatorContext ctx{};
+        ctx.useSf2SpecModulatorResolver = true;
+        const std::vector<Sf2ModulatorEvaluation> evaluated = EvaluateSf2Modulators(resolved, 60, 65535, &ctx);
+
+        // Mod 0: 100
+        // Mod 1: 100 * 2 = 200
+        // Mod 2: 200 * 3 = 600
+        Require(evaluated.size() == 1, "Chain evaluation should result in one final output");
+        Require(evaluated[0].destination == GEN_Pan, "Final destination should be GEN_Pan");
+        Require(evaluated[0].amount == 600, "Chain evaluation should correctly multiply amounts (100 * 2 * 3 = 600)");
+    }
+
     void TestSf2SpecResolverOptInAppliesImplicitDefaults() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -4522,6 +4547,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
     RUN_TEST(TestSf2ModulatorResolverLinkCyclesAreIgnored);
     RUN_TEST(TestSf2ModulatorResolverLinkedInputsEvaluate);
+    RUN_TEST(TestSf2ModulatorResolverLinkedChains);
     RUN_TEST(TestSf2SpecResolverOptInAppliesImplicitDefaults);
     RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
     RUN_TEST(TestAbsoluteTransformSupport);

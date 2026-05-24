@@ -224,7 +224,7 @@ double ApplyTransform(double value, u16 transform, bool& valid) {
 Sf2ModulatorValidity ValidateModulatorDefinition(const SFModList& mod, Sf2ModulatorLevel level) {
     const bool allowInternalDestination = level == Sf2ModulatorLevel::ImplicitInstrumentDefault;
     if (IsLinkDestination(mod.sfModDestOper)) {
-        if (!IsSf2SpecModulatorSourceDefinition(mod.sfModSrcOper, false)) {
+        if (!IsSf2SpecModulatorSourceDefinition(mod.sfModSrcOper, true)) {
             return Sf2ModulatorValidity::InvalidSource;
         }
     } else if (!IsSf2SpecValueGeneratorDestination(mod.sfModDestOper) &&
@@ -264,6 +264,7 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
         entries.push_back(entry);
         const int entryIndex = static_cast<int>(entries.size()) - 1;
         rawToEntry[entry.rawIndex] = entryIndex;
+        std::printf("DEBUG_NORM: added raw %d as entry %d (dest 0x%04x)\n", static_cast<int>(i), entryIndex, mod.sfModDestOper);
 
         const auto key = std::make_tuple(mod.sfModSrcOper, mod.sfModDestOper,
                                          mod.sfModAmtSrcOper);
@@ -285,10 +286,12 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
         const int targetRaw = static_cast<int>(entry.mod.sfModDestOper & 0x7FFFu);
         const auto target = rawToEntry.find(targetRaw);
         if (target == rawToEntry.end()) {
+            std::printf("DEBUG_NORM: target %d not found for raw index %d\n", targetRaw, i);
             entry.validity = Sf2ModulatorValidity::InvalidLink;
             entry.ignored = true;
             continue;
         }
+        std::printf("DEBUG_NORM: link raw %d -> target raw %d (entry %d)\n", i, targetRaw, target->second);
         entries[target->second].incomingLinks.push_back(i);
     }
 
@@ -333,8 +336,8 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
     return entries;
 }
 
-std::vector<SFModList> CollectLinkedInputs(const std::vector<WorkingModulator>& entries, const WorkingModulator& entry) {
-    std::vector<SFModList> inputs;
+std::vector<Sf2ResolvedModulator> CollectLinkedInputs(const std::vector<WorkingModulator>& entries, const WorkingModulator& entry) {
+    std::vector<Sf2ResolvedModulator> inputs;
     inputs.reserve(entry.incomingLinks.size());
     for (int incoming : entry.incomingLinks) {
         if (incoming < 0 || incoming >= static_cast<int>(entries.size())) {
@@ -342,7 +345,14 @@ std::vector<SFModList> CollectLinkedInputs(const std::vector<WorkingModulator>& 
         }
         const WorkingModulator& linked = entries[incoming];
         if (!linked.ignored && linked.validity == Sf2ModulatorValidity::Valid) {
-            inputs.push_back(linked.mod);
+            Sf2ResolvedModulator resolved;
+            resolved.mod = linked.mod;
+            resolved.level = linked.level;
+            resolved.validity = linked.validity;
+            resolved.participatesInDefaultSuppression = false;
+            resolved.dependencies = linked.dependencies;
+            resolved.linkedInputs = CollectLinkedInputs(entries, linked);
+            inputs.push_back(resolved);
         }
     }
     return inputs;
@@ -561,6 +571,52 @@ std::vector<Sf2ResolvedModulator> BuildSf2EffectiveModulators(const std::vector<
     return result;
 }
 
+DecodeSourceResult EvaluateModulatorValue(const Sf2ResolvedModulator& modulator,
+                                          u8 key, u16 velocity,
+                                          const ModulatorContext* ctx) {
+    DecodeSourceResult source;
+    if (IsLinkSource(modulator.mod.sfModSrcOper)) {
+        if (modulator.linkedInputs.empty()) {
+            std::printf("DEBUG_LINK: empty inputs for dest 0x%04x\n", modulator.mod.sfModDestOper);
+            return { false, 0.0, Sf2ModulatorDependency::None };
+        }
+        source.valid = true;
+        source.value = 0.0;
+        for (const auto& linkedInput : modulator.linkedInputs) {
+            DecodeSourceResult res = EvaluateModulatorValue(linkedInput, key, velocity, ctx);
+            if (!res.valid) {
+                source.valid = false;
+                break;
+            }
+            source.value += res.value;
+            source.dependencies |= res.dependencies;
+        }
+        source.value = ApplySourceShape(source.value, modulator.mod.sfModSrcOper);
+    } else {
+        source = DecodeSource(modulator.mod.sfModSrcOper, key, velocity, ctx, false);
+    }
+
+    const DecodeSourceResult amountSource = DecodeSource(modulator.mod.sfModAmtSrcOper, key, velocity, ctx, false);
+    if (!source.valid || !amountSource.valid) {
+        std::printf("DEBUG_LINK: invalid source/amount for dest 0x%04x (src_v=%f amt_v=%f)\n", 
+                    modulator.mod.sfModDestOper, source.value, amountSource.value);
+        return { false, 0.0, Sf2ModulatorDependency::None };
+    }
+
+    bool transformValid = false;
+    const double transformed = ApplyTransform(
+        static_cast<double>(modulator.mod.modAmount) * source.value * amountSource.value,
+        modulator.mod.sfModTransOper,
+        transformValid);
+
+    if (!transformValid) {
+        return { false, 0.0, Sf2ModulatorDependency::None };
+    }
+
+    std::printf("DEBUG_LINK: dest 0x%04x res=%f\n", modulator.mod.sfModDestOper, transformed);
+    return { true, transformed, source.dependencies | amountSource.dependencies | modulator.dependencies };
+}
+
 std::vector<Sf2ModulatorEvaluation> EvaluateSf2Modulators(const std::vector<Sf2ResolvedModulator>& modulators,
                                                           u8 key, u16 velocity,
                                                           const ModulatorContext* ctx) {
@@ -573,53 +629,14 @@ std::vector<Sf2ModulatorEvaluation> EvaluateSf2Modulators(const std::vector<Sf2R
             continue;
         }
 
-        DecodeSourceResult source;
-        if (IsLinkSource(modulator.mod.sfModSrcOper)) {
-            if (modulator.linkedInputs.empty()) {
-                continue;
-            }
-            source.valid = true;
-            source.value = 0.0;
-            for (const auto& linkedInput : modulator.linkedInputs) {
-                DecodeSourceResult linkedSource = DecodeSource(linkedInput.sfModSrcOper, key, velocity, ctx, false);
-                DecodeSourceResult linkedAmountSource = DecodeSource(linkedInput.sfModAmtSrcOper, key, velocity, ctx, false);
-                if (!linkedSource.valid || !linkedAmountSource.valid) {
-                    source.valid = false;
-                    break;
-                }
-                bool linkedTransformValid = false;
-                source.value += ApplyTransform(
-                    static_cast<double>(linkedInput.modAmount) * linkedSource.value * linkedAmountSource.value,
-                    linkedInput.sfModTransOper,
-                    linkedTransformValid);
-                if (!linkedTransformValid) {
-                    source.valid = false;
-                    break;
-                }
-                source.dependencies |= linkedSource.dependencies | linkedAmountSource.dependencies;
-            }
-        } else {
-            source = DecodeSource(modulator.mod.sfModSrcOper, key, velocity, ctx, false);
+        const DecodeSourceResult res = EvaluateModulatorValue(modulator, key, velocity, ctx);
+        if (res.valid) {
+            Sf2ModulatorEvaluation evaluation;
+            evaluation.destination = modulator.mod.sfModDestOper;
+            evaluation.amount = static_cast<i32>(std::lround(res.value));
+            evaluation.dependencies = res.dependencies;
+            result.push_back(evaluation);
         }
-        DecodeSourceResult amountSource = DecodeSource(modulator.mod.sfModAmtSrcOper, key, velocity, ctx, false);
-        if (!source.valid || !amountSource.valid) {
-            continue;
-        }
-
-        bool transformValid = false;
-        const double transformed = ApplyTransform(
-            static_cast<double>(modulator.mod.modAmount) * source.value * amountSource.value,
-            modulator.mod.sfModTransOper,
-            transformValid);
-        if (!transformValid) {
-            continue;
-        }
-
-        Sf2ModulatorEvaluation evaluation;
-        evaluation.destination = modulator.mod.sfModDestOper;
-        evaluation.amount = static_cast<i32>(std::lround(transformed));
-        evaluation.dependencies = source.dependencies | amountSource.dependencies | modulator.dependencies;
-        result.push_back(evaluation);
     }
     return result;
 }
