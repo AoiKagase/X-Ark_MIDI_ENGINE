@@ -38,7 +38,9 @@ public sealed class MainForm : Form
     private readonly OutputStageMeterControl _outputStageMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(340, 46), Margin = new Padding(8, 0, 0, 0) };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
-    private readonly GroupBox _createOptionsGroup = new() { Dock = DockStyle.Top, Text = "Engine Create Options", AutoSize = true };
+    // グループをPanelに変更
+    private readonly Panel _createOptionsPanel = new() { Dock = DockStyle.Top, AutoSize = true, BackColor = Color.White, Padding = new Padding(8) };
+    private readonly Label _createOptionsHeader = new() { Text = "Engine Create Options", Dock = DockStyle.Top, Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold), Margin = new Padding(0, 0, 0, 8) };
     private readonly NumericUpDown _maxSampleDataBytesUpDown = new() {
         Width = 150,
         Minimum = 0,
@@ -147,6 +149,20 @@ public sealed class MainForm : Form
     private readonly SaveFileDialog _wavSaveDialog = new() { Filter = "WAV audio (*.wav)|*.wav|All files (*.*)|*.*", DefaultExt = "wav", AddExtension = true };
     private readonly Label _keyboardLabel = new() { AutoSize = true, Text = "Keyboard: Ch 1" };
     private readonly PianoKeyboardControl _keyboard = new() { Dock = DockStyle.Fill, Height = 120, MinimumSize = new Size(0, 120) };
+    private readonly Button _toggleDetailsButton = new() { Text = "詳細設定...", AutoSize = true };
+    private bool _showDetails = false;
+    private readonly Panel _detailsPanel = new() { Dock = DockStyle.Top, Visible = false };
+    // Theme Colors
+    public static readonly Color PrimaryBg = Color.FromArgb(245, 245, 247);
+    public static readonly Color AccentColor = Color.FromArgb(0, 120, 215);
+    public static readonly Color PanelBg = Color.White;
+    public static readonly Color BorderColor = Color.FromArgb(220, 220, 220);
+
+    // Modernized Theme Colors for Meters
+    public static readonly Color DryColor = Color.FromArgb(100, 180, 120);
+    public static readonly Color ReverbColor = Color.FromArgb(150, 130, 200);
+    public static readonly Color ChorusColor = Color.FromArgb(100, 180, 210);
+
     private readonly ToolTip _optionToolTip = new() {
         AutoPopDelay = 20000,
         InitialDelay = 300,
@@ -168,6 +184,15 @@ public sealed class MainForm : Form
         Text = "X-Ark MIDI GUI Player";
         MinimumSize = new Size(980, 620);
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = PrimaryBg;
+
+        // Apply FlatStyle to all buttons (simplified for this context)
+        foreach (var btn in new[] { _browseMidiButton, _browseSoundFontButton, _playButton, _stopButton, _exportWavButton, _effectsOptionsButton, _toggleDetailsButton })
+        {
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.BackColor = Color.White;
+        }
 
         for (int i = 0; i < ChannelCount; ++i) {
             _channels.Add(new ChannelRow {
@@ -200,10 +225,11 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 8,
-            Padding = new Padding(12),
+            RowCount = 9,
+            Padding = new Padding(20),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -218,6 +244,7 @@ public sealed class MainForm : Form
             ColumnCount = 3,
             RowCount = 2,
             Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 16),
         };
         filePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -233,13 +260,15 @@ public sealed class MainForm : Form
             AutoSize = true,
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(0, 8, 0, 0),
+            Padding = new Padding(0),
+            Margin = new Padding(0, 0, 12, 0),
             WrapContents = false,
         };
         playbackControls.Controls.Add(_playButton);
         playbackControls.Controls.Add(_stopButton);
         playbackControls.Controls.Add(_exportWavButton);
         playbackControls.Controls.Add(_effectsOptionsButton);
+        playbackControls.Controls.Add(_toggleDetailsButton);
         playbackControls.Controls.Add(new Label { AutoSize = true, Width = 12 });
         playbackControls.Controls.Add(_loopEnabledCheckBox);
         playbackControls.Controls.Add(CreateInlineLabel("Count"));
@@ -251,7 +280,7 @@ public sealed class MainForm : Form
             AutoSize = true,
             ColumnCount = 2,
             Dock = DockStyle.Fill,
-            Margin = new Padding(0, 4, 0, 2),
+            Margin = new Padding(0, 8, 0, 16),
         };
         controlPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         controlPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -269,22 +298,33 @@ public sealed class MainForm : Form
         seekPanel.Controls.Add(_timeLabel, 1, 0);
 
         ConfigureCreateOptionsPanel();
+        _createOptionsPanel.Controls.Add(_createOptionsHeader);
         ConfigureGrid();
         _channelLevelGroup.Controls.Add(_channelLevelMeter);
 
         root.Controls.Add(filePanel, 0, 0);
         root.Controls.Add(controlPanel, 0, 1);
         root.Controls.Add(seekPanel, 0, 2);
-        root.Controls.Add(_createOptionsGroup, 0, 3);
-        root.Controls.Add(_channelLevelGroup, 0, 4);
-        root.Controls.Add(_channelGrid, 0, 5);
-        root.Controls.Add(_keyboardLabel, 0, 6);
-        root.Controls.Add(_keyboard, 0, 7);
+        root.Controls.Add(_detailsPanel, 0, 3);
+        root.Controls.Add(_createOptionsPanel, 0, 4);
+        root.Controls.Add(_channelLevelGroup, 0, 5);
+        root.Controls.Add(_channelGrid, 0, 6);
+        root.Controls.Add(_keyboardLabel, 0, 7);
+        root.Controls.Add(_keyboard, 0, 8);
         Controls.Add(root);
     }
 
     private void ConfigureCreateOptionsPanel()
     {
+        // 常に表示させたい項目を保持するため、あえて別のレイアウトを作る
+        var rootLayout = new TableLayoutPanel {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = 2,
+        };
+
         var layout = new TableLayoutPanel {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -328,7 +368,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(flagsPanel, 1, 1);
         layout.SetColumnSpan(flagsPanel, 6);
 
-        _createOptionsGroup.Controls.Add(layout);
+        _detailsPanel.Controls.Add(layout);
         ConfigureCreateOptionToolTips();
         UpdateCreateOptionsEnabledState();
     }
@@ -428,20 +468,31 @@ public sealed class MainForm : Form
         _channelGrid.MultiSelect = false;
         _channelGrid.RowHeadersVisible = false;
         _channelGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _channelGrid.BackgroundColor = SystemColors.Window;
-        _channelGrid.BorderStyle = BorderStyle.FixedSingle;
+        
+        // Modern Style
+        _channelGrid.BackgroundColor = Color.White;
+        _channelGrid.BorderStyle = BorderStyle.None;
+        _channelGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         _channelGrid.EnableHeadersVisualStyles = false;
-        _channelGrid.GridColor = Color.FromArgb(224, 224, 224);
-        _channelGrid.DefaultCellStyle.BackColor = SystemColors.Window;
-        _channelGrid.DefaultCellStyle.ForeColor = SystemColors.ControlText;
-        _channelGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(210, 228, 250);
-        _channelGrid.DefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
-        _channelGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
-        _channelGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-        _channelGrid.ColumnHeadersDefaultCellStyle.ForeColor = SystemColors.ControlText;
-        _channelGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(240, 240, 240);
-        _channelGrid.ColumnHeadersDefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+        _channelGrid.GridColor = BorderColor;
+        _channelGrid.RowTemplate.Height = 28;
+
+        _channelGrid.DefaultCellStyle.BackColor = Color.White;
+        _channelGrid.DefaultCellStyle.ForeColor = Color.Black;
+        _channelGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(230, 242, 255);
+        _channelGrid.DefaultCellStyle.SelectionForeColor = Color.Black;
+        _channelGrid.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+
+        _channelGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.White;
+        _channelGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.DimGray;
+        _channelGrid.ColumnHeadersDefaultCellStyle.Font = new Font(Font, FontStyle.Bold);
+        _channelGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.White;
+        _channelGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        _channelGrid.ColumnHeadersHeight = 32;
+
         _channelGrid.DataSource = _channels;
+        // ... rest of column definitions ...
+
 
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
             DataPropertyName = nameof(ChannelRow.Channel),
@@ -519,6 +570,7 @@ public sealed class MainForm : Form
         _stopButton.Click += (_, _) => StopPlayback();
         _exportWavButton.Click += async (_, _) => await ExportWavAsync();
         _effectsOptionsButton.Click += (_, _) => ShowEffectsOptionsDialog();
+        _toggleDetailsButton.Click += (_, _) => ToggleDetails();
         _loopEnabledCheckBox.CheckedChanged += (_, _) => {
             _loopCountUpDown.Enabled = _loopEnabledCheckBox.Checked;
             ApplyLoopToPlayer();
@@ -581,6 +633,14 @@ public sealed class MainForm : Form
         var location = _effectsOptionsButton.PointToScreen(new Point(0, _effectsOptionsButton.Height + 2));
         _effectsDialog.Location = location;
         _effectsDialog.Show(this);
+    }
+
+    private void ToggleDetails()
+    {
+        _showDetails = !_showDetails;
+        _detailsPanel.Visible = _showDetails;
+        _toggleDetailsButton.Text = _showDetails ? "詳細設定を隠す" : "詳細設定...";
+        PerformLayout();
     }
 
     private Form CreateEffectsOptionsDialog()
@@ -1068,7 +1128,7 @@ public sealed class MainForm : Form
     private void UpdateCreateOptionsEnabledState()
     {
         var idle = _player is null && !_exportInFlight;
-        _createOptionsGroup.Enabled = !_exportInFlight;
+        _createOptionsPanel.Enabled = !_exportInFlight;
         _effectsOptionsButton.Enabled = !_exportInFlight;
         _maxSampleDataBytesUpDown.Enabled = idle;
         _maxSf2PdtaEntriesUpDown.Enabled = idle;
@@ -1946,9 +2006,9 @@ public readonly record struct WavExportProgress(double CurrentSeconds, double To
 
 internal sealed class ChannelLevelMeterControl : Control
 {
-    private static readonly Color DryLegendColor = Color.FromArgb(64, 150, 94);
-    private static readonly Color ReverbLegendColor = Color.FromArgb(128, 92, 172);
-    private static readonly Color ChorusLegendColor = Color.FromArgb(52, 142, 176);
+    private static readonly Color DryLegendColor = MainForm.DryColor;
+    private static readonly Color ReverbLegendColor = MainForm.ReverbColor;
+    private static readonly Color ChorusLegendColor = MainForm.ChorusColor;
 
     private readonly float[] _dryLevels = new float[16];
     private readonly float[] _reverbLevels = new float[16];
@@ -1960,7 +2020,7 @@ internal sealed class ChannelLevelMeterControl : Control
     {
         DoubleBuffered = true;
         ResizeRedraw = true;
-        BackColor = SystemColors.Control;
+        BackColor = MainForm.PrimaryBg;
         Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
     }
 
