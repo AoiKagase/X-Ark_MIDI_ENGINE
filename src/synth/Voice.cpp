@@ -537,9 +537,11 @@ void Voice::ApplyResolvedZoneDestinationClassState(const ResolvedZone& zone, i32
 
 void Voice::ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey) {
     const i32* gen = zone.generators;
-    ApplyResolvedZoneMixState(zone);
-    ApplyResolvedZoneEnvelopeParameters(gen, effectiveKey);
-    ApplyResolvedZoneFilterState(zone);
+    const u8 mixMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix);
+    const u8 filterMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter);
+    const u8 envelopeMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope);
+    const u8 lfoMask = static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo);
+    ApplyResolvedZoneDestinationClassState(zone, effectiveKey, static_cast<u8>(mixMask | filterMask | envelopeMask | lfoMask));
     exclusiveClass = static_cast<u8>(gen[GEN_ExclusiveClass]);
 }
 
@@ -766,9 +768,7 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
         return;
     }
 
-    ApplyResolvedZoneControllerState(zone, effectiveKey);
-
-    ApplyResolvedZonePitchState(gen, effectiveKey);
+    ApplyResolvedZoneDestinationClassState(zone, effectiveKey, knownMask);
     RefreshOutputGains();
 }
 
