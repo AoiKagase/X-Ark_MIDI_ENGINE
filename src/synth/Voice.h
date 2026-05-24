@@ -24,6 +24,7 @@ struct SynthCompatOptions {
     bool applySf2Cc11ToInitialAttenuation = false;
     bool applySf2Cc91ToReverbSend = true;
     bool applySf2Cc93ToChorusSend = true;
+    bool useSf2SpecModulatorResolver = false;
     bool enableSoftPedal = true;
     bool enableEnhancedOutputStage = false;
     bool useNaturalOutputStage = false;

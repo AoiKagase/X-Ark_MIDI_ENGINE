@@ -69,6 +69,7 @@ struct Sf2ResolvedModulator {
     Sf2ModulatorValidity validity = Sf2ModulatorValidity::Valid;
     bool participatesInDefaultSuppression = false;
     Sf2ModulatorDependency dependencies = Sf2ModulatorDependency::None;
+    std::vector<SFModList> linkedInputs;
 };
 
 struct Sf2ModulatorEvaluation {

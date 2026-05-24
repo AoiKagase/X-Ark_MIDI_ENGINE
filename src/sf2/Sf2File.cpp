@@ -5,6 +5,7 @@
  */
 
 #include "Sf2File.h"
+#include "Sf2ModulatorResolver.h"
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
@@ -1523,26 +1524,92 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         }
     }
 
+    const u8 effectiveKey = ResolveForcedKey(key, outZone);
+    const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
+
+    if (ctx && ctx->useSf2SpecModulatorResolver) {
+        std::vector<Sf2ModulatorZone> zones;
+        auto addModZone = [&](Sf2ModulatorLevel level, const std::vector<SFModList>& mods,
+                              int bagIdx, auto getStart, auto getEnd) {
+            if (bagIdx < 0) {
+                return;
+            }
+            const int modMax = static_cast<int>(mods.size());
+            int modStart = getStart(bagIdx);
+            int modEnd = getEnd(bagIdx);
+            if (modStart < 0 || modStart > modMax) modStart = modMax;
+            if (modEnd < modStart) modEnd = modStart;
+            if (modEnd > modMax) modEnd = modMax;
+            if (modEnd == modStart) {
+                return;
+            }
+            Sf2ModulatorZone zone;
+            zone.level = level;
+            zone.mods = mods.data() + modStart;
+            zone.count = static_cast<size_t>(modEnd - modStart);
+            zones.push_back(zone);
+        };
+
+        if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
+            addModZone(Sf2ModulatorLevel::InstrumentGlobal, instMods_, globalInstBagIdx,
+                       [&](int bagIdx) { return static_cast<int>(instBags_[bagIdx].wInstModNdx); },
+                       [&](int bagIdx) { return static_cast<int>(instBags_[bagIdx + 1].wInstModNdx); });
+        }
+        if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
+            addModZone(Sf2ModulatorLevel::InstrumentLocal, instMods_, instBagIdx,
+                       [&](int bagIdx) { return static_cast<int>(instBags_[bagIdx].wInstModNdx); },
+                       [&](int bagIdx) { return static_cast<int>(instBags_[bagIdx + 1].wInstModNdx); });
+        }
+        if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+            addModZone(Sf2ModulatorLevel::PresetGlobal, presetMods_, globalPresetBagIdx,
+                       [&](int bagIdx) { return static_cast<int>(presetBags_[bagIdx].wModNdx); },
+                       [&](int bagIdx) { return static_cast<int>(presetBags_[bagIdx + 1].wModNdx); });
+        }
+        if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+            addModZone(Sf2ModulatorLevel::PresetLocal, presetMods_, presetBagIdx,
+                       [&](int bagIdx) { return static_cast<int>(presetBags_[bagIdx].wModNdx); },
+                       [&](int bagIdx) { return static_cast<int>(presetBags_[bagIdx + 1].wModNdx); });
+        }
+
+        const std::vector<Sf2ResolvedModulator> modulators = BuildSf2EffectiveModulators(zones, true);
+        const std::vector<Sf2ModulatorEvaluation> evaluations =
+            EvaluateSf2Modulators(modulators, effectiveKey, effectiveVelocity, ctx);
+        for (const auto& evaluation : evaluations) {
+            if (evaluation.amount == 0) {
+                continue;
+            }
+            if (evaluation.destination == GEN_COUNT) {
+                ApplyModulatorDelta(outZone, kModDestInitialPitch, evaluation.amount);
+            } else {
+                ApplyModulatorDelta(outZone, evaluation.destination, evaluation.amount);
+            }
+        }
+
+        if (ctx->nrpnOffsets) {
+            for (int g = 0; g < GEN_COUNT; ++g) {
+                if (ctx->nrpnOffsets[g] == 0) {
+                    continue;
+                }
+                outZone.generators[g] = ClampGeneratorValue(
+                    static_cast<u16>(g), outZone.generators[g] + ctx->nrpnOffsets[g]);
+            }
+        }
+        return;
+    }
+
     DefaultModulatorState defaultState;
     if (globalInstBagIdx >= 0 && globalInstBagIdx + 1 < static_cast<int>(instBags_.size())) {
-        const u8 effectiveKey = ResolveForcedKey(key, outZone);
-        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         ApplyModulatorEntries(instMods_,
                               instBags_[globalInstBagIdx].wInstModNdx,
                               instBags_[globalInstBagIdx + 1].wInstModNdx,
                               effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
     }
     if (instBagIdx >= 0 && instBagIdx + 1 < static_cast<int>(instBags_.size())) {
-        const u8 effectiveKey = ResolveForcedKey(key, outZone);
-        const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
         ApplyModulatorEntries(instMods_,
                               instBags_[instBagIdx].wInstModNdx,
                               instBags_[instBagIdx + 1].wInstModNdx,
                               effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
     }
-
-    const u8 effectiveKey = ResolveForcedKey(key, outZone);
-    const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
 
     if (ctx && ctx->applySf2ChannelDefaults &&
         ctx->applySf2VelocityToInitialAttenuation &&

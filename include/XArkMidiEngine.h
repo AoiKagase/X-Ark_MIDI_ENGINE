@@ -69,6 +69,8 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM = 1u << 6,
     /* Disable the internal post-mix reverb/chorus processing while keeping dry rendering active. 内部 post-mix リバーブ/コーラス処理を無効化し、ドライ出力のみを維持します。 */
     XAME_COMPAT_DISABLE_INTERNAL_EFFECTS = 1u << 7,
+    /* Opt in to the SoundFont 2.04 spec-oriented modulator resolver. Legacy compatibility behavior remains the default. SoundFont 2.04 仕様寄りの modulator resolver を明示的に有効化します。既定は旧互換動作です。 */
+    XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER = 1u << 8,
 } XAmeCompatibilityFlags;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */

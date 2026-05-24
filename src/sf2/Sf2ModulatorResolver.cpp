@@ -330,7 +330,24 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
     return entries;
 }
 
-void AddOrReplaceInstrument(std::vector<Sf2ResolvedModulator>& out, const WorkingModulator& entry) {
+std::vector<SFModList> CollectLinkedInputs(const std::vector<WorkingModulator>& entries, const WorkingModulator& entry) {
+    std::vector<SFModList> inputs;
+    inputs.reserve(entry.incomingLinks.size());
+    for (int incoming : entry.incomingLinks) {
+        if (incoming < 0 || incoming >= static_cast<int>(entries.size())) {
+            continue;
+        }
+        const WorkingModulator& linked = entries[incoming];
+        if (!linked.ignored && linked.validity == Sf2ModulatorValidity::Valid) {
+            inputs.push_back(linked.mod);
+        }
+    }
+    return inputs;
+}
+
+void AddOrReplaceInstrument(std::vector<Sf2ResolvedModulator>& out,
+                            const std::vector<WorkingModulator>& entries,
+                            const WorkingModulator& entry) {
     const Sf2ModulatorIdentity identity = MakeSf2ModulatorIdentity(entry.mod);
     for (auto& existing : out) {
         if (existing.participatesInDefaultSuppression &&
@@ -339,6 +356,7 @@ void AddOrReplaceInstrument(std::vector<Sf2ResolvedModulator>& out, const Workin
             existing.mod = entry.mod;
             existing.level = entry.level;
             existing.dependencies = entry.dependencies;
+            existing.linkedInputs = CollectLinkedInputs(entries, entry);
             return;
         }
     }
@@ -349,16 +367,20 @@ void AddOrReplaceInstrument(std::vector<Sf2ResolvedModulator>& out, const Workin
     resolved.validity = entry.validity;
     resolved.participatesInDefaultSuppression = entry.validity == Sf2ModulatorValidity::Valid;
     resolved.dependencies = entry.dependencies;
+    resolved.linkedInputs = CollectLinkedInputs(entries, entry);
     out.push_back(resolved);
 }
 
-void AddPreset(std::vector<Sf2ResolvedModulator>& out, const WorkingModulator& entry) {
+void AddPreset(std::vector<Sf2ResolvedModulator>& out,
+               const std::vector<WorkingModulator>& entries,
+               const WorkingModulator& entry) {
     Sf2ResolvedModulator resolved;
     resolved.mod = entry.mod;
     resolved.level = entry.level;
     resolved.validity = entry.validity;
     resolved.participatesInDefaultSuppression = false;
     resolved.dependencies = entry.dependencies;
+    resolved.linkedInputs = CollectLinkedInputs(entries, entry);
     out.push_back(resolved);
 }
 
@@ -483,9 +505,10 @@ std::vector<Sf2ResolvedModulator> BuildSf2EffectiveModulators(const std::vector<
         defaultZone.level = Sf2ModulatorLevel::ImplicitInstrumentDefault;
         defaultZone.mods = implicitDefaults.data();
         defaultZone.count = implicitDefaults.size();
-        for (const auto& entry : NormalizeZone(defaultZone)) {
+        const std::vector<WorkingModulator> normalized = NormalizeZone(defaultZone);
+        for (const auto& entry : normalized) {
             if (!entry.ignored && entry.validity == Sf2ModulatorValidity::Valid) {
-                AddOrReplaceInstrument(result, entry);
+                AddOrReplaceInstrument(result, normalized, entry);
             }
         }
     }
@@ -496,7 +519,7 @@ std::vector<Sf2ResolvedModulator> BuildSf2EffectiveModulators(const std::vector<
         if (IsInstrumentLevel(zone.level)) {
             for (const auto& entry : normalized) {
                 if (!entry.ignored && entry.validity == Sf2ModulatorValidity::Valid) {
-                    AddOrReplaceInstrument(result, entry);
+                    AddOrReplaceInstrument(result, normalized, entry);
                 }
             }
         } else {
@@ -519,13 +542,14 @@ std::vector<Sf2ResolvedModulator> BuildSf2EffectiveModulators(const std::vector<
                         MakeSf2ModulatorIdentity(existing.mod) == identity) {
                         existing.mod = entry.mod;
                         existing.level = entry.level;
+                        existing.linkedInputs = CollectLinkedInputs(normalized, entry);
                         replaced = true;
                         break;
                     }
                 }
             }
             if (!replaced) {
-                AddPreset(effectivePreset, entry);
+                AddPreset(effectivePreset, normalized, entry);
             }
         }
     }
@@ -546,7 +570,34 @@ std::vector<Sf2ModulatorEvaluation> EvaluateSf2Modulators(const std::vector<Sf2R
             continue;
         }
 
-        DecodeSourceResult source = DecodeSource(modulator.mod.sfModSrcOper, key, velocity, ctx, false);
+        DecodeSourceResult source;
+        if (IsLinkSource(modulator.mod.sfModSrcOper)) {
+            if (modulator.linkedInputs.empty()) {
+                continue;
+            }
+            source.valid = true;
+            source.value = 0.0;
+            for (const auto& linkedInput : modulator.linkedInputs) {
+                DecodeSourceResult linkedSource = DecodeSource(linkedInput.sfModSrcOper, key, velocity, ctx, false);
+                DecodeSourceResult linkedAmountSource = DecodeSource(linkedInput.sfModAmtSrcOper, key, velocity, ctx, false);
+                if (!linkedSource.valid || !linkedAmountSource.valid) {
+                    source.valid = false;
+                    break;
+                }
+                bool linkedTransformValid = false;
+                source.value += ApplyTransform(
+                    static_cast<double>(linkedInput.modAmount) * linkedSource.value * linkedAmountSource.value,
+                    linkedInput.sfModTransOper,
+                    linkedTransformValid);
+                if (!linkedTransformValid) {
+                    source.valid = false;
+                    break;
+                }
+                source.dependencies |= linkedSource.dependencies | linkedAmountSource.dependencies;
+            }
+        } else {
+            source = DecodeSource(modulator.mod.sfModSrcOper, key, velocity, ctx, false);
+        }
         DecodeSourceResult amountSource = DecodeSource(modulator.mod.sfModAmtSrcOper, key, velocity, ctx, false);
         if (!source.valid || !amountSource.valid) {
             continue;

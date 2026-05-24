@@ -78,6 +78,8 @@ public static class XArkMidiEngine
         EnhancedOutputStageWarm = 1 << 6,
         /// <summary>Disable internal post-mix reverb/chorus processing while keeping dry rendering active. 内部 post-mix リバーブ/コーラス処理を無効化し、ドライ出力のみを維持します。</summary>
         DisableInternalEffects = 1 << 7,
+        /// <summary>Opt in to the SoundFont 2.04 spec-oriented modulator resolver. Legacy compatibility behavior remains the default. SoundFont 2.04 仕様寄りの modulator resolver を明示的に有効化します。既定は旧互換動作です。</summary>
+        UseSf2SpecModulatorResolver = 1 << 8,
     }
 
     [StructLayout(LayoutKind.Sequential)]

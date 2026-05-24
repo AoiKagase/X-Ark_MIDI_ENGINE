@@ -1015,6 +1015,57 @@ namespace {
         Require(resolved.empty(), "Modulators in a link cycle should be ignored");
     }
 
+    void TestSf2ModulatorResolverLinkedInputsEvaluate() {
+        const SFModList mods[] = {
+            MakeMod(0, 0x8001u, 100, 0, 0),
+            MakeMod(127, GEN_Pan, 1, 0, 0),
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+        const std::vector<Sf2ModulatorEvaluation> evaluated = EvaluateSf2Modulators(resolved, 60, 65535, nullptr);
+        Require(evaluated.size() == 1, "Linked modulator input should evaluate through the target source");
+        Require(evaluated[0].destination == GEN_Pan && evaluated[0].amount == 100,
+            "Linked input output should feed the target source");
+    }
+
+    void TestSf2SpecResolverOptInAppliesImplicitDefaults() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, &ctx, zones);
+        const i32 expectedFilter = std::clamp(
+            13500 + static_cast<i32>(std::lround(-2400.0 * (1.0 - (32768.0 / 65536.0)))),
+            1500, 13500);
+        Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
+            "Spec resolver opt-in should apply implicit velocity->filter default without legacy flags");
+    }
+
+    void TestSf2SpecResolverOptInPresetAddsToInstrument() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(0, GEN_Pan, 100, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_Pan, 25, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.useSf2SpecModulatorResolver = true;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        Require(zone.generators[GEN_Pan] == 125,
+            "Spec resolver opt-in should add preset modulators to instrument modulators");
+    }
+
     void TestBagIndexHelpersSkipGlobalZones() {
         MinimalSf2Config config;
         config.presetGlobalGens.push_back(MakeSignedGen(GEN_CoarseTune, 1));
@@ -2545,6 +2596,8 @@ namespace {
             "Public warm output-stage preset flag value should remain stable");
         Require(XAME_COMPAT_DISABLE_INTERNAL_EFFECTS == (1u << 7),
             "Public internal effects disable flag value should remain stable");
+        Require(XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER == (1u << 8),
+            "Public SF2 spec modulator resolver flag value should remain stable");
     }
 
     void TestNegativeSampleOffsetsArePreserved() {
@@ -4433,6 +4486,9 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults);
     RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
     RUN_TEST(TestSf2ModulatorResolverLinkCyclesAreIgnored);
+    RUN_TEST(TestSf2ModulatorResolverLinkedInputsEvaluate);
+    RUN_TEST(TestSf2SpecResolverOptInAppliesImplicitDefaults);
+    RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
     RUN_TEST(TestAbsoluteTransformSupport);
     RUN_TEST(TestPresetZoneTerminalInstrumentRule);
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);

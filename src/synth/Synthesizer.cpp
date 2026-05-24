@@ -916,6 +916,7 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.applySf2Cc11ToInitialAttenuation = compatOptions_.applySf2Cc11ToInitialAttenuation;
     ctx.applySf2Cc91ToReverbSend = compatOptions_.applySf2Cc91ToReverbSend;
     ctx.applySf2Cc93ToChorusSend = compatOptions_.applySf2Cc93ToChorusSend;
+    ctx.useSf2SpecModulatorResolver = compatOptions_.useSf2SpecModulatorResolver;
 
     u8 resolvedProgram = state.program;
     auto tryResolveZones = [&](u16 bankToTry, u8 programToTry) -> bool {
@@ -1442,6 +1443,7 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch) {
     ctx.applySf2Cc11ToInitialAttenuation = compatOptions_.applySf2Cc11ToInitialAttenuation;
     ctx.applySf2Cc91ToReverbSend = compatOptions_.applySf2Cc91ToReverbSend;
     ctx.applySf2Cc93ToChorusSend = compatOptions_.applySf2Cc93ToChorusSend;
+    ctx.useSf2SpecModulatorResolver = compatOptions_.useSf2SpecModulatorResolver;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);
 }

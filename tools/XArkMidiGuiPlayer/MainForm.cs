@@ -75,6 +75,10 @@ public sealed class MainForm : Form
         AutoSize = true,
         Text = "Apply SF2 channel default modulators",
     };
+    private readonly CheckBox _useSf2SpecModulatorResolverCheckBox = new() {
+        AutoSize = true,
+        Text = "SF2 2.04 modulator resolver",
+    };
     private readonly CheckBox _internalEffectsCheckBox = new() {
         AutoSize = true,
         Text = "Internal effects",
@@ -316,6 +320,7 @@ public sealed class MainForm : Form
         flagsPanel.Controls.Add(_sf2ZeroLengthLoopRetriggerCheckBox);
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
         flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
+        flagsPanel.Controls.Add(_useSf2SpecModulatorResolverCheckBox);
         flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
@@ -390,6 +395,8 @@ public sealed class MainForm : Form
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
             "CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にし、グローバルチャンネル処理の代わりに SF2 寄りの挙動を使います。");
+        _optionToolTip.SetToolTip(_useSf2SpecModulatorResolverCheckBox,
+            "SoundFont 2.04 仕様寄りの modulator resolver を使います。旧互換動作と比較するための明示的な opt-in です。停止後の次回再生から反映されます。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,
             "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
         _optionToolTip.SetToolTip(_sf2ReverbSendScaleUpDown,
@@ -1032,6 +1039,9 @@ public sealed class MainForm : Form
         if (_applySf2ChannelDefaultModulatorsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
         }
+        if (_useSf2SpecModulatorResolverCheckBox.Checked) {
+            flags |= XArkMidiEngine.CompatibilityFlags.UseSf2SpecModulatorResolver;
+        }
         if (!_internalEffectsCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.DisableInternalEffects;
         }
@@ -1060,6 +1070,7 @@ public sealed class MainForm : Form
         _enableSf2SamplePitchCorrectionCheckBox.Enabled = idle;
         _multiplySf2MidiEffectsSendsCheckBox.Enabled = idle;
         _applySf2ChannelDefaultModulatorsCheckBox.Enabled = idle;
+        _useSf2SpecModulatorResolverCheckBox.Enabled = idle;
         _internalEffectsCheckBox.Enabled = idle;
         _outputStageComboBox.Enabled = idle;
         _sf2ReverbSendScaleUpDown.Enabled = !_exportInFlight;
