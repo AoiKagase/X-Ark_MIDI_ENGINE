@@ -91,6 +91,7 @@
     <ClInclude Include="..\src\dls\DlsFile.h" />
     <ClInclude Include="..\src\sf2\Sf2Types.h" />
     <ClInclude Include="..\src\sf2\Sf2File.h" />
+    <ClInclude Include="..\src\sf2\Sf2ModulatorResolver.h" />
     <ClInclude Include="..\src\synth\Interpolator.h" />
     <ClInclude Include="..\src\synth\SimdKernels.h" />
     <ClInclude Include="..\src\synth\Voice.h" />
@@ -111,6 +112,7 @@
     <ClCompile Include="..\src\midi2\Midi2File.cpp" />
     <ClCompile Include="..\src\dls\DlsFile.cpp" />
     <ClCompile Include="..\src\sf2\Sf2File.cpp" />
+    <ClCompile Include="..\src\sf2\Sf2ModulatorResolver.cpp" />
     <ClCompile Include="..\src\synth\SimdKernels.cpp" />
     <ClCompile Include="..\src\synth\SimdKernelsAvx2.cpp">
       <AdditionalOptions>/arch:AVX2 %(AdditionalOptions)</AdditionalOptions>

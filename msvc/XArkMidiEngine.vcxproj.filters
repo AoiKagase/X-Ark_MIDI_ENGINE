@@ -57,6 +57,9 @@
     <ClInclude Include="..\src\sf2\Sf2File.h">
       <Filter>Source Files\sf2</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\sf2\Sf2ModulatorResolver.h">
+      <Filter>Source Files\sf2</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\soundbank\SoundBank.h">
       <Filter>Source Files\soundbank</Filter>
     </ClInclude>
@@ -104,6 +107,9 @@
       <Filter>Source Files\midi</Filter>
     </ClCompile>
     <ClCompile Include="..\src\sf2\Sf2File.cpp">
+      <Filter>Source Files\sf2</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\sf2\Sf2ModulatorResolver.cpp">
       <Filter>Source Files\sf2</Filter>
     </ClCompile>
     <ClCompile Include="..\src\dls\DlsFile.cpp">

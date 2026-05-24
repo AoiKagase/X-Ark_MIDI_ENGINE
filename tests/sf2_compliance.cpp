@@ -1,4 +1,5 @@
 #include "../src/sf2/Sf2File.h"
+#include "../src/sf2/Sf2ModulatorResolver.h"
 #include "../src/sf2/Sf2Types.h"
 #include "../src/synth/Channel.h"
 #include "../src/synth/Interpolator.h"
@@ -916,6 +917,102 @@ namespace {
             "Velocity mod with amount source must not suppress default attenuation modulator");
         Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
             "Velocity mod with amount source must not suppress default filter modulator");
+    }
+
+    void TestSf2ModulatorResolverDefaultTableAndDestinations() {
+        const std::vector<SFModList> defaults = GetSf2ImplicitDefaultModulators();
+        Require(defaults.size() == 10, "SF2 implicit default modulator table should contain all spec defaults");
+        Require(defaults[0].sfModSrcOper == 0x0502u, "Default velocity attenuation source should be concave negative unipolar");
+        Require(defaults[0].sfModDestOper == GEN_InitialAttenuation, "Default velocity attenuation destination should be initialAttenuation");
+        Require(defaults[9].sfModSrcOper == 0x020Eu, "Default pitch-wheel source should be positive bipolar pitch wheel");
+        Require(defaults[9].sfModAmtSrcOper == 0x0010u, "Default pitch-wheel amount source should be pitch wheel sensitivity");
+
+        Require(IsSf2SpecValueGeneratorDestination(GEN_Pan), "Pan should be a spec Value Generator mod destination");
+        Require(!IsSf2SpecValueGeneratorDestination(GEN_StartAddrsOffset), "Sample offset generators should not be mod destinations");
+        Require(!IsSf2SpecValueGeneratorDestination(GEN_SampleModes), "sampleModes should not be a mod destination");
+        Require(!IsSf2SpecValueGeneratorDestination(GEN_SampleID), "sampleID should not be a mod destination");
+        Require(!IsSf2SpecValueGeneratorDestination(GEN_ExclusiveClass), "exclusiveClass should not be a mod destination");
+        Require(!IsSf2SpecValueGeneratorDestination(59), "Generator 59 unused5 should not be a mod destination");
+    }
+
+    void TestSf2ModulatorResolverHierarchySemantics() {
+        const SFModList instReplace = MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0);
+        const SFModList presetAdd = MakeMod(0x0502u, GEN_InitialAttenuation, 25, 0, 0);
+        std::vector<Sf2ModulatorZone> zones;
+        zones.push_back({ Sf2ModulatorLevel::InstrumentLocal, &instReplace, 1 });
+        zones.push_back({ Sf2ModulatorLevel::PresetLocal, &presetAdd, 1 });
+
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators(zones, true);
+
+        int identicalCount = 0;
+        bool sawInstrumentReplacement = false;
+        bool sawPresetAdd = false;
+        const Sf2ModulatorIdentity target = MakeSf2ModulatorIdentity(instReplace);
+        for (const auto& mod : resolved) {
+            if (!(MakeSf2ModulatorIdentity(mod.mod) == target)) {
+                continue;
+            }
+            ++identicalCount;
+            sawInstrumentReplacement |=
+                mod.level == Sf2ModulatorLevel::InstrumentLocal && mod.mod.modAmount == 100 &&
+                mod.participatesInDefaultSuppression;
+            sawPresetAdd |=
+                mod.level == Sf2ModulatorLevel::PresetLocal && mod.mod.modAmount == 25 &&
+                !mod.participatesInDefaultSuppression;
+        }
+
+        Require(identicalCount == 2, "Instrument identical mod should replace default while preset identical mod adds");
+        Require(sawInstrumentReplacement, "Instrument local mod should replace the implicit default modulator");
+        Require(sawPresetAdd, "Preset local identical mod should add instead of suppressing instrument/default");
+    }
+
+    void TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults() {
+        const SFModList invalidAmountSource = MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0x0080u, 0);
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, &invalidAmountSource, 1 };
+
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, true);
+        int defaultCount = 0;
+        for (const auto& mod : resolved) {
+            if (mod.mod.sfModSrcOper == 0x0502u &&
+                mod.mod.sfModDestOper == GEN_InitialAttenuation &&
+                mod.mod.modAmount == 960) {
+                ++defaultCount;
+            }
+            Require(mod.mod.modAmount != 100, "Invalid amount source mod should not enter the effective set");
+        }
+        Require(defaultCount == 1, "Invalid identical instrument mod should not suppress the implicit default");
+    }
+
+    void TestSf2ModulatorResolverSourceAndTransformRules() {
+        Require(!IsSf2SpecModulatorSourceDefinition(0x0080u, false), "CC0 should be an illegal modulator source");
+        Require(!IsSf2SpecModulatorSourceDefinition(0x00A1u, false), "CC33 LSB source should be reserved");
+        Require(!IsSf2SpecModulatorSourceDefinition(0x00F8u, false), "CC120..127 should be illegal modulator sources");
+        Require(!IsSf2SpecModulatorSourceDefinition(static_cast<u16>(2u | (4u << 10)), false),
+            "Unknown source curve types should be invalid");
+
+        const SFModList mod = MakeMod(0x028Au, GEN_Pan, -100, 0x0081u, 2);
+        const Sf2ResolvedModulator resolved{ mod, Sf2ModulatorLevel::InstrumentLocal,
+            Sf2ModulatorValidity::Valid, true, Sf2ModulatorDependency::None };
+        ModulatorContext ctx{};
+        ctx.ccValues[1] = 64;
+        ctx.ccValues[10] = 0;
+
+        const std::vector<Sf2ModulatorEvaluation> evaluated = EvaluateSf2Modulators({ resolved }, 60, 65535, &ctx);
+        Require(evaluated.size() == 1, "Valid resolver modulator should evaluate");
+        Require(evaluated[0].amount == 50, "Transform should apply after amount * source * amountSource");
+        Require((static_cast<u16>(evaluated[0].dependencies) &
+                 static_cast<u16>(Sf2ModulatorDependency::ChannelController)) != 0,
+            "Amount source and primary source should contribute controller dependencies");
+    }
+
+    void TestSf2ModulatorResolverLinkCyclesAreIgnored() {
+        const SFModList cycleMods[] = {
+            MakeMod(0x0081u, 0x8001u, 100, 0, 0),
+            MakeMod(0x0082u, 0x8000u, 100, 0, 0),
+        };
+        const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, cycleMods, 2 };
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
+        Require(resolved.empty(), "Modulators in a link cycle should be ignored");
     }
 
     void TestBagIndexHelpersSkipGlobalZones() {
@@ -4331,6 +4428,11 @@ int main(int argc, char** argv) {
 #define RUN_TEST(name) do { if (shouldRun(#name)) { g_currentTestName = #name; name(); } } while (0)
     RUN_TEST(TestForcedVelocityDefaultModulators);
     RUN_TEST(TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods);
+    RUN_TEST(TestSf2ModulatorResolverDefaultTableAndDestinations);
+    RUN_TEST(TestSf2ModulatorResolverHierarchySemantics);
+    RUN_TEST(TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults);
+    RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
+    RUN_TEST(TestSf2ModulatorResolverLinkCyclesAreIgnored);
     RUN_TEST(TestAbsoluteTransformSupport);
     RUN_TEST(TestPresetZoneTerminalInstrumentRule);
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);

@@ -25,6 +25,7 @@ set(XAME_SOURCES
     src/midi2/UmpDownConverter.cpp
     src/dls/DlsFile.cpp
     src/sf2/Sf2File.cpp
+    src/sf2/Sf2ModulatorResolver.cpp
     src/synth/SimdKernels.cpp
     src/synth/SimdKernelsAvx2.cpp
     src/synth/Synthesizer.cpp
@@ -108,6 +109,7 @@ if(XAME_BUILD_TESTS)
             src/midi2/UmpDownConverter.cpp
             src/dls/DlsFile.cpp
             src/sf2/Sf2File.cpp
+            src/sf2/Sf2ModulatorResolver.cpp
         )
     endforeach()
 
@@ -122,6 +124,7 @@ if(XAME_BUILD_TESTS)
         src/midi2/Midi2File.cpp
         src/midi2/UmpDownConverter.cpp
         src/sf2/Sf2File.cpp
+        src/sf2/Sf2ModulatorResolver.cpp
         src/synth/SimdKernels.cpp
         src/synth/SimdKernelsAvx2.cpp
         src/synth/Synthesizer.cpp
