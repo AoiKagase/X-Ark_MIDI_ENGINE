@@ -3436,6 +3436,52 @@ namespace {
             "Mix+Pitch refresh should touch mix state without disturbing unrelated state");
     }
 
+    void TestSf2MixAndFilterRefreshCanBeAppliedTogether() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        const f64 originalBaseSampleStep = voice.baseSampleStep;
+        const i64 originalSampleStepFixed = voice.sampleStepFixed;
+        const f32 originalBaseGainL = voice.baseGainL;
+        const f32 originalAttenuation = voice.attenuation;
+        const i32 originalFilterBaseFc = voice.filterBaseFcCents;
+
+        ResolvedZone refreshed = zone;
+        refreshed.generators[GEN_Pan] = 500;
+        refreshed.generators[GEN_InitialAttenuation] = 600;
+        refreshed.generators[GEN_InitialFilterFc] = 9000;
+        refreshed.generators[GEN_InitialFilterQ] = 300;
+        voice.RefreshResolvedZoneControllers(
+            refreshed,
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix) |
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter));
+
+        Require(voice.baseGainL != originalBaseGainL,
+            "Mix+Filter refresh should update mix state");
+        Require(voice.attenuation < 1.0f,
+            "Mix+Filter refresh should update attenuation");
+        Require(voice.filterBaseFcCents == 9000,
+            "Mix+Filter refresh should update filter cutoff");
+        Require(voice.filterQCb == 300,
+            "Mix+Filter refresh should update filter resonance");
+        Require(NearlyEqual(voice.baseSampleStep, originalBaseSampleStep, 1.0e-12),
+            "Mix+Filter refresh should not recompute base pitch state");
+        Require(voice.sampleStepFixed == originalSampleStepFixed,
+            "Mix+Filter refresh should not recompute sample step");
+        Require(voice.baseGainL != originalBaseGainL || voice.attenuation != originalAttenuation,
+            "Mix+Filter refresh should touch mix state without disturbing unrelated state");
+        Require(voice.filterBaseFcCents != originalFilterBaseFc,
+            "Mix+Filter refresh should touch filter state");
+    }
+
     void TestEnvelopePitchAndKeynumScaling() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_ModEnvToPitch, 600));
@@ -5090,6 +5136,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2EnvelopeOnlyRefreshPreservesMixPitchFilterAndLfoState);
     RUN_TEST(TestSf2LfoOnlyRefreshPreservesMixPitchEnvelopeAndFilterState);
     RUN_TEST(TestSf2MixAndPitchRefreshCanBeAppliedTogether);
+    RUN_TEST(TestSf2MixAndFilterRefreshCanBeAppliedTogether);
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
     RUN_TEST(TestEnvelopeReleaseRecalculation);
     RUN_TEST(TestFilterAndLfoInitialization);

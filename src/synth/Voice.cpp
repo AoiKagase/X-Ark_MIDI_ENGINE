@@ -756,6 +756,14 @@ void Voice::RefreshResolvedZoneControllers(const ResolvedZone& zone, u8 sf2Desti
         return;
     }
     if (sf2DestinationClasses != 0xFFu &&
+        (sf2DestinationClasses & static_cast<u8>(~(mixMask | filterMask))) == 0 &&
+        (sf2DestinationClasses & mixMask) != 0 &&
+        (sf2DestinationClasses & filterMask) != 0) {
+        ApplyResolvedZoneMixState(zone);
+        ApplyResolvedZoneFilterState(zone);
+        return;
+    }
+    if (sf2DestinationClasses != 0xFFu &&
         (sf2DestinationClasses & static_cast<u8>(~filterMask)) == 0 &&
         (sf2DestinationClasses & filterMask) != 0) {
         ApplyResolvedZoneFilterState(zone);
