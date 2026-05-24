@@ -44,6 +44,7 @@
     <ClCompile Include="..\src\sf2\Sf2File.cpp" />
     <ClCompile Include="..\src\common\BinaryReader.cpp" />
     <ClCompile Include="..\src\common\FileUtil.cpp" />
+    <ClCompile Include="..\src\sf2\Sf2ModulatorResolver.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\sf2\Sf2File.h" />
