@@ -3081,8 +3081,8 @@ namespace {
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 286,
-                "Preset-level explicit default mod should add to the implicit default");
+            Require(zone.generators[GEN_Pan] == 26,
+                "Preset-level explicit default mod should supersede the implicit default");
         }
     }
 

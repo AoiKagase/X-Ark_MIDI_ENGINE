@@ -1545,6 +1545,19 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     const u8 effectiveKey = ResolveForcedKey(key, outZone);
     const u16 effectiveVelocity = ResolveForcedVelocity(velocity, outZone);
 
+    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[globalPresetBagIdx].wModNdx,
+                              presetBags_[globalPresetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
+    }
+    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
+        ApplyModulatorEntries(presetMods_,
+                              presetBags_[presetBagIdx].wModNdx,
+                              presetBags_[presetBagIdx + 1].wModNdx,
+                              effectiveKey, effectiveVelocity, ctx, outZone, &defaultState);
+    }
+
     if (ctx && ctx->applySf2ChannelDefaults &&
         ctx->applySf2VelocityToInitialAttenuation &&
         !defaultState.hasVelocityToAttenuationMod) {
@@ -1617,18 +1630,6 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                             static_cast<i32>(std::lround(static_cast<double>(rangeCents) * bend)));
     }
 
-    if (globalPresetBagIdx >= 0 && globalPresetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        ApplyModulatorEntries(presetMods_,
-                              presetBags_[globalPresetBagIdx].wModNdx,
-                              presetBags_[globalPresetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
-    }
-    if (presetBagIdx >= 0 && presetBagIdx + 1 < static_cast<int>(presetBags_.size())) {
-        ApplyModulatorEntries(presetMods_,
-                              presetBags_[presetBagIdx].wModNdx,
-                              presetBags_[presetBagIdx + 1].wModNdx,
-                              effectiveKey, effectiveVelocity, ctx, outZone, nullptr);
-    }
     if (ctx && ctx->nrpnOffsets) {
         for (int g = 0; g < GEN_COUNT; ++g) {
             if (ctx->nrpnOffsets[g] == 0) {
