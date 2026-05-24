@@ -1743,6 +1743,10 @@ void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modS
         if (entries[i].ignored) {
             continue;
         }
+        if ((mod.sfModDestOper & 0x8000u) != 0) continue;
+        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
+        if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
+
         if (outDefaultState) {
             outDefaultState->hasVelocityToAttenuationMod |= IsVelocityToInitialAttenuationMod(mod);
             outDefaultState->hasVelocityToFilterFcMod |= IsVelocityToInitialFilterFcMod(mod);
@@ -1755,9 +1759,6 @@ void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modS
             outDefaultState->hasCc93ToChorusSendMod |= IsCc93ToChorusSendMod(mod);
             outDefaultState->hasPitchWheelToInitialPitchMod |= IsPitchWheelToInitialPitchMod(mod);
         }
-        if ((mod.sfModDestOper & 0x8000u) != 0) continue;
-        if (!IsSupportedModulatorDestination(mod.sfModDestOper)) continue;
-        if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
 
         const i32 delta = static_cast<i32>(std::lround(output[i]));
         if (delta == 0) continue;
