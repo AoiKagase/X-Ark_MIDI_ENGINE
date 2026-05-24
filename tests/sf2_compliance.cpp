@@ -1097,6 +1097,25 @@ namespace {
             "Unsupported amount-source modulator should be ignored instead of applying full amount");
     }
 
+    void TestInvalidLinkSourceIsReported() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(127, GEN_Pan, 500, 0, 0));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        Require(sf2.UnsupportedModulatorCount() == 1,
+            "Link source used as a direct source should be reported as unsupported");
+        Require(sf2.UnsupportedModulatorTransformCount() == 0,
+            "Invalid link source should not increment transform count");
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+        Require(zone.generators[GEN_Pan] == 0,
+            "Invalid link source should be ignored during zone resolution");
+    }
+
     void TestEffectsSendMixPolicy() {
         Voice sf2;
         sf2.soundBankKind = SoundBankKind::Sf2;
@@ -4272,6 +4291,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestLinkedModulatorsFeedTargetSource);
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
+    RUN_TEST(TestInvalidLinkSourceIsReported);
     RUN_TEST(TestEffectsSendMixPolicy);
     RUN_TEST(TestOutputLimiterAvoidsCrossSampleDucking);
     RUN_TEST(TestOutputLimiterUsesLinkedStereoGain);

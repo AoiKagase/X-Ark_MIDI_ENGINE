@@ -411,7 +411,6 @@ bool IsSupportedModSourceOperDefinition(u16 oper) {
     case 13:
     case 14:
     case 16:
-    case 127:
         return true;
     default:
         return false;
@@ -1782,7 +1781,10 @@ void Sf2File::ScanUnsupportedModulators() {
                 continue;
             }
             const bool unsupportedTransform = !IsSupportedModTransform(mod.sfModTransOper);
-            const bool unsupportedSource = !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
+            const bool sourceIsValidLink =
+                IsLinkModSource(mod.sfModSrcOper) && ((mod.sfModDestOper & 0x8000u) != 0);
+            const bool unsupportedSource =
+                !sourceIsValidLink && !IsSupportedModSourceOperDefinition(mod.sfModSrcOper);
             const bool unsupportedAmountSource = !IsSupportedModSourceOperDefinition(mod.sfModAmtSrcOper);
             const bool unsupportedDestination =
                 ((mod.sfModDestOper & 0x8000u) == 0) &&
