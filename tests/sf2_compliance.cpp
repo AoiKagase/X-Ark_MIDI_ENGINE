@@ -2983,6 +2983,12 @@ namespace {
         Require(sf2.UnsupportedModulatorCount() == 0,
             "Instrument-level sample generator modulators should be supported in legacy mode");
 
+        Sf2File strictSf2;
+        strictSf2.SetStrictSpecCompliance(true);
+        Require(strictSf2.LoadFromMemory(bytes.data(), bytes.size()), strictSf2.ErrorMessage().c_str());
+        Require(strictSf2.UnsupportedModulatorCount() == 7,
+            "Strict spec mode should report non-value generator modulator destinations as unsupported");
+
         std::vector<ResolvedZone> zones;
         const ResolvedZone& legacyZone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
         Require(legacyZone.generators[GEN_StartAddrsOffset] == 2,
