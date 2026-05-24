@@ -3584,6 +3584,72 @@ namespace {
             "Mix+Envelope+Lfo refresh should not touch filter cutoff");
     }
 
+    void TestSf2AllDestinationClassRefreshCanBeAppliedTogether() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                     SoundBankKind::Sf2, SynthCompatOptions{});
+        const f64 originalBaseSampleStep = voice.baseSampleStep;
+        const i64 originalSampleStepFixed = voice.sampleStepFixed;
+        const f32 originalBaseGainL = voice.baseGainL;
+        const f32 originalAttenuation = voice.attenuation;
+
+        ResolvedZone refreshed = zone;
+        refreshed.generators[GEN_Pan] = 500;
+        refreshed.generators[GEN_InitialAttenuation] = 600;
+        refreshed.generators[GEN_CoarseTune] = 12;
+        refreshed.generators[GEN_InitialFilterFc] = 9000;
+        refreshed.generators[GEN_InitialFilterQ] = 300;
+        refreshed.generators[GEN_ReleaseVolEnv] = -1200;
+        refreshed.generators[GEN_ModEnvToPitch] = 900;
+        refreshed.generators[GEN_DelayModLFO] = -600;
+        refreshed.generators[GEN_FreqModLFO] = 1200;
+        refreshed.generators[GEN_ModLfoToPitch] = 200;
+        refreshed.generators[GEN_ModLfoToFilterFc] = 600;
+        refreshed.generators[GEN_ModLfoToVolume] = 300;
+        voice.RefreshResolvedZoneControllers(
+            refreshed,
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Mix) |
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Pitch) |
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Filter) |
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Envelope) |
+            static_cast<u8>(Sf2ModulatorDestinationClassMask::Lfo));
+
+        Require(voice.baseGainL != originalBaseGainL,
+            "All-class refresh should update mix state");
+        Require(voice.attenuation < 1.0f,
+            "All-class refresh should update attenuation");
+        Require(NearlyEqual(voice.baseSampleStep / originalBaseSampleStep, 2.0, 1.0e-6),
+            "All-class refresh should update pitch state");
+        Require(voice.sampleStepFixed != originalSampleStepFixed,
+            "All-class refresh should recompute sample step");
+        Require(voice.filterBaseFcCents == 9000,
+            "All-class refresh should update filter cutoff");
+        Require(voice.filterQCb == 300,
+            "All-class refresh should update filter resonance");
+        Require(voice.useModEnv,
+            "All-class refresh should keep mod env enabled when ModEnvToPitch is present");
+        Require(voice.modEnvToPitchCents == 900.0f,
+            "All-class refresh should update ModEnvToPitch");
+        Require(voice.modLfoDelayEnd > 0,
+            "All-class refresh should update modulation LFO delay");
+        Require(voice.modLfoPhaseStep > 0.0f,
+            "All-class refresh should update modulation LFO rate");
+        Require(voice.modLfoToPitchCents == 200.0f,
+            "All-class refresh should update modulation LFO pitch depth");
+        Require(voice.modLfoToFilterFcCents == 600.0f,
+            "All-class refresh should update modulation LFO filter depth");
+        Require(voice.modLfoToVolumeCb == 300.0f,
+            "All-class refresh should update tremolo depth");
+    }
+
     void TestEnvelopePitchAndKeynumScaling() {
         MinimalSf2Config config;
         config.instGens.push_back(MakeSignedGen(GEN_ModEnvToPitch, 600));
@@ -5241,6 +5307,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2MixAndFilterRefreshCanBeAppliedTogether);
     RUN_TEST(TestSf2PitchAndFilterRefreshCanBeAppliedTogether);
     RUN_TEST(TestSf2MixEnvelopeAndLfoRefreshCanBeAppliedTogether);
+    RUN_TEST(TestSf2AllDestinationClassRefreshCanBeAppliedTogether);
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
     RUN_TEST(TestEnvelopeReleaseRecalculation);
     RUN_TEST(TestFilterAndLfoInitialization);
