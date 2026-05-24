@@ -1361,11 +1361,17 @@ namespace {
         config.presetGens.push_back(MakeSignedGen(GEN_EndAddrsOffset, -6));
         config.presetGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, 4));
         config.presetGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -4));
+        config.presetGens.push_back(MakeSignedGen(GEN_Keynum, 72));
+        config.presetGens.push_back(MakeSignedGen(GEN_Velocity, 64));
         config.presetMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 5, 0, 0));
         config.presetMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -5, 0, 0));
         config.presetMods.push_back(MakeMod(0, GEN_SampleModes, 1, 0, 0));
         config.presetMods.push_back(MakeMod(0, GEN_OverridingRootKey, 7, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_Keynum, 3, 0, 0));
+        config.presetMods.push_back(MakeMod(0, GEN_Velocity, 4, 0, 0));
         config.instGens.push_back(MakeSignedGen(GEN_OverridingRootKey, 60));
+        config.instGens.push_back(MakeSignedGen(GEN_Keynum, 61));
+        config.instGens.push_back(MakeSignedGen(GEN_Velocity, 62));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -1375,7 +1381,7 @@ namespace {
             std::snprintf(message, sizeof(message),
                 "Preset-level sample generator modulators should be reported as unsupported (actual=%u)",
                 sf2.UnsupportedModulatorCount());
-            Require(sf2.UnsupportedModulatorCount() == 4, message);
+            Require(sf2.UnsupportedModulatorCount() == 6, message);
         }
 
         std::vector<ResolvedZone> zones;
@@ -1386,6 +1392,10 @@ namespace {
             "Preset-level ExclusiveClass should be ignored");
         Require(zone.generators[GEN_SampleModes] == 0,
             "Preset-level SampleModes should be ignored");
+        Require(zone.generators[GEN_Keynum] == 61,
+            "Preset-level Keynum should be ignored");
+        Require(zone.generators[GEN_Velocity] == 62,
+            "Preset-level Velocity should be ignored");
         Require(zone.sample != nullptr, "Resolved zone sample should exist");
         Require(zone.sample->start == 0 && zone.sample->end == 64,
             "Preset-level sample address offsets should be ignored");
@@ -2964,6 +2974,8 @@ namespace {
         config.instMods.push_back(MakeMod(0, GEN_StartloopAddrsOffset, 1, 0, 0));
         config.instMods.push_back(MakeMod(0, GEN_EndloopAddrsOffset, -2, 0, 0));
         config.instMods.push_back(MakeMod(0, GEN_SampleModes, 1, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_Keynum, 65, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_Velocity, 71, 0, 0));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -2983,6 +2995,10 @@ namespace {
             "Legacy resolver should apply loop-end modulator destination");
         Require(legacyZone.generators[GEN_SampleModes] == 1,
             "Legacy resolver should apply sampleModes modulator destination");
+        Require(legacyZone.generators[GEN_Keynum] == 64,
+            "Legacy resolver should apply keynum modulator destination");
+        Require(legacyZone.generators[GEN_Velocity] == 70,
+            "Legacy resolver should apply velocity modulator destination");
 
         Voice legacyVoice;
         legacyVoice.NoteOn(legacyZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
@@ -3013,6 +3029,10 @@ namespace {
             "Spec resolver should ignore loop-end modulator destination");
         Require(specZone.generators[GEN_SampleModes] == 0,
             "Spec resolver should ignore sampleModes modulator destination");
+        Require(specZone.generators[GEN_Keynum] == -1,
+            "Spec resolver should ignore keynum modulator destination");
+        Require(specZone.generators[GEN_Velocity] == -1,
+            "Spec resolver should ignore velocity modulator destination");
 
         Voice specVoice;
         specVoice.NoteOn(specZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,

@@ -149,7 +149,7 @@ bool ValidateChunkSizeMultiple(u32 size, u32 recordSize, const char* chunkName, 
     return true;
 }
 
-bool IsIllegalPresetSampleGenerator(u16 oper) {
+bool IsIllegalPresetGenerator(u16 oper) {
     switch (oper) {
     case GEN_StartAddrsOffset:
     case GEN_EndAddrsOffset:
@@ -163,6 +163,8 @@ bool IsIllegalPresetSampleGenerator(u16 oper) {
     case GEN_SampleModes:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
+    case GEN_Keynum:
+    case GEN_Velocity:
         return true;
     default:
         return false;
@@ -431,6 +433,8 @@ bool IsInstrumentOnlySampleGeneratorModDestination(u16 dest) {
     case GEN_SampleModes:
     case GEN_ExclusiveClass:
     case GEN_OverridingRootKey:
+    case GEN_Keynum:
+    case GEN_Velocity:
         return true;
     default:
         return false;
@@ -635,8 +639,6 @@ bool IsSupportedModulatorDestination(u16 dest, bool allowInstrumentOnlyDestinati
     case GEN_ReleaseVolEnv:
     case GEN_KeynumToVolEnvHold:
     case GEN_KeynumToVolEnvDecay:
-    case GEN_Keynum:
-    case GEN_Velocity:
     case GEN_InitialAttenuation:
     case GEN_CoarseTune:
     case GEN_FineTune:
@@ -1529,7 +1531,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             u16 oper = presetGens_[g].sfGenOper;
             if (oper == GEN_Instrument) break;
             if (oper >= GEN_COUNT) continue;
-            if (IsIllegalPresetSampleGenerator(oper)) continue;
+            if (IsIllegalPresetGenerator(oper)) continue;
             if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
                 layer[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.wAmount));
             } else {
@@ -2139,7 +2141,7 @@ void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]
         u16 oper = presetGens_[g].sfGenOper;
         if (oper == GEN_Instrument) break;
         if (oper >= GEN_COUNT) continue;
-        if (IsIllegalPresetSampleGenerator(oper)) continue;
+        if (IsIllegalPresetGenerator(oper)) continue;
         outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.shAmount));
     }
 }
@@ -2162,7 +2164,7 @@ void Sf2File::GetPresetGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const 
         u16 oper = presetGens_[g].sfGenOper;
         if (oper == GEN_Instrument) break;
         if (oper >= GEN_COUNT) continue;
-        if (IsIllegalPresetSampleGenerator(oper)) continue;
+        if (IsIllegalPresetGenerator(oper)) continue;
         if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
             outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.wAmount));
         } else {
