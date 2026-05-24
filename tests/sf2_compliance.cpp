@@ -814,6 +814,12 @@ namespace {
         return static_cast<i32>(std::lround(400.0 * std::log10(65535.0 / velocity)));
     }
 
+    i32 ExpectedVelocityFilterCutoff(i32 baseFc, u16 velocity) {
+        const i32 delta = static_cast<i32>(std::lround(
+            -2400.0 * (1.0 - static_cast<double>(velocity) / 65535.0)));
+        return std::clamp(baseFc + delta, 1500, 13500);
+    }
+
     u32 FloatToU32(f32 value) {
         const double scaled = std::clamp(static_cast<double>(value), 0.0, 1.0) * 4294967295.0;
         return static_cast<u32>(std::llround(scaled));
@@ -2954,6 +2960,92 @@ namespace {
         }
     }
 
+    void TestSf2SplitDefaultModulatorCompatibility() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        constexpr u8 key = 60;
+        constexpr u16 velocity = 32768;
+        constexpr i32 baseFilterFc = 13500;
+
+        ModulatorContext offCtx{};
+        SetDefaultMidiControllers(offCtx);
+        offCtx.ccValues[7] = 0;
+        offCtx.ccValues[10] = 127;
+        offCtx.ccValues[11] = 0;
+        offCtx.ccValues[91] = 127;
+        offCtx.ccValues[93] = 127;
+
+        ModulatorContext onCtx = offCtx;
+        onCtx.applySf2ChannelDefaults = true;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone offZone = RequireSingleZone(sf2, key, velocity, &offCtx, zones);
+        Require(offZone.generators[GEN_InitialAttenuation] == 0,
+            "SF2 defaults OFF should not apply velocity/CC attenuation deltas");
+        Require(offZone.generators[GEN_InitialFilterFc] == baseFilterFc,
+            "SF2 defaults OFF should not apply velocity filter cutoff delta");
+        Require(offZone.generators[GEN_Pan] == 0,
+            "SF2 defaults OFF should not apply CC10 pan delta");
+        Require(offZone.generators[GEN_ReverbEffectsSend] == 0,
+            "SF2 defaults OFF should not apply CC91 reverb send delta");
+        Require(offZone.generators[GEN_ChorusEffectsSend] == 0,
+            "SF2 defaults OFF should not apply CC93 chorus send delta");
+
+        const ResolvedZone onZone = RequireSingleZone(sf2, key, velocity, &onCtx, zones);
+        Require(onZone.generators[GEN_InitialAttenuation] == 0,
+            "SF2 defaults ON should not apply velocity/CC attenuation split defaults unless enabled");
+        Require(onZone.generators[GEN_InitialFilterFc] == ExpectedVelocityFilterCutoff(baseFilterFc, velocity),
+            "SF2 defaults ON should apply only the velocity filter cutoff delta by default");
+        Require(onZone.generators[GEN_Pan] == 0,
+            "SF2 defaults ON should not apply CC10 pan unless its split flag is enabled");
+        Require(onZone.generators[GEN_ReverbEffectsSend] == 200,
+            "SF2 defaults ON should apply CC91 reverb send by default");
+        Require(onZone.generators[GEN_ChorusEffectsSend] == 200,
+            "SF2 defaults ON should apply CC93 chorus send by default");
+
+        ModulatorContext splitCtx = onCtx;
+        splitCtx.applySf2VelocityToInitialAttenuation = true;
+        splitCtx.applySf2Cc7ToInitialAttenuation = true;
+        splitCtx.applySf2Cc10ToPan = true;
+        splitCtx.applySf2Cc11ToInitialAttenuation = true;
+        const ResolvedZone splitZone = RequireSingleZone(sf2, key, velocity, &splitCtx, zones);
+        Require(splitZone.generators[GEN_InitialAttenuation] ==
+                std::clamp(ExpectedVelocityAttenuationCb(velocity) + 1920, 0, 1440),
+            "Velocity, CC7, and CC11 attenuation defaults should apply only when split flags are enabled");
+        Require(splitZone.generators[GEN_Pan] == 500,
+            "CC10 pan default should apply only when its split flag is enabled");
+
+        SynthCompatOptions offOptions{};
+        SynthCompatOptions onOptions{};
+        onOptions.applySf2ChannelDefaults = true;
+
+        Voice offVoice;
+        offVoice.NoteOn(offZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(),
+            0, 0, 0, key, velocity, 1, 44100, 0.0, SoundBankKind::Sf2, offOptions);
+        offVoice.UpdateChannelMix(0.5f, FloatToU32(0.75f), FloatToU32(0.25f), FloatToU32(0.5f));
+
+        Voice onVoice;
+        onVoice.NoteOn(onZone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(),
+            0, 0, 0, key, velocity, 1, 44100, 0.0, SoundBankKind::Sf2, onOptions);
+        onVoice.UpdateChannelMix(0.5f, FloatToU32(0.75f), FloatToU32(0.25f), FloatToU32(0.5f));
+
+        Require(NearlyEqual(offVoice.channelGainL, onVoice.channelGainL, 1.0e-6),
+            "SF2 defaults OFF/ON should leave channelGainL controlled by UpdateChannelMix");
+        Require(NearlyEqual(offVoice.channelGainR, onVoice.channelGainR, 1.0e-6),
+            "SF2 defaults OFF/ON should leave channelGainR controlled by UpdateChannelMix");
+        Require(NearlyEqual(offVoice.reverbSend, 0.0f, 1.0e-6),
+            "SF2 defaults OFF should leave final reverb send at the preset value");
+        Require(NearlyEqual(offVoice.chorusSend, 0.0f, 1.0e-6),
+            "SF2 defaults OFF should leave final chorus send at the preset value");
+        Require(NearlyEqual(onVoice.reverbSend, 0.2f, 1.0e-6),
+            "SF2 defaults ON should expose the CC91 default as final reverb send");
+        Require(NearlyEqual(onVoice.chorusSend, 0.2f, 1.0e-6),
+            "SF2 defaults ON should expose the CC93 default as final chorus send");
+    }
+
     void TestDefaultModulatorSupersedeSemantics() {
         {
             MinimalSf2Config config;
@@ -4211,6 +4303,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPressureSources);
     RUN_TEST(TestPitchWheelSensitivityAmountSource);
     RUN_TEST(TestRemainingDefaultModulators);
+    RUN_TEST(TestSf2SplitDefaultModulatorCompatibility);
     RUN_TEST(TestDefaultModulatorSupersedeSemantics);
     RUN_TEST(TestStereoSampleLinks);
     RUN_TEST(TestParallelRenderClearsFinishedLinkedVoice);
