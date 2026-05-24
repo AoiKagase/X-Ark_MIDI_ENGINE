@@ -676,6 +676,10 @@ std::vector<Sf2ModulatorEvaluation> EvaluateSf2Modulators(const std::vector<Sf2R
             evaluation.destination = modulator.mod.sfModDestOper;
             evaluation.amount = static_cast<i32>(std::lround(res.value));
             evaluation.dependencies = res.dependencies;
+            evaluation.destinationClass =
+                (modulator.mod.sfModDestOper == kInternalInitialPitchDestination)
+                    ? Sf2ModulatorDestinationClass::Pitch
+                    : ClassifySf2ModulatorDestination(modulator.mod.sfModDestOper);
             result.push_back(evaluation);
         }
     }

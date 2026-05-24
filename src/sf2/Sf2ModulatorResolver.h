@@ -85,6 +85,7 @@ struct Sf2ModulatorEvaluation {
     u16 destination = 0;
     i32 amount = 0;
     Sf2ModulatorDependency dependencies = Sf2ModulatorDependency::None;
+    Sf2ModulatorDestinationClass destinationClass = Sf2ModulatorDestinationClass::Ignored;
 };
 
 struct Sf2ModulatorZone {

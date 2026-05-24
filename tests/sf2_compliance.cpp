@@ -1022,6 +1022,34 @@ namespace {
         Require((static_cast<u16>(evaluated[0].dependencies) &
                  static_cast<u16>(Sf2ModulatorDependency::ChannelController)) != 0,
             "Amount source and primary source should contribute controller dependencies");
+        Require(evaluated[0].destinationClass == Sf2ModulatorDestinationClass::Mix,
+            "Evaluated pan modulator should carry its mix destination class");
+    }
+
+    void TestSf2ModulatorResolverPitchEvaluationMetadata() {
+        const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({}, true);
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.pitchBend = 8191;
+        ctx.pitchWheelSensitivitySemitones = 2;
+
+        const std::vector<Sf2ModulatorEvaluation> evaluated = EvaluateSf2Modulators(resolved, 60, 65535, &ctx);
+        bool sawPitchWheel = false;
+        for (const auto& evaluation : evaluated) {
+            if (evaluation.destination != GEN_COUNT) {
+                continue;
+            }
+            sawPitchWheel = true;
+            Require(evaluation.destinationClass == Sf2ModulatorDestinationClass::Pitch,
+                "Internal Initial Pitch evaluation should be classified as pitch refresh");
+            Require((static_cast<u16>(evaluation.dependencies) &
+                     static_cast<u16>(Sf2ModulatorDependency::PitchWheel)) != 0,
+                "Internal Initial Pitch evaluation should depend on pitch wheel");
+            Require((static_cast<u16>(evaluation.dependencies) &
+                     static_cast<u16>(Sf2ModulatorDependency::PitchWheelSensitivity)) != 0,
+                "Internal Initial Pitch evaluation should depend on pitch wheel sensitivity");
+        }
+        Require(sawPitchWheel, "Implicit pitch wheel default should produce an internal pitch evaluation");
     }
 
     void TestSf2ModulatorResolverLinkCyclesAreIgnored() {
@@ -4633,6 +4661,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2ModulatorResolverHierarchySemantics);
     RUN_TEST(TestSf2ModulatorResolverInvalidModsDoNotSuppressDefaults);
     RUN_TEST(TestSf2ModulatorResolverSourceAndTransformRules);
+    RUN_TEST(TestSf2ModulatorResolverPitchEvaluationMetadata);
     RUN_TEST(TestSf2ModulatorResolverLinkCyclesAreIgnored);
     RUN_TEST(TestSf2ModulatorResolverLinkedInputsEvaluate);
     RUN_TEST(TestSf2ModulatorResolverLinkedChains);
