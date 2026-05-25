@@ -82,6 +82,20 @@ public static class XArkMidiEngine
         UseSf2SpecModulatorResolver = 1 << 8,
     }
 
+    /// <summary>
+    /// High-level compatibility mode override.
+    /// 上位互換モードの上書き設定です。
+    /// </summary>
+    public enum CompatibilityMode : uint
+    {
+        /// <summary>Keep engine defaults and interpret <see cref="CompatibilityFlags"/> as usual. エンジン既定動作を維持します。</summary>
+        EngineDefault = 0,
+        /// <summary>Force legacy SF2 compatibility behavior. SF2 の旧互換動作を強制します。</summary>
+        Sf2Legacy = 1,
+        /// <summary>Force SF2 spec-oriented resolver behavior. SF2 仕様寄り resolver 動作を強制します。</summary>
+        Sf2Spec204 = 2,
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     /// <summary>
     /// Optional limits and compatibility overrides used during engine creation.
@@ -114,6 +128,17 @@ public static class XArkMidiEngine
         /// 互換フラグの OR 値です。
         /// </summary>
         public CompatibilityFlags CompatibilityFlags;
+
+        // Native XAmeCreateOptions reserves these pointer slots for optional ROM bank paths.
+        // Managed wrapper currently does not expose those path setters.
+        private IntPtr _sf2RomBankPath;
+        private IntPtr _sf2RomBankPathUtf8;
+
+        /// <summary>
+        /// Optional high-level compatibility mode override.
+        /// 互換モード上書き設定です。
+        /// </summary>
+        public CompatibilityMode CompatibilityMode;
 
         /// <summary>
         /// Create an option block initialized with the correct native structure size.

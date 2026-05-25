@@ -73,6 +73,15 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER = 1u << 8,
 } XAmeCompatibilityFlags;
 
+typedef enum XAmeCompatibilityMode_ {
+    /* Keep engine defaults and interpret XAmeCompatibilityFlags as usual. エンジン既定動作を維持し、XAmeCompatibilityFlags を通常どおり解釈します。 */
+    XAME_COMPAT_MODE_ENGINE_DEFAULT = 0,
+    /* Force legacy SF2 compatibility behavior. SF2 の旧互換動作を強制します。 */
+    XAME_COMPAT_MODE_SF2_LEGACY = 1,
+    /* Force the SF2 spec-oriented resolver behavior. SF2 仕様寄り resolver 動作を強制します。 */
+    XAME_COMPAT_MODE_SF2_SPEC_204 = 2,
+} XAmeCompatibilityMode;
+
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */
 typedef struct XAmeCreateOptions_ {
     /* Size of this structure in bytes. Set to sizeof(XAmeCreateOptions). 構造体サイズをバイト単位で指定します。 */
@@ -89,6 +98,8 @@ typedef struct XAmeCreateOptions_ {
     const wchar_t*      sf2RomBankPath;
     /* Optional UTF-8 path to an external SF2 ROM sample bank used by SoundFont ROM-backed samples. Used when sf2RomBankPath is NULL. sf2RomBankPath が NULL の場合に使う UTF-8 パスです。 */
     const char*         sf2RomBankPathUtf8;
+    /* Optional high-level compatibility mode override. 0=engine default, 1=force SF2 legacy mode, 2=force SF2 spec-oriented mode. 上位互換モードの上書き設定です。 */
+    unsigned int        compatibilityMode;
 } XAmeCreateOptions;
 
 /* Key event popped from the engine's per-channel event queue. チャンネル別イベントキューから取得したキーイベントです。 */

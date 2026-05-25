@@ -3002,6 +3002,17 @@ namespace {
             "Public internal effects disable flag value should remain stable");
         Require(XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER == (1u << 8),
             "Public SF2 spec modulator resolver flag value should remain stable");
+        Require(XAME_COMPAT_MODE_ENGINE_DEFAULT == 0u,
+            "Public compatibility mode default value should remain stable");
+        Require(XAME_COMPAT_MODE_SF2_LEGACY == 1u,
+            "Public compatibility mode legacy value should remain stable");
+        Require(XAME_COMPAT_MODE_SF2_SPEC_204 == 2u,
+            "Public compatibility mode spec value should remain stable");
+
+        XAmeCreateOptions options{};
+        options.structSize = sizeof(XAmeCreateOptions);
+        Require(options.compatibilityMode == XAME_COMPAT_MODE_ENGINE_DEFAULT,
+            "Create options compatibilityMode should default to engine default");
     }
 
     void TestNegativeSampleOffsetsArePreserved() {

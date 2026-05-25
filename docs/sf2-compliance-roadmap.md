@@ -13,13 +13,13 @@
 - preset/instrument modulator precedence
 - unsupported destination rejection
 - separate initial pitch summing node
-
-## Remaining work
-
 - spec-like Filter Q
 - stricter NRPN generator ranges/units
 - realtime controller refresh coverage
 - public compatibility mode design
+
+## Remaining work
+
 - golden audio regression tests
 
 ## Validation
