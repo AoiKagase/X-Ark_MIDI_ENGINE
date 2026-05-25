@@ -316,7 +316,16 @@ msbuild msvc/Sf2Dump.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Rebuild /
 
 ```powershell
 XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
+XArkMidiTest.exe <input.mid> <input.sf2> <output.wav> --solo 2 --compat-mode sf2-spec-204
+XArkMidiTest.exe <input.mid> <input.sf2> <output.wav> --solo 2 --compat-mode sf2-render-tuned --disable-internal-effects
 ```
+
+主な追加オプション:
+
+- `--compat-mode <engine-default|sf2-legacy|sf2-spec-204|sf2-render-tuned|0-3>`
+- `--disable-internal-effects`
+- `--sample-rate <hz>`
+- `--channels <1|2>`
 
 ### 補助テスト / 検証コード
 
@@ -330,6 +339,8 @@ XArkMidiTest.exe <input.mid> <input.sf2> <output.wav>
   - DLS の zone / articulation 内容確認に使います。
 - `tests/analyze_wav_clipping.cpp` / `tests/compare_wav_diff.cpp`
   - レンダリング結果のクリッピングや WAV 差分確認に使います。
+- `tools/sf2_render_benchmark.ps1`
+  - `SF2_SPEC_204` と `SF2_RENDER_TUNED` の dry/wet 比較を一括実行します（詳細: `docs/sf2-render-tuned-benchmark-harness.md`）。
 
 Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_track`、`dump_midi_window`、`dump_sf2_zone`、`dump_dls_zone`、`sf2_compliance`、WAV 解析ツールもビルドされます。不要な場合は `-DXAME_BUILD_TESTS=OFF` を指定してください。
 

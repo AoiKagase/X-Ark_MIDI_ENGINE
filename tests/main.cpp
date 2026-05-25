@@ -12,6 +12,8 @@
  *   X-ArkMidiTest.exe <input.mid> <input.sf2|input.dls> <output.wav>
  *   X-ArkMidiTest.exe <input.mid> <input.sf2|input.dls> <output.wav> [--solo <1-16>] [--mute <1-16>] [--chunk <frames>]
  *                                                     [--max-seconds <sec>] [--progress-seconds <sec>]
+ *                                                     [--compat-mode <engine-default|sf2-legacy|sf2-spec-204|sf2-render-tuned|0-3>]
+ *                                                     [--disable-internal-effects] [--sample-rate <hz>] [--channels <1|2>]
  */
 
 #include <cstdio>
@@ -21,6 +23,7 @@
 #include <vector>
 #include <stdint.h>
 #include <string>
+#include <cctype>
 
 // DLL ヘッダー（DLL をビルド後にパスを通すこと）
 #include "../include/XArkMidiEngine.h"
@@ -69,7 +72,9 @@ void PrintUsage(const char* exeName) {
     std::fprintf(stderr,
                  "Usage: %s <input.mid> <input.sf2|input.dls> <output.wav> "
                  "[--solo <1-16>] [--mute <1-16>] [--chunk <frames>] "
-                 "[--max-seconds <sec>] [--progress-seconds <sec>]\n",
+                 "[--max-seconds <sec>] [--progress-seconds <sec>] "
+                 "[--compat-mode <engine-default|sf2-legacy|sf2-spec-204|sf2-render-tuned|0-3>] "
+                 "[--disable-internal-effects] [--sample-rate <hz>] [--channels <1|2>]\n",
                  exeName);
 }
 
@@ -103,6 +108,58 @@ bool TryParseChannelMaskArgument(const char* valueText, const char* optionName, 
     return true;
 }
 
+bool TryParseCompatibilityModeArgument(const char* valueText, unsigned int& outMode) {
+    const long modeValue = std::strtol(valueText, nullptr, 10);
+    if (modeValue >= static_cast<long>(XAME_COMPAT_MODE_ENGINE_DEFAULT) &&
+        modeValue <= static_cast<long>(XAME_COMPAT_MODE_SF2_RENDER_TUNED)) {
+        outMode = static_cast<unsigned int>(modeValue);
+        return true;
+    }
+
+    std::string normalized(valueText);
+    for (char& c : normalized) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (c == '_') {
+            c = '-';
+        }
+    }
+
+    if (normalized == "engine-default" || normalized == "default") {
+        outMode = XAME_COMPAT_MODE_ENGINE_DEFAULT;
+        return true;
+    }
+    if (normalized == "sf2-legacy" || normalized == "legacy") {
+        outMode = XAME_COMPAT_MODE_SF2_LEGACY;
+        return true;
+    }
+    if (normalized == "sf2-spec-204" || normalized == "sf2-spec" || normalized == "spec-204" ||
+        normalized == "spec204") {
+        outMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+        return true;
+    }
+    if (normalized == "sf2-render-tuned" || normalized == "sf2-tuned" || normalized == "render-tuned" ||
+        normalized == "tuned") {
+        outMode = XAME_COMPAT_MODE_SF2_RENDER_TUNED;
+        return true;
+    }
+
+    std::fprintf(stderr, "Invalid --compat-mode value: %s\n", valueText);
+    return false;
+}
+
+bool TryParseChannelCountArgument(const char* valueText, unsigned int& outValue) {
+    long channelCount = 0;
+    if (!TryParsePositiveLong(valueText, "--channels", channelCount)) {
+        return false;
+    }
+    if (channelCount != 1 && channelCount != 2) {
+        std::fprintf(stderr, "Invalid --channels value: %s (must be 1 or 2)\n", valueText);
+        return false;
+    }
+    outValue = static_cast<unsigned int>(channelCount);
+    return true;
+}
+
 }
 
 int main(int argc, char* argv[]) {
@@ -120,6 +177,11 @@ int main(int argc, char* argv[]) {
     unsigned int muteMask = 0;
     double maxSeconds = 0.0;
     double progressSeconds = 5.0;
+    unsigned int compatibilityMode = XAME_COMPAT_MODE_ENGINE_DEFAULT;
+    bool hasCompatibilityMode = false;
+    bool disableInternalEffects = false;
+    unsigned int sampleRate = 44100;
+    unsigned int numChannels = 2;
     for (int i = 4; i < argc; ++i) {
         if (std::strcmp(argv[i], "--chunk") == 0 && i + 1 < argc) {
             long value = 0;
@@ -158,24 +220,57 @@ int main(int argc, char* argv[]) {
             ++i;
             continue;
         }
+        if (std::strcmp(argv[i], "--compat-mode") == 0 && i + 1 < argc) {
+            if (!TryParseCompatibilityModeArgument(argv[i + 1], compatibilityMode)) {
+                return 1;
+            }
+            hasCompatibilityMode = true;
+            ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--disable-internal-effects") == 0) {
+            disableInternalEffects = true;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--sample-rate") == 0 && i + 1 < argc) {
+            long value = 0;
+            if (!TryParsePositiveLong(argv[i + 1], "--sample-rate", value)) {
+                return 1;
+            }
+            sampleRate = static_cast<unsigned int>(value);
+            ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--channels") == 0 && i + 1 < argc) {
+            if (!TryParseChannelCountArgument(argv[i + 1], numChannels)) {
+                return 1;
+            }
+            ++i;
+            continue;
+        }
         std::fprintf(stderr, "Unknown argument: %s\n", argv[i]);
         PrintUsage(argv[0]);
         return 1;
     }
 
     // エンジン生成（UTF-8 API を使用）
-    const unsigned int SAMPLE_RATE  = 44100;
-    const unsigned int NUM_CHANNELS = 2;
     XAmeCreateOptions options{};
     options.structSize = sizeof(options);
     options.compatibilityFlags = XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER;
+    if (disableInternalEffects) {
+        options.compatibilityFlags |= XAME_COMPAT_DISABLE_INTERNAL_EFFECTS;
+    }
+    if (hasCompatibilityMode) {
+        options.compatibilityMode = compatibilityMode;
+    }
 
     XAmeEngine engine = nullptr;
     XAmeResult r = XAmeCreateEngineWithOptionsUtf8(
         midiPath,
         soundBankPath,
         XAME_SOUNDBANK_AUTO,
-        SAMPLE_RATE, NUM_CHANNELS,
+        sampleRate,
+        numChannels,
         &options,
         &engine);
 
@@ -184,7 +279,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    printf("Engine created. Rendering...\n");
+    std::printf("Engine created. Rendering...\n");
+    std::printf("Render config: sampleRate=%u channels=%u compatMode=%u flags=0x%08X\n",
+                sampleRate, numChannels, options.compatibilityMode, options.compatibilityFlags);
 
     if (muteMask != 0) {
         XAmeSetChannelMuteMask(engine, muteMask);
@@ -202,18 +299,18 @@ int main(int argc, char* argv[]) {
     }
 
     // 仮ヘッダー（dataBytes = 0）
-    WriteWavHeader(wavFile, SAMPLE_RATE, static_cast<uint16_t>(NUM_CHANNELS), 16, 0);
+    WriteWavHeader(wavFile, sampleRate, static_cast<uint16_t>(numChannels), 16, 0);
 
     // レンダリングループ
-    std::vector<short> buf(chunkFrames * NUM_CHANNELS);
+    std::vector<short> buf(chunkFrames * numChannels);
     uint32_t totalFrames = 0;
     const uint32_t maxFrames =
         (maxSeconds > 0.0)
-            ? static_cast<uint32_t>(maxSeconds * static_cast<double>(SAMPLE_RATE) + 0.5)
+            ? static_cast<uint32_t>(maxSeconds * static_cast<double>(sampleRate) + 0.5)
             : 0u;
     const uint32_t progressEveryFrames =
         (progressSeconds > 0.0)
-            ? static_cast<uint32_t>(progressSeconds * static_cast<double>(SAMPLE_RATE) + 0.5)
+            ? static_cast<uint32_t>(progressSeconds * static_cast<double>(sampleRate) + 0.5)
             : 0u;
     uint32_t nextProgressFrame = progressEveryFrames;
 
@@ -225,23 +322,23 @@ int main(int argc, char* argv[]) {
             requestFrames = std::min<unsigned int>(requestFrames, remaining);
         }
         XAmeRender(engine, buf.data(), requestFrames, &written);
-        fwrite(buf.data(), sizeof(short) * NUM_CHANNELS, written, wavFile);
+        fwrite(buf.data(), sizeof(short) * numChannels, written, wavFile);
         totalFrames += written;
 
         if (progressEveryFrames != 0 && totalFrames >= nextProgressFrame) {
-            printf("  %.1f sec rendered...\n", static_cast<double>(totalFrames) / SAMPLE_RATE);
+            std::printf("  %.1f sec rendered...\n", static_cast<double>(totalFrames) / sampleRate);
             nextProgressFrame += progressEveryFrames;
         }
     }
 
     // WAV ヘッダーを正しいサイズで上書き
-    uint32_t dataBytes = totalFrames * NUM_CHANNELS * sizeof(short);
+    uint32_t dataBytes = totalFrames * numChannels * sizeof(short);
     fseek(wavFile, 0, SEEK_SET);
-    WriteWavHeader(wavFile, SAMPLE_RATE, static_cast<uint16_t>(NUM_CHANNELS), 16, dataBytes);
+    WriteWavHeader(wavFile, sampleRate, static_cast<uint16_t>(numChannels), 16, dataBytes);
     fclose(wavFile);
 
-    printf("Done! %.2f sec (%u frames) -> %s\n",
-           static_cast<double>(totalFrames) / SAMPLE_RATE, totalFrames, wavPath);
+    std::printf("Done! %.2f sec (%u frames) -> %s\n",
+                static_cast<double>(totalFrames) / sampleRate, totalFrames, wavPath);
 
     XAmeDestroyEngine(engine);
     return 0;

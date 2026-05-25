@@ -73,7 +73,10 @@
 ## TODO: `SF2_RENDER_TUNED` phased roadmap
 
 - [x] Phase 0: Add `docs/sf2-render-tuned-roadmap.md` (documentation-only; no DSP changes).
-- [ ] Phase 1: Benchmark harness for `FluidR3_GM2-2.SF2` + `fighting-the-spirit.mid` (Ch2 solo path included).
+- [x] Phase 1: Benchmark harness for `FluidR3_GM2-2.SF2` + `fighting-the-spirit.mid` (Ch2 solo path included).
+  - Added `tools/sf2_render_benchmark.ps1` for dry/wet A/B runs (`SF2_SPEC_204` vs `SF2_RENDER_TUNED`).
+  - Added `docs/sf2-render-tuned-benchmark-harness.md` for fixed run procedure and output artifacts.
+  - Extended `XArkMidiTest` options (`--compat-mode`, `--disable-internal-effects`, `--sample-rate`, `--channels`).
 - [ ] Phase 2: Dry analysis first (`InternalEffect OFF`) and isolate interpolation/filter/layer/output gaps.
 - [ ] Phase 3: Resampler experiments in `SF2_RENDER_TUNED` only; keep `SF2_SPEC_204` unchanged.
 - [ ] Phase 4: Filter-response experiments in `SF2_RENDER_TUNED` only; keep resolver/NRPN unchanged.
