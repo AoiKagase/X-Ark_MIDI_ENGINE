@@ -69,17 +69,13 @@ public sealed class MainForm : Form
         AutoSize = true,
         Text = "Enable SF2 sample pitch correction",
     };
-    private readonly CheckBox _multiplySf2MidiEffectsSendsCheckBox = new() {
-        AutoSize = true,
-        Text = "Multiply SF2 MIDI effects sends",
-    };
-    private readonly CheckBox _applySf2ChannelDefaultModulatorsCheckBox = new() {
-        AutoSize = true,
-        Text = "Apply SF2 channel default modulators (Deprecated)",
-    };
     private readonly CheckBox _useSf2SpecModulatorResolverCheckBox = new() {
         AutoSize = true,
         Text = "SF2 2.04 modulator resolver",
+    };
+    private readonly ComboBox _compatibilityModeComboBox = new() {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Width = 180,
     };
     private readonly CheckBox _internalEffectsCheckBox = new() {
         AutoSize = true,
@@ -212,6 +208,8 @@ public sealed class MainForm : Form
 
         _outputStageComboBox.BackColor = PanelBg;
         _outputStageComboBox.ForeColor = TextColor;
+        _compatibilityModeComboBox.BackColor = PanelBg;
+        _compatibilityModeComboBox.ForeColor = TextColor;
 
         _channelLevelGroup.ForeColor = TextColor;
         _keyboardLabel.ForeColor = TextColor;
@@ -379,8 +377,9 @@ public sealed class MainForm : Form
         };
         flagsPanel.Controls.Add(_sf2ZeroLengthLoopRetriggerCheckBox);
         flagsPanel.Controls.Add(_enableSf2SamplePitchCorrectionCheckBox);
-        flagsPanel.Controls.Add(_applySf2ChannelDefaultModulatorsCheckBox);
         flagsPanel.Controls.Add(_useSf2SpecModulatorResolverCheckBox);
+        flagsPanel.Controls.Add(CreateInlineLabel("SF2 mode"));
+        flagsPanel.Controls.Add(_compatibilityModeComboBox);
         flagsPanel.Controls.Add(CreateInlineLabel("Output stage"));
         flagsPanel.Controls.Add(_outputStageComboBox);
 
@@ -452,12 +451,12 @@ public sealed class MainForm : Form
             "長さ 0 の SF2 ループを一部互換実装のように再トリガーします。古い音源向けの互換動作です。");
         _optionToolTip.SetToolTip(_enableSf2SamplePitchCorrectionCheckBox,
             "SF2 サンプルに含まれる pitch correction を反映します。音程がずれて聞こえるバンク向けの補正です。");
-        _optionToolTip.SetToolTip(_multiplySf2MidiEffectsSendsCheckBox,
-            "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
-        _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
-            "非推奨の旧互換スイッチです。legacy 経路では velocity->filter と CC91/CC93 の default modulator を有効化します。SF2 2.04 modulator resolver が ON の場合（または SF2_SPEC_204 モード）では無視されます。");
         _optionToolTip.SetToolTip(_useSf2SpecModulatorResolverCheckBox,
-            "SoundFont 2.04 仕様寄りの modulator resolver を使います。implicit default modulators も resolver 側で扱います。停止後の次回再生から反映されます。");
+            "SoundFont 2.04 仕様寄りの modulator resolver を使います。implicit default modulators も resolver 側で扱います。SF2 mode が Legacy の場合は無効、Spec 2.04 の場合は常に有効です。停止後の次回再生から反映されます。");
+        _compatibilityModeComboBox.Items.AddRange(new object[] { "Engine default", "SF2 legacy", "SF2 spec 2.04" });
+        _compatibilityModeComboBox.SelectedIndex = 0;
+        _optionToolTip.SetToolTip(_compatibilityModeComboBox,
+            "SF2 互換モードを選択します。Legacy は旧互換を強制し、Spec 2.04 は spec resolver を強制します。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,
             "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
         _optionToolTip.SetToolTip(_sf2ReverbSendScaleUpDown,
@@ -601,10 +600,12 @@ public sealed class MainForm : Form
         _loopCountUpDown.ValueChanged += (_, _) => ApplyLoopToPlayer();
         _sf2ReverbSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
         _sf2ChorusSendScaleUpDown.ValueChanged += (_, _) => ApplySf2SendScalesToPlayer();
+        _compatibilityModeComboBox.SelectedIndexChanged += (_, _) => {
+            ApplyCompatibilityModeInterlocks();
+            UpdateCreateOptionsEnabledState();
+        };
         _useSf2SpecModulatorResolverCheckBox.CheckedChanged += (_, _) => {
-            if (_useSf2SpecModulatorResolverCheckBox.Checked) {
-                _applySf2ChannelDefaultModulatorsCheckBox.Checked = false;
-            }
+            ApplyCompatibilityModeInterlocks();
             UpdateCreateOptionsEnabledState();
         };
         _reverbReturnScaleUpDown.ValueChanged += (_, _) => ApplyEffectMixScalesToPlayer();
@@ -699,7 +700,6 @@ public sealed class MainForm : Form
             Margin = new Padding(0, 0, 0, 8),
         };
         flagsPanel.Controls.Add(_internalEffectsCheckBox);
-        flagsPanel.Controls.Add(_multiplySf2MidiEffectsSendsCheckBox);
 
         root.Controls.Add(flagsPanel, 0, 0);
         root.SetColumnSpan(flagsPanel, 3);
@@ -1091,6 +1091,29 @@ public sealed class MainForm : Form
         _keyboardLabel.Text = $"Keyboard: Ch {channelIndex + 1}";
     }
 
+    private XArkMidiEngine.CompatibilityMode SelectedCompatibilityMode
+        => _compatibilityModeComboBox.SelectedIndex switch {
+            1 => XArkMidiEngine.CompatibilityMode.Sf2Legacy,
+            2 => XArkMidiEngine.CompatibilityMode.Sf2Spec204,
+            _ => XArkMidiEngine.CompatibilityMode.EngineDefault,
+        };
+
+    private void ApplyCompatibilityModeInterlocks()
+    {
+        var mode = SelectedCompatibilityMode;
+        if (mode == XArkMidiEngine.CompatibilityMode.Sf2Spec204) {
+            if (!_useSf2SpecModulatorResolverCheckBox.Checked) {
+                _useSf2SpecModulatorResolverCheckBox.Checked = true;
+            }
+            return;
+        }
+
+        if (mode == XArkMidiEngine.CompatibilityMode.Sf2Legacy &&
+            _useSf2SpecModulatorResolverCheckBox.Checked) {
+            _useSf2SpecModulatorResolverCheckBox.Checked = false;
+        }
+    }
+
     private void UpdateLampStyles()
     {
         var lampColumnIndex = _channelGrid.Columns[nameof(ChannelRow.Lamp)]?.Index ?? -1;
@@ -1114,6 +1137,7 @@ public sealed class MainForm : Form
         options.MaxSampleDataBytes = DecimalToUInt64(_maxSampleDataBytesUpDown.Value);
         options.MaxSf2PdtaEntries = DecimalToUInt32(_maxSf2PdtaEntriesUpDown.Value);
         options.MaxDlsPoolTableEntries = DecimalToUInt32(_maxDlsPoolTableEntriesUpDown.Value);
+        options.CompatibilityMode = SelectedCompatibilityMode;
 
         XArkMidiEngine.CompatibilityFlags flags = XArkMidiEngine.CompatibilityFlags.None;
         if (_sf2ZeroLengthLoopRetriggerCheckBox.Checked) {
@@ -1122,14 +1146,8 @@ public sealed class MainForm : Form
         if (_enableSf2SamplePitchCorrectionCheckBox.Checked) {
             flags |= XArkMidiEngine.CompatibilityFlags.EnableSf2SamplePitchCorrection;
         }
-        if (_multiplySf2MidiEffectsSendsCheckBox.Checked) {
-            flags |= XArkMidiEngine.CompatibilityFlags.MultiplySf2MidiEffectsSends;
-        }
-        if (_applySf2ChannelDefaultModulatorsCheckBox.Checked &&
-            !_useSf2SpecModulatorResolverCheckBox.Checked) {
-            flags |= XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
-        }
-        if (_useSf2SpecModulatorResolverCheckBox.Checked) {
+        if (_useSf2SpecModulatorResolverCheckBox.Checked &&
+            options.CompatibilityMode != XArkMidiEngine.CompatibilityMode.Sf2Legacy) {
             flags |= XArkMidiEngine.CompatibilityFlags.UseSf2SpecModulatorResolver;
         }
         if (!_internalEffectsCheckBox.Checked) {
@@ -1151,6 +1169,7 @@ public sealed class MainForm : Form
     private void UpdateCreateOptionsEnabledState()
     {
         var idle = _player is null && !_exportInFlight;
+        var compatMode = SelectedCompatibilityMode;
         _createOptionsPanel.Enabled = !_exportInFlight;
         _effectsOptionsButton.Enabled = !_exportInFlight;
         _maxSampleDataBytesUpDown.Enabled = idle;
@@ -1158,10 +1177,9 @@ public sealed class MainForm : Form
         _maxDlsPoolTableEntriesUpDown.Enabled = idle;
         _sf2ZeroLengthLoopRetriggerCheckBox.Enabled = idle;
         _enableSf2SamplePitchCorrectionCheckBox.Enabled = idle;
-        _multiplySf2MidiEffectsSendsCheckBox.Enabled = idle;
-        _useSf2SpecModulatorResolverCheckBox.Enabled = idle;
-        _applySf2ChannelDefaultModulatorsCheckBox.Enabled =
-            idle && !_useSf2SpecModulatorResolverCheckBox.Checked;
+        _compatibilityModeComboBox.Enabled = idle;
+        _useSf2SpecModulatorResolverCheckBox.Enabled =
+            idle && compatMode == XArkMidiEngine.CompatibilityMode.EngineDefault;
         _internalEffectsCheckBox.Enabled = idle;
         _outputStageComboBox.Enabled = idle;
         _sf2ReverbSendScaleUpDown.Enabled = !_exportInFlight;
