@@ -46,6 +46,7 @@ SynthCompatOptions ResolveCompatOptionsForCreateOptions(const XAmeCreateOptions*
         compatOptions.useSf2SpecModulatorResolver = false;
         break;
     case XAME_COMPAT_MODE_SF2_SPEC_204:
+    case XAME_COMPAT_MODE_SF2_RENDER_TUNED:
         compatOptions.useSf2SpecModulatorResolver = true;
         break;
     case XAME_COMPAT_MODE_ENGINE_DEFAULT:

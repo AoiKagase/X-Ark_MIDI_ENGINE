@@ -90,6 +90,8 @@ public static class XArkMidiEngine
         Sf2Legacy = 1,
         /// <summary>Force SF2 spec-oriented resolver behavior. SF2 仕様寄り resolver 動作を強制します。</summary>
         Sf2Spec204 = 2,
+        /// <summary>Use SF2 spec behavior as a base for X-Ark's independent tuned rendering mode. This is not Sound Blaster, Audigy, Creative, EMU8000, or other hardware emulation, and currently may behave the same as <see cref="Sf2Spec204"/>. SF2_SPEC_204 を土台にする独立 tuned モードです。現時点では <see cref="Sf2Spec204"/> と同等動作の場合があります。</summary>
+        Sf2RenderTuned = 3,
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -1564,6 +1564,151 @@ namespace {
             "SF2_LEGACY mode should keep chorus send at the preset value");
     }
 
+    void TestSf2RenderTunedCompatibilityModeUsesSpecResolverDefaults() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        XAmeCreateOptions modeTuned{};
+        modeTuned.structSize = sizeof(modeTuned);
+        modeTuned.compatibilityFlags = XAME_COMPAT_NONE;
+        modeTuned.compatibilityMode = XAME_COMPAT_MODE_SF2_RENDER_TUNED;
+
+        const SynthCompatOptions tunedCompat = ResolveCompatOptionsForCreateOptions(&modeTuned);
+        Require(tunedCompat.useSf2SpecModulatorResolver,
+            "SF2_RENDER_TUNED mode should force the SF2 spec modulator resolver");
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.ccValues[7] = 0;
+        ctx.ccValues[10] = 127;
+        ctx.ccValues[11] = 0;
+        ctx.ccValues[91] = 127;
+        ctx.ccValues[93] = 127;
+        ctx.useSf2SpecModulatorResolver = tunedCompat.useSf2SpecModulatorResolver;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, &ctx, zones);
+
+        const i32 expectedFilter = std::clamp(
+            13500 + static_cast<i32>(std::lround(-2400.0 * (1.0 - (32768.0 / 65536.0)))),
+            1500, 13500);
+        Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
+            "SF2_RENDER_TUNED mode should currently use the SF2 spec resolver velocity->filter default");
+        Require(zone.generators[GEN_Pan] == 500,
+            "SF2_RENDER_TUNED mode should currently use the SF2 spec resolver CC10->pan default");
+        const i32 expectedReverb = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(ctx.ccValues[91])));
+        const i32 expectedChorus = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(ctx.ccValues[93])));
+        Require(zone.generators[GEN_ReverbEffectsSend] == expectedReverb,
+            "SF2_RENDER_TUNED mode should currently use the SF2 spec resolver CC91->reverb default");
+        Require(zone.generators[GEN_ChorusEffectsSend] == expectedChorus,
+            "SF2_RENDER_TUNED mode should currently use the SF2 spec resolver CC93->chorus default");
+    }
+
+    void TestSf2RenderTunedCompatibilityModeDoesNotUseLegacyResolver() {
+        XAmeCreateOptions tunedOptions{};
+        tunedOptions.structSize = sizeof(tunedOptions);
+        tunedOptions.compatibilityFlags = XAME_COMPAT_NONE;
+        tunedOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_RENDER_TUNED;
+
+        XAmeCreateOptions legacyOptions = tunedOptions;
+        legacyOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_LEGACY;
+
+        const SynthCompatOptions tunedCompat = ResolveCompatOptionsForCreateOptions(&tunedOptions);
+        const SynthCompatOptions legacyCompat = ResolveCompatOptionsForCreateOptions(&legacyOptions);
+        Require(tunedCompat.useSf2SpecModulatorResolver,
+            "SF2_RENDER_TUNED mode should keep spec resolver enabled");
+        Require(!legacyCompat.useSf2SpecModulatorResolver,
+            "SF2_LEGACY mode should keep spec resolver disabled");
+
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext legacyCtx{};
+        SetDefaultMidiControllers(legacyCtx);
+        legacyCtx.ccValues[10] = 127;
+        legacyCtx.ccValues[91] = 127;
+        legacyCtx.ccValues[93] = 127;
+        legacyCtx.useSf2SpecModulatorResolver = legacyCompat.useSf2SpecModulatorResolver;
+
+        ModulatorContext tunedCtx = legacyCtx;
+        tunedCtx.useSf2SpecModulatorResolver = tunedCompat.useSf2SpecModulatorResolver;
+
+        std::vector<ResolvedZone> legacyZones;
+        std::vector<ResolvedZone> tunedZones;
+        const ResolvedZone& legacyZone = RequireSingleZone(sf2, 60, 32768, &legacyCtx, legacyZones);
+        const ResolvedZone& tunedZone = RequireSingleZone(sf2, 60, 32768, &tunedCtx, tunedZones);
+
+        Require(legacyZone.generators[GEN_Pan] == 0,
+            "SF2_LEGACY should keep implicit pan defaults disabled");
+        Require(tunedZone.generators[GEN_Pan] == 500,
+            "SF2_RENDER_TUNED should currently follow the SF2 spec resolver pan default");
+        Require(legacyZone.generators[GEN_Pan] != tunedZone.generators[GEN_Pan],
+            "SF2_RENDER_TUNED should not behave like SF2_LEGACY for implicit defaults");
+    }
+
+    void TestSf2RenderTunedCompatibilityModeMatchesSpecCoreOptions() {
+        XAmeCreateOptions specOptions{};
+        specOptions.structSize = sizeof(specOptions);
+        specOptions.compatibilityFlags =
+            XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER |
+            XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION |
+            XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE |
+            XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL |
+            XAME_COMPAT_DISABLE_INTERNAL_EFFECTS;
+        specOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+
+        XAmeCreateOptions tunedOptions = specOptions;
+        tunedOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_RENDER_TUNED;
+
+        const SynthCompatOptions specCompat = ResolveCompatOptionsForCreateOptions(&specOptions);
+        const SynthCompatOptions tunedCompat = ResolveCompatOptionsForCreateOptions(&tunedOptions);
+
+        Require(specCompat.useSf2SpecModulatorResolver && tunedCompat.useSf2SpecModulatorResolver,
+            "SF2_SPEC_204 and SF2_RENDER_TUNED should both force the SF2 spec modulator resolver");
+        Require(specCompat.sf2ZeroLengthLoopRetrigger == tunedCompat.sf2ZeroLengthLoopRetrigger,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 sf2ZeroLengthLoopRetrigger");
+        Require(specCompat.enableSf2SamplePitchCorrection == tunedCompat.enableSf2SamplePitchCorrection,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 enableSf2SamplePitchCorrection");
+        Require(specCompat.enableEnhancedOutputStage == tunedCompat.enableEnhancedOutputStage,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 enableEnhancedOutputStage");
+        Require(specCompat.useNaturalOutputStage == tunedCompat.useNaturalOutputStage,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 useNaturalOutputStage");
+        Require(specCompat.useWarmOutputStage == tunedCompat.useWarmOutputStage,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 useWarmOutputStage");
+        Require(specCompat.disableInternalEffects == tunedCompat.disableInternalEffects,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 disableInternalEffects");
+        Require(specCompat.enableSoftPedal == tunedCompat.enableSoftPedal,
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 enableSoftPedal");
+        Require(NearlyEqual(specCompat.sf2ReverbSendScale, tunedCompat.sf2ReverbSendScale, 1.0e-6),
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 sf2ReverbSendScale");
+        Require(NearlyEqual(specCompat.sf2ChorusSendScale, tunedCompat.sf2ChorusSendScale, 1.0e-6),
+            "SF2_RENDER_TUNED should currently match SF2_SPEC_204 sf2ChorusSendScale");
+    }
+
+    void TestRemovedLegacyCompatibilityFlagsRemainAbsent() {
+#if defined(XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS)
+        constexpr bool hasRemovedMultiplyFlag = true;
+#else
+        constexpr bool hasRemovedMultiplyFlag = false;
+#endif
+#if defined(XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS)
+        constexpr bool hasRemovedDefaultModulatorFlag = true;
+#else
+        constexpr bool hasRemovedDefaultModulatorFlag = false;
+#endif
+
+        Require(!hasRemovedMultiplyFlag,
+            "Removed compatibility flag XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS should remain absent");
+        Require(!hasRemovedDefaultModulatorFlag,
+            "Removed compatibility flag XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS should remain absent");
+    }
+
     void TestSf2SpecResolverEffectsSendUsesResolverValue() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -3428,6 +3573,8 @@ namespace {
             "Public compatibility mode legacy value should remain stable");
         Require(XAME_COMPAT_MODE_SF2_SPEC_204 == 2u,
             "Public compatibility mode spec value should remain stable");
+        Require(XAME_COMPAT_MODE_SF2_RENDER_TUNED == 3u,
+            "Public compatibility mode tuned value should remain stable");
 
         XAmeCreateOptions options{};
         options.structSize = sizeof(XAmeCreateOptions);
@@ -6415,6 +6562,10 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2SpecCompatibilityModeUsesSpecResolverDefaults);
     RUN_TEST(TestSf2SpecCompatibilityModeUsesResolverOwnedEffectsSend);
     RUN_TEST(TestSf2LegacyCompatibilityModeDisablesSpecResolver);
+    RUN_TEST(TestSf2RenderTunedCompatibilityModeUsesSpecResolverDefaults);
+    RUN_TEST(TestSf2RenderTunedCompatibilityModeDoesNotUseLegacyResolver);
+    RUN_TEST(TestSf2RenderTunedCompatibilityModeMatchesSpecCoreOptions);
+    RUN_TEST(TestRemovedLegacyCompatibilityFlagsRemainAbsent);
     RUN_TEST(TestSf2SpecResolverEffectsSendUsesResolverValue);
     RUN_TEST(TestEngineDefaultCompatibilityModePreservesFlagInterpretation);
     RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);

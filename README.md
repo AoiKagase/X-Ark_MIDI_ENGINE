@@ -104,6 +104,7 @@ cmake --build build/cmake
   - `XAME_COMPAT_MODE_ENGINE_DEFAULT`
   - `XAME_COMPAT_MODE_SF2_LEGACY`
   - `XAME_COMPAT_MODE_SF2_SPEC_204`
+  - `XAME_COMPAT_MODE_SF2_RENDER_TUNED`
 
 ### エンジン生成 API
 
@@ -361,11 +362,17 @@ Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_
 互換モード補足:
 
 - SF2 の互換挙動は `compatibilityMode` を基準に選択します。
-  - `XAME_COMPAT_MODE_ENGINE_DEFAULT`: エンジン既定挙動。`compatibilityFlags` を通常どおり解釈します。
-  - `XAME_COMPAT_MODE_SF2_LEGACY`: legacy SF2 resolver を強制します（旧互換向け）。
-  - `XAME_COMPAT_MODE_SF2_SPEC_204`: spec modulator resolver を強制します（推奨）。
-- `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにし、implicit default modulator も spec resolver のみで処理します。
+
+| Mode | Resolver baseline | Intent |
+| --- | --- | --- |
+| `XAME_COMPAT_MODE_ENGINE_DEFAULT` | Engine default | `compatibilityFlags` を通常どおり解釈します。 |
+| `XAME_COMPAT_MODE_SF2_LEGACY` | Legacy SF2 resolver | 旧互換向けモードです。 |
+| `XAME_COMPAT_MODE_SF2_SPEC_204` | SoundFont 2.04 spec-oriented resolver | SF2 仕様寄りのモードです。 |
+| `XAME_COMPAT_MODE_SF2_RENDER_TUNED` | SoundFont 2.04 spec-oriented resolver (current) | SF2_SPEC_204 を土台にした X-Ark 独自 tuned レンダリング用モードです。Sound Blaster / Audigy / Creative / EMU8000 など特定ハード互換を意図しません。 |
+
+- `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204` / `XAME_COMPAT_MODE_SF2_RENDER_TUNED`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにし、implicit default modulator も spec resolver のみで処理します。
   既定の legacy 互換モードでは、実運用互換のため instrument-level の sample/substitution destination（例: sample address offset, sampleModes, keynum, velocity）も処理します。
+- 現時点の `XAME_COMPAT_MODE_SF2_RENDER_TUNED` は `XAME_COMPAT_MODE_SF2_SPEC_204` と同じ resolver 選択です。将来の tuned 調整（例: interpolation、filter response、effect headroom、output-stage behavior）は別コミットで段階的に追加します。
 - `sfModTransOper` は SF2 仕様定義の `linear` と `absolute` を処理します。仕様外 transform 値は unsupported として無効化されます。
 - SF2 send と MIDI send の最終ミキシング方針は既定で加算です。
   SF2 では resolver で解決された Reverb/Chorus send をそのまま使用し、`sf2ReverbSendScale` / `sf2ChorusSendScale` で最終スケーリングします。

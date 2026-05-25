@@ -76,6 +76,8 @@ typedef enum XAmeCompatibilityMode_ {
     XAME_COMPAT_MODE_SF2_LEGACY = 1,
     /* Force the SF2 spec-oriented resolver behavior. SF2 仕様寄り resolver 動作を強制します。 */
     XAME_COMPAT_MODE_SF2_SPEC_204 = 2,
+    /* Use the SF2 2.04 spec-oriented resolver as the base for X-Ark's independent tuned rendering adjustments. This mode is not Sound Blaster, Audigy, Creative, EMU8000, or other hardware emulation. SF2 2.04 仕様寄り resolver を土台にした X-Ark 独自調整向けモードです。Sound Blaster / Audigy / Creative / EMU8000 などのハードウェア互換モードではありません。 */
+    XAME_COMPAT_MODE_SF2_RENDER_TUNED = 3,
 } XAmeCompatibilityMode;
 
 /* Optional limits and compatibility overrides used when creating an engine. エンジン生成時の任意制限値と互換設定です。 */
@@ -94,7 +96,7 @@ typedef struct XAmeCreateOptions_ {
     const wchar_t*      sf2RomBankPath;
     /* Optional UTF-8 path to an external SF2 ROM sample bank used by SoundFont ROM-backed samples. Used when sf2RomBankPath is NULL. sf2RomBankPath が NULL の場合に使う UTF-8 パスです。 */
     const char*         sf2RomBankPathUtf8;
-    /* Optional high-level compatibility mode override. 0=engine default, 1=force SF2 legacy mode, 2=force SF2 spec-oriented mode. 上位互換モードの上書き設定です。 */
+    /* Optional high-level compatibility mode override. 0=engine default, 1=force SF2 legacy mode, 2=force SF2 spec-oriented mode, 3=SF2 render tuned mode. 上位互換モードの上書き設定です。 */
     unsigned int        compatibilityMode;
 } XAmeCreateOptions;
 
