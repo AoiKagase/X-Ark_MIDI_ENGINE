@@ -313,6 +313,7 @@ private:
     static constexpr f32 kWetReturnDcPoleAt44100 = 0.9950f;
     static constexpr f32 kGsParameterSmoothingAt44100 = 0.0025f;
     static constexpr f32 kEffectInputShape = 0.10f;
+    static constexpr f32 kTankInputShape = 0.45f;
     static constexpr f32 kDenormalGuard = 1.0e-20f;
     static constexpr f32 kMasterReverbSend = 0.28f;
     static constexpr f32 kTwoPi = 6.28318530717958647692f;
@@ -367,6 +368,11 @@ private:
 
     static f32 ShapeEffectInput(f32 sample) {
         return FlushTiny(sample / (1.0f + std::fabs(sample) * kEffectInputShape));
+    }
+
+    static f32 ShapeTankInput(f32 sample) {
+        // Keep feedback writes bounded so very hot effect routes avoid metallic breakup.
+        return FlushTiny(sample / (1.0f + std::fabs(sample) * kTankInputShape));
     }
 
     static WetPair ApplyWetReturnWidth(f32 wetL, f32 wetR) {
@@ -428,8 +434,8 @@ private:
         chorusDampR_ = FlushTiny(chorusDampR_ + (chorusWetR - chorusDampR_) * chorusDamping_);
         const f32 feedbackScale = SmoothScale(gsChorusFeedbackCurrent_, gsChorusFeedbackScale_);
         const f32 feedback = Clamp(kChorusFeedback * feedbackScale, 0.0f, kMaxChorusFeedback);
-        chorusDelayL_[chorusIndex_] = FlushTiny(chorusInL + chorusDampR_ * feedback);
-        chorusDelayR_[chorusIndex_] = FlushTiny(chorusInR + chorusDampL_ * feedback);
+        chorusDelayL_[chorusIndex_] = ShapeTankInput(chorusInL + chorusDampR_ * feedback);
+        chorusDelayR_[chorusIndex_] = ShapeTankInput(chorusInR + chorusDampL_ * feedback);
         ++chorusIndex_;
         if (chorusIndex_ == size) {
             chorusIndex_ = 0;
@@ -479,8 +485,8 @@ private:
         reverbDampR_ = FlushTiny(reverbDampR_ + (reverbWetR - reverbDampR_) * reverbDamping_);
         const f32 feedbackScale = SmoothScale(gsReverbFeedbackCurrent_, gsReverbFeedbackScale_);
         const f32 feedback = Clamp(kReverbFeedback * feedbackScale, 0.0f, kMaxReverbFeedback);
-        reverbDelayL_[reverbIndex_] = FlushTiny(reverbInL + reverbDampR_ * feedback);
-        reverbDelayR_[reverbIndex_] = FlushTiny(reverbInR + reverbDampL_ * feedback);
+        reverbDelayL_[reverbIndex_] = ShapeTankInput(reverbInL + reverbDampR_ * feedback);
+        reverbDelayR_[reverbIndex_] = ShapeTankInput(reverbInR + reverbDampL_ * feedback);
         ++reverbIndex_;
         if (reverbIndex_ == size) {
             reverbIndex_ = 0;

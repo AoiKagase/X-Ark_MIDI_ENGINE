@@ -2676,6 +2676,57 @@ namespace {
             "Post-mix feedback clamp should avoid runaway late tails");
     }
 
+    void TestPostMixEffectsTankInputShapingTamesHotCombinedRoutes() {
+        PostMixEffects effects;
+        effects.Init(44100);
+        Require(effects.ApplyGsParameter(0x09, 127),
+            "Post-mix effects should accept maximum GS reverb feedback before hot-route shaping test");
+        Require(effects.ApplyGsParameter(0x10, 127),
+            "Post-mix effects should accept maximum GS chorus feedback before hot-route shaping test");
+        Require(effects.ApplyGsParameter(0x0A, 127),
+            "Post-mix effects should accept high GS master reverb send before hot-route shaping test");
+        Require(effects.ApplyGsParameter(0x14, 127),
+            "Post-mix effects should accept maximum GS chorus-to-reverb send before hot-route shaping test");
+
+        double peak = 0.0;
+        double stepPeak = 0.0;
+        double lateEnergy = 0.0;
+        bool havePrev = false;
+        f32 prevL = 0.0f;
+        f32 prevR = 0.0f;
+        for (int i = 0; i < 48000; ++i) {
+            const f32 dry = (i < 220) ? 1.2f : 0.0f;
+            const f32 send = (i < 220) ? 1.0f : 0.0f;
+            const auto out =
+                effects.ProcessSample(dry, dry, send, send, send, send);
+
+            const f32 framePeak = std::max(std::fabs(out.wetL), std::fabs(out.wetR));
+            peak = std::max<double>(peak, framePeak);
+
+            if (havePrev) {
+                stepPeak = std::max<double>(stepPeak, std::max(
+                    std::fabs(out.wetL - prevL),
+                    std::fabs(out.wetR - prevR)));
+            }
+            prevL = out.wetL;
+            prevR = out.wetR;
+            havePrev = true;
+
+            if (i > 24000) {
+                lateEnergy += std::fabs(out.wetL) + std::fabs(out.wetR);
+            }
+        }
+
+        Require(peak > 0.0,
+            "Post-mix hot-route shaping should preserve audible wet output");
+        Require(peak < 4.0,
+            "Post-mix hot-route shaping should keep combined dry/send peaks bounded");
+        Require(stepPeak < 1.5,
+            "Post-mix hot-route shaping should avoid abrupt wet-output jumps");
+        Require(lateEnergy < 350.0,
+            "Post-mix hot-route shaping should avoid runaway late tails");
+    }
+
     void TestPostMixEffectsInputShapeSoftensExtremeSends() {
         PostMixEffects normalEffects;
         normalEffects.Init(44100);
@@ -3096,16 +3147,16 @@ namespace {
         constexpr std::array<i16, 8> expectedSpecRight = { 0, 24, 18, 9, 3, 1, 3, -2 };
 
         Require(legacySig.frames == 11264u, "Legacy golden render frame count changed");
-        Require(legacySig.pcmHash == 11803931783063108560ull, "Legacy golden PCM hash changed");
-        Require(legacySig.signedSum == -281, "Legacy golden signed sample sum changed");
-        Require(legacySig.absSum == 23827u, "Legacy golden absolute sample sum changed");
+        Require(legacySig.pcmHash == 613923961705685982ull, "Legacy golden PCM hash changed");
+        Require(legacySig.signedSum == -283, "Legacy golden signed sample sum changed");
+        Require(legacySig.absSum == 23819u, "Legacy golden absolute sample sum changed");
         Require(legacySig.leftTaps == expectedLegacyLeft, "Legacy golden left tap samples changed");
         Require(legacySig.rightTaps == expectedLegacyRight, "Legacy golden right tap samples changed");
 
         Require(specSig.frames == 11264u, "Spec golden render frame count changed");
-        Require(specSig.pcmHash == 6396362925860688376ull, "Spec golden PCM hash changed");
-        Require(specSig.signedSum == -158, "Spec golden signed sample sum changed");
-        Require(specSig.absSum == 46920u, "Spec golden absolute sample sum changed");
+        Require(specSig.pcmHash == 12870174662207808781ull, "Spec golden PCM hash changed");
+        Require(specSig.signedSum == -168, "Spec golden signed sample sum changed");
+        Require(specSig.absSum == 46886u, "Spec golden absolute sample sum changed");
         Require(specSig.leftTaps == expectedSpecLeft, "Spec golden left tap samples changed");
         Require(specSig.rightTaps == expectedSpecRight, "Spec golden right tap samples changed");
 
@@ -6168,6 +6219,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsTailIncludesSmoothingState);
     RUN_TEST(TestPostMixEffectsFlushesTinyAudioState);
     RUN_TEST(TestPostMixEffectsFeedbackClampKeepsHotGsStable);
+    RUN_TEST(TestPostMixEffectsTankInputShapingTamesHotCombinedRoutes);
     RUN_TEST(TestPostMixEffectsInputShapeSoftensExtremeSends);
     RUN_TEST(TestPostMixEffectsShapesChorusToReverbSend);
     RUN_TEST(TestPostMixEffectsReverbDiffusionCreatesDenseTail);
