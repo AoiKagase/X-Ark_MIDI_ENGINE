@@ -613,54 +613,95 @@ void CountSf2SpecUnsupportedModulators(const std::vector<Sf2ModulatorZone>& zone
 
 namespace {
 
-i32 Sf2NrpnUsefulRange(u16 generator) {
+struct Sf2NrpnUsefulBounds {
+    i32 minUseful = 0;
+    i32 maxUseful = 0;
+};
+
+bool GetSf2NrpnUsefulBounds(u16 generator, Sf2NrpnUsefulBounds& out) {
     switch (generator) {
     case GEN_ModLfoToPitch:
     case GEN_VibLfoToPitch:
     case GEN_ModEnvToPitch:
     case GEN_ModLfoToFilterFc:
     case GEN_ModEnvToFilterFc:
-        return 24000;
+        out = { -12000, 12000 };
+        return true;
     case GEN_InitialFilterFc:
-        return 12000;
+        out = { 1500, 13500 };
+        return true;
     case GEN_InitialFilterQ:
-        return 960;
+        out = { 0, 960 };
+        return true;
     case GEN_ModLfoToVolume:
-        return 1920;
+        out = { -960, 960 };
+        return true;
     case GEN_ChorusEffectsSend:
     case GEN_ReverbEffectsSend:
+        out = { 0, 1000 };
+        return true;
     case GEN_Pan:
-        return 1000;
+        out = { -500, 500 };
+        return true;
     case GEN_DelayModLFO:
     case GEN_DelayVibLFO:
     case GEN_DelayModEnv:
     case GEN_HoldModEnv:
     case GEN_DelayVolEnv:
     case GEN_HoldVolEnv:
-        return 17000;
+        out = { -12000, 5000 };
+        return true;
     case GEN_FreqModLFO:
     case GEN_FreqVibLFO:
-        return 20500;
+        out = { -16000, 4500 };
+        return true;
     case GEN_AttackModEnv:
     case GEN_DecayModEnv:
     case GEN_ReleaseModEnv:
     case GEN_AttackVolEnv:
     case GEN_DecayVolEnv:
     case GEN_ReleaseVolEnv:
-        return 20000;
+        out = { -12000, 8000 };
+        return true;
     case GEN_SustainModEnv:
+        out = { 0, 1000 };
+        return true;
     case GEN_KeynumToModEnvHold:
     case GEN_KeynumToModEnvDecay:
     case GEN_KeynumToVolEnvHold:
     case GEN_KeynumToVolEnvDecay:
+        out = { -1200, 1200 };
+        return true;
     case GEN_SustainVolEnv:
     case GEN_InitialAttenuation:
+        out = { 0, 1440 };
+        return true;
     case GEN_CoarseTune:
+        out = { -120, 120 };
+        return true;
     case GEN_FineTune:
-        return 2400;
+        out = { -99, 99 };
+        return true;
     default:
-        return 0;
+        return false;
     }
+}
+
+i32 Sf2NrpnUsefulSpan(const Sf2NrpnUsefulBounds& bounds) {
+    return std::max(0, bounds.maxUseful - bounds.minUseful);
+}
+
+i32 Sf2NrpnMaxOffsetMagnitude(const Sf2NrpnUsefulBounds& bounds) {
+    return std::max(bounds.maxUseful, -bounds.minUseful);
+}
+
+i32 RoundDivideByPowerOfTwo(i32 value, i32 divisor) {
+    if (divisor <= 1) {
+        return value;
+    }
+    return (value >= 0)
+        ? (value + (divisor / 2)) / divisor
+        : (value - (divisor / 2)) / divisor;
 }
 
 } // namespace
@@ -680,18 +721,25 @@ i32 ConvertSf2NrpnDataEntryToGeneratorOffset(u16 generator, u8 dataEntryMsb, u8 
 
     const i32 raw14 = (static_cast<i32>(dataEntryMsb) << 7) | static_cast<i32>(dataEntryLsb);
     i32 centered = std::clamp(raw14, 0, 16383) - 8192;
-    i32 usefulRange = Sf2NrpnUsefulRange(generator);
-    i32 divisor = 1;
-    while (usefulRange > 8192 && divisor < 16384) {
-        usefulRange = (usefulRange + 1) / 2;
-        divisor <<= 1;
-    }
-    if (divisor <= 1) {
+
+    Sf2NrpnUsefulBounds bounds{};
+    if (!GetSf2NrpnUsefulBounds(generator, bounds)) {
         return centered;
     }
-    return (centered >= 0)
-        ? (centered + (divisor / 2)) / divisor
-        : (centered - (divisor / 2)) / divisor;
+
+    i32 usefulSpan = Sf2NrpnUsefulSpan(bounds);
+    i32 divisor = 1;
+    while (usefulSpan > 8192 && divisor < 16384) {
+        usefulSpan = (usefulSpan + 1) / 2;
+        divisor <<= 1;
+    }
+
+    i32 offset = RoundDivideByPowerOfTwo(centered, divisor);
+    const i32 maxOffsetMagnitude = Sf2NrpnMaxOffsetMagnitude(bounds);
+    if (maxOffsetMagnitude > 0) {
+        offset = std::clamp(offset, -maxOffsetMagnitude, maxOffsetMagnitude);
+    }
+    return offset;
 }
 
 u8 ClassifySf2NrpnOffsetDestinationClasses(const i32* nrpnOffsets, size_t count) {

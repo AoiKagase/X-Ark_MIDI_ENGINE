@@ -4741,6 +4741,34 @@ namespace {
             "Non-realtime overridingRootKey NRPN offset should be ignored during zone resolution");
     }
 
+    void TestSf2NrpnGeneratorRangesAndUnits() {
+        // Centered positive offsets should respect each generator's useful-unit clamp.
+        const i32 coarseTunePositive =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(GEN_CoarseTune, 0x7Fu, 0x7Fu);
+        Require(coarseTunePositive == 120,
+            "coarseTune NRPN should clamp to +120 semitones (useful range units)");
+
+        const i32 fineTunePositive =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(GEN_FineTune, 0x7Fu, 0x7Fu);
+        Require(fineTunePositive == 99,
+            "fineTune NRPN should clamp to +99 cents (useful range units)");
+
+        const i32 attenuationNegative =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(GEN_InitialAttenuation, 0x00u, 0x00u);
+        Require(attenuationNegative == -1440,
+            "initialAttenuation NRPN should clamp to -1440 cB");
+
+        const i32 attenuationPositive =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(GEN_InitialAttenuation, 0x7Fu, 0x7Fu);
+        Require(attenuationPositive == 1440,
+            "initialAttenuation NRPN should clamp to +1440 cB");
+
+        const i32 modLfoToPitchPositive =
+            ConvertSf2NrpnDataEntryToGeneratorOffset(GEN_ModLfoToPitch, 0x7Fu, 0x7Fu);
+        Require(modLfoToPitchPositive == 2048,
+            "Large useful ranges should keep the spec-style factor-of-two downscaling");
+    }
+
     void TestSoftPedalAffectsNewNoteOnOnly() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -5860,6 +5888,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2NrpnGeneratorOffsets);
     RUN_TEST(TestSf2NrpnAppliesOnMsbOnly);
     RUN_TEST(TestSf2NrpnIgnoresNonRealtimeGenerators);
+    RUN_TEST(TestSf2NrpnGeneratorRangesAndUnits);
     RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
     RUN_TEST(TestVelocityZoneBoundary);
     RUN_TEST(TestSm24Detection);
