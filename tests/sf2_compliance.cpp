@@ -1026,6 +1026,8 @@ namespace {
         Require(!IsSf2SpecModulatorSourceDefinition(0x00F8u, false), "CC120..127 should be illegal modulator sources");
         Require(!IsSf2SpecModulatorSourceDefinition(static_cast<u16>(2u | (4u << 10)), false),
             "Unknown source curve types should be invalid");
+        Require(!IsSf2SpecModulatorSourceDefinition(0x017Fu, true),
+            "Link source with additional source-shape bits should be invalid");
 
         const SFModList mod = MakeMod(0x028Au, GEN_Pan, -100, 0x0081u, 2);
         const Sf2ResolvedModulator resolved{ mod, Sf2ModulatorLevel::InstrumentLocal,

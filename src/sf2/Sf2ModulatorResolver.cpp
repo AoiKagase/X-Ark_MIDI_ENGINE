@@ -63,7 +63,9 @@ bool IsTerminalModulator(const SFModList& mod) {
 }
 
 bool IsLinkSource(u16 source) {
-    return (source & kSourceIndexMask) == kSourceLink && (source & kSourceCcPalette) == 0;
+    // Link source is a dedicated enumerator value (127) and must not carry
+    // direction/polarity/type/CC bit modifiers.
+    return source == kSourceLink;
 }
 
 bool IsLinkDestination(u16 destination) {
