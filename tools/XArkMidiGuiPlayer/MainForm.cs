@@ -75,7 +75,7 @@ public sealed class MainForm : Form
     };
     private readonly CheckBox _applySf2ChannelDefaultModulatorsCheckBox = new() {
         AutoSize = true,
-        Text = "Apply SF2 channel default modulators",
+        Text = "Apply SF2 channel default modulators (Deprecated)",
     };
     private readonly CheckBox _useSf2SpecModulatorResolverCheckBox = new() {
         AutoSize = true,
@@ -455,7 +455,7 @@ public sealed class MainForm : Form
         _optionToolTip.SetToolTip(_multiplySf2MidiEffectsSendsCheckBox,
             "既定の SF2 modulator 駆動ではなく、SF2 send と MIDI チャンネル send を乗算してエフェクト送信量を決めます。旧互換向けです。");
         _optionToolTip.SetToolTip(_applySf2ChannelDefaultModulatorsCheckBox,
-            "旧互換経路で CC7、CC10、CC11 の SF2 暗黙 default modulator を有効にします。SF2 2.04 modulator resolver が ON の場合は resolver 側が default modulators を扱うため無効化されます。");
+            "非推奨の旧互換スイッチです。legacy 経路では velocity->filter と CC91/CC93 の default modulator を有効化します。SF2 2.04 modulator resolver が ON の場合（または SF2_SPEC_204 モード）では無視されます。");
         _optionToolTip.SetToolTip(_useSf2SpecModulatorResolverCheckBox,
             "SoundFont 2.04 仕様寄りの modulator resolver を使います。implicit default modulators も resolver 側で扱います。停止後の次回再生から反映されます。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,

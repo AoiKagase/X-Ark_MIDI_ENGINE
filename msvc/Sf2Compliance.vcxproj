@@ -68,6 +68,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\ApiCompatOptions.cpp" />
     <ClCompile Include="..\tests\sf2_compliance.cpp" />
     <ClCompile Include="..\src\common\BinaryReader.cpp" />
     <ClCompile Include="..\src\common\CpuFeatures.cpp" />
@@ -88,6 +89,7 @@
     <ClCompile Include="..\src\synth\VoicePool.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\ApiCompatOptions.h" />
     <ClInclude Include="..\src\common\BinaryReader.h" />
     <ClInclude Include="..\src\common\CpuFeatures.h" />
     <ClInclude Include="..\src\common\FileUtil.h" />

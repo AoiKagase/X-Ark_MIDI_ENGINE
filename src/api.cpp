@@ -5,6 +5,7 @@
  */
 
 #include "../include/XArkMidiEngine.h"
+#include "ApiCompatOptions.h"
 #include "midi/MidiFile.h"
 #include "sf2/Sf2File.h"
 #include "dls/DlsFile.h"
@@ -67,53 +68,6 @@ std::wstring ResolveOptionalRomBankPath(const XAmeCreateOptions* options) {
         return Utf8ToWstring(options->sf2RomBankPathUtf8);
     }
     return std::wstring();
-}
-
-SynthCompatOptions ResolveCompatOptions(const XAmeCreateOptions* options) {
-    SynthCompatOptions compatOptions;
-    XAmeCompatibilityMode compatMode = XAME_COMPAT_MODE_ENGINE_DEFAULT;
-    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, compatibilityFlags), sizeof(options->compatibilityFlags))) {
-        const u32 flags = options->compatibilityFlags;
-        compatOptions.sf2ZeroLengthLoopRetrigger =
-            (flags & XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER) != 0;
-        compatOptions.enableSf2SamplePitchCorrection =
-            (flags & XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION) != 0;
-        compatOptions.multiplySf2MidiEffectsSends =
-            (flags & XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS) != 0;
-        compatOptions.applySf2ChannelDefaults =
-            (flags & XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS) != 0;
-        compatOptions.enableEnhancedOutputStage =
-            (flags & XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE) != 0;
-        compatOptions.useNaturalOutputStage =
-            (flags & XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL) != 0;
-        compatOptions.useWarmOutputStage =
-            (flags & XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM) != 0;
-        compatOptions.disableInternalEffects =
-            (flags & XAME_COMPAT_DISABLE_INTERNAL_EFFECTS) != 0;
-        compatOptions.useSf2SpecModulatorResolver =
-            (flags & XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER) != 0;
-    }
-
-    if (HasCreateOptionField(options, offsetof(XAmeCreateOptions, compatibilityMode), sizeof(options->compatibilityMode))) {
-        compatMode = static_cast<XAmeCompatibilityMode>(options->compatibilityMode);
-    }
-
-    switch (compatMode) {
-    case XAME_COMPAT_MODE_SF2_LEGACY:
-        compatOptions.useSf2SpecModulatorResolver = false;
-        break;
-    case XAME_COMPAT_MODE_SF2_SPEC_204:
-        compatOptions.useSf2SpecModulatorResolver = true;
-        break;
-    case XAME_COMPAT_MODE_ENGINE_DEFAULT:
-    default:
-        break;
-    }
-
-    if (compatOptions.useSf2SpecModulatorResolver) {
-        compatOptions.applySf2ChannelDefaults = false;
-    }
-    return compatOptions;
 }
 
 } // namespace
@@ -239,7 +193,7 @@ XAmeResult XAmeCreateEngineWithOptions(
         return XAME_ERR_UNSUPPORTED;
     }
     const CreateLimits limits = ResolveCreateLimits(options);
-    const SynthCompatOptions compatOptions = ResolveCompatOptions(options);
+    const SynthCompatOptions compatOptions = ResolveCompatOptionsForCreateOptions(options);
     const std::wstring romBankPath = ResolveOptionalRomBankPath(options);
     XAmeEngine_* eng = nullptr;
     try {

@@ -13,6 +13,7 @@ endif()
 # Sources
 # ---------------------------------------------------------------------------
 set(XAME_SOURCES
+    src/ApiCompatOptions.cpp
     src/api.cpp
     src/dllmain.cpp
     src/common/BinaryReader.cpp
@@ -115,6 +116,7 @@ if(XAME_BUILD_TESTS)
 
     add_executable(sf2_compliance
         tests/sf2_compliance.cpp
+        src/ApiCompatOptions.cpp
         src/common/BinaryReader.cpp
         src/common/CpuFeatures.cpp
         src/common/FileUtil.cpp

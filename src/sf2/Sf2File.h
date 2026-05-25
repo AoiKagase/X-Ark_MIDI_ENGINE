@@ -70,13 +70,9 @@ public:
 
 private:
     struct DefaultModulatorState {
-        bool hasVelocityToAttenuationMod = false;
         bool hasVelocityToFilterFcMod = false;
         bool hasChannelPressureToVibLfoPitchMod = false;
         bool hasCc1ToVibLfoPitchMod = false;
-        bool hasCc7ToInitialAttenuationMod = false;
-        bool hasCc10ToPanMod = false;
-        bool hasCc11ToInitialAttenuationMod = false;
         bool hasCc91ToReverbSendMod = false;
         bool hasCc93ToChorusSendMod = false;
         bool hasPitchWheelToInitialPitchMod = false;
@@ -121,7 +117,7 @@ private:
                      const ModulatorContext* ctx,
                      ResolvedZone& outZone) const;
 
-    bool ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
+    void ApplyModulators(const std::vector<SFModList>& mods, int modStart, int modEnd,
                          u8 key, u16 velocity, const ModulatorContext* ctx, ResolvedZone& zone,
                          bool allowInstrumentOnlyDestinations) const;
     void ApplyModulatorEntries(const std::vector<SFModList>& mods, int modStart, int modEnd,

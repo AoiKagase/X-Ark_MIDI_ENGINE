@@ -353,11 +353,11 @@ Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_
 
 互換モード補足:
 
-- `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにします。
+- `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにし、implicit default modulator も spec resolver のみで処理します。
   既定の legacy 互換モードでは、実運用互換のため instrument-level の sample/substitution destination（例: sample address offset, sampleModes, keynum, velocity）も処理します。
 - `sfModTransOper` は SF2 仕様定義の `linear` と `absolute` を処理します。仕様外 transform 値は unsupported として無効化されます。
-- CC7 / CC10 / CC11 の implicit default modulator は既定で無効です。
-  必要なら `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を指定してください。
+- `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` は非推奨です。
+  `XAME_COMPAT_MODE_SF2_SPEC_204` では無視され、spec resolver 側の implicit default modulator が使用されます。
 - SF2 send と MIDI send の最終ミキシング方針は既定で加算です。
   `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` を指定すると乗算に切り替えられます。
 

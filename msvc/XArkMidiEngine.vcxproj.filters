@@ -27,6 +27,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\ApiCompatOptions.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\XArkMidiEngine.h">
       <Filter>Public API</Filter>
     </ClInclude>
@@ -86,6 +89,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\dllmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\ApiCompatOptions.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\api.cpp">

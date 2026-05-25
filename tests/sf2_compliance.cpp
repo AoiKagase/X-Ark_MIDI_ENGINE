@@ -6,6 +6,7 @@
 #include "../src/synth/Synthesizer.h"
 #include "../src/synth/Voice.h"
 #include "../src/synth/VoicePool.h"
+#include "../src/ApiCompatOptions.h"
 #include "../include/XArkMidiEngine.h"
 #include <array>
 #include <algorithm>
@@ -835,6 +836,63 @@ namespace {
         return Sf2SpecNormalize7Bit(static_cast<u8>(std::min<u16>(velocity7, 127u)));
     }
 
+    double Sf2SpecApplyType(double value, u16 type) {
+        switch (type) {
+        case 0: // Linear
+            return value;
+        case 1: // Concave
+            if (value <= 0.0) return 0.0;
+            if (value >= 1.0) return 1.0;
+            return std::min(1.0, -40.0 / 96.0 * std::log10(1.0 - value));
+        case 2: // Convex
+            if (value <= 0.0) return 0.0;
+            if (value >= 1.0) return 1.0;
+            return std::max(0.0, 1.0 + 40.0 / 96.0 * std::log10(value));
+        case 3: // Switch
+            return (value >= 0.5) ? 1.0 : 0.0;
+        default:
+            return 0.0;
+        }
+    }
+
+    double Sf2SpecApplySourceShape(double normalizedInput, u16 sourceOper) {
+        const bool directionNegative = (sourceOper & 0x0100u) != 0;
+        const bool bipolar = (sourceOper & 0x0200u) != 0;
+        const u16 type = (sourceOper >> 10) & 0x3Fu;
+
+        const double directed = directionNegative ? (1.0 - normalizedInput) : normalizedInput;
+        if (bipolar) {
+            if (directed >= 0.5) {
+                return Sf2SpecApplyType(2.0 * directed - 1.0, type);
+            }
+            return -Sf2SpecApplyType(1.0 - 2.0 * directed, type);
+        }
+        return Sf2SpecApplyType(directed, type);
+    }
+
+    i32 Sf2SpecEvaluateModAmount(i16 modAmount, u16 sourceOper, double sourceInputNormalized,
+                                 double amountSourceNormalized = 1.0) {
+        return static_cast<i32>(std::lround(
+            static_cast<double>(modAmount) *
+            Sf2SpecApplySourceShape(sourceInputNormalized, sourceOper) *
+            amountSourceNormalized));
+    }
+
+    i32 ExpectedSpecVelocityAttenuationCb(u16 velocity) {
+        return Sf2SpecEvaluateModAmount(960, 0x0502u, Sf2SpecNormalizeVelocity16(velocity));
+    }
+
+    i32 ExpectedSpecVelocityFilterDelta(u16 velocity) {
+        return Sf2SpecEvaluateModAmount(-2400, 0x0102u, Sf2SpecNormalizeVelocity16(velocity));
+    }
+
+    i32 ExpectedSpecDefaultInitialAttenuation(u16 velocity, u8 cc7, u8 cc11) {
+        const i32 sum = ExpectedSpecVelocityAttenuationCb(velocity) +
+            Sf2SpecEvaluateModAmount(960, 0x0587u, Sf2SpecNormalize7Bit(cc7)) +
+            Sf2SpecEvaluateModAmount(960, 0x058Bu, Sf2SpecNormalize7Bit(cc11));
+        return std::clamp(sum, 0, 1440);
+    }
+
     i32 ExpectedVelocityAttenuationCb(u16 velocity) {
         if (velocity == 0) return 960;
         if (velocity >= 65535) return 0;
@@ -960,8 +1018,7 @@ namespace {
 
         ModulatorContext ctx{};
         SetDefaultMidiControllers(ctx);
-        ctx.applySf2ChannelDefaults = true;
-        ctx.applySf2VelocityToInitialAttenuation = true;
+        ctx.useSf2SpecModulatorResolver = true;
 
         std::vector<ResolvedZone> zones;
         if (!sf2.FindZones(0, 0, 60, 50000, zones, &ctx)) {
@@ -981,15 +1038,25 @@ namespace {
         Require(zone.generators[GEN_Velocity] == 64, "Forced velocity should be preserved");
 
         const u16 forcedVelocity16 = static_cast<u16>((64 * 65535 + 63) / 127);
-        const i32 expectedAtten = ExpectedVelocityAttenuationCb(forcedVelocity16);
-        const i32 expectedFilter = std::clamp(13500 +
-            static_cast<i32>(std::lround(-2400.0 * (1.0 - static_cast<double>(forcedVelocity16) / 65535.0))),
-            1500, 13500);
+        const i32 expectedAtten = ExpectedSpecDefaultInitialAttenuation(
+            forcedVelocity16, ctx.ccValues[7], ctx.ccValues[11]);
+        const i32 expectedFilter = std::clamp(
+            13500 + ExpectedSpecVelocityFilterDelta(forcedVelocity16), 1500, 13500);
 
-        Require(zone.generators[GEN_InitialAttenuation] == expectedAtten,
-            "Default velocity->attenuation should use forced velocity");
-        Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
-            "Default velocity->filter cutoff should use forced velocity");
+        {
+            char message[256];
+            std::snprintf(message, sizeof(message),
+                "Spec resolver default velocity->attenuation should use forced velocity (actual=%d expected=%d)",
+                zone.generators[GEN_InitialAttenuation], expectedAtten);
+            Require(zone.generators[GEN_InitialAttenuation] == expectedAtten, message);
+        }
+        {
+            char message[256];
+            std::snprintf(message, sizeof(message),
+                "Spec resolver default velocity->filter cutoff should use forced velocity (actual=%d expected=%d)",
+                zone.generators[GEN_InitialFilterFc], expectedFilter);
+            Require(zone.generators[GEN_InitialFilterFc] == expectedFilter, message);
+        }
     }
 
     void TestDefaultVelocityModulatorsAreNotSuppressedByAmountSourceMods() {
@@ -1003,21 +1070,37 @@ namespace {
 
         ModulatorContext ctx{};
         SetDefaultMidiControllers(ctx);
-        ctx.applySf2ChannelDefaults = true;
-        ctx.applySf2VelocityToInitialAttenuation = true;
+        ctx.useSf2SpecModulatorResolver = true;
         ctx.pitchWheelSensitivitySemitones = 24;
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 32768, &ctx, zones);
-        const i32 expectedAtten = ExpectedVelocityAttenuationCb(32768u) + 50;
-        const i32 customFilter = std::clamp(13500 + 600, 1500, 13500);
+        const double velocityNormalized = Sf2SpecNormalizeVelocity16(32768u);
+        const double sensitivityNormalized = std::clamp(24.0 / 128.0, 0.0, 127.0 / 128.0);
+        const i32 customAtten = Sf2SpecEvaluateModAmount(100, 0x0002u,
+                                                         velocityNormalized, sensitivityNormalized);
+        const i32 customFilter = Sf2SpecEvaluateModAmount(1200, 0x0002u,
+                                                          velocityNormalized, sensitivityNormalized);
+        const i32 expectedAtten = std::clamp(
+            ExpectedSpecDefaultInitialAttenuation(32768u, ctx.ccValues[7], ctx.ccValues[11]) + customAtten,
+            0, 1440);
         const i32 expectedFilter = std::clamp(
-            customFilter + static_cast<i32>(std::lround(-2400.0 * (1.0 - (32768.0 / 65535.0)))),
+            13500 + ExpectedSpecVelocityFilterDelta(32768u) + customFilter,
             1500, 13500);
-        Require(zone.generators[GEN_InitialAttenuation] == expectedAtten,
-            "Velocity mod with amount source must not suppress default attenuation modulator");
-        Require(zone.generators[GEN_InitialFilterFc] == expectedFilter,
-            "Velocity mod with amount source must not suppress default filter modulator");
+        {
+            char message[256];
+            std::snprintf(message, sizeof(message),
+                "Spec resolver velocity mod with amount source must not suppress default attenuation modulator (actual=%d expected=%d)",
+                zone.generators[GEN_InitialAttenuation], expectedAtten);
+            Require(zone.generators[GEN_InitialAttenuation] == expectedAtten, message);
+        }
+        {
+            char message[256];
+            std::snprintf(message, sizeof(message),
+                "Spec resolver velocity mod with amount source must not suppress default filter modulator (actual=%d expected=%d)",
+                zone.generators[GEN_InitialFilterFc], expectedFilter);
+            Require(zone.generators[GEN_InitialFilterFc] == expectedFilter, message);
+        }
     }
 
     void TestSf2ModulatorResolverDefaultTableAndDestinations() {
@@ -1356,7 +1439,6 @@ namespace {
         SetDefaultMidiControllers(ctx);
         ctx.ccValues[10] = 80;
         ctx.applySf2ChannelDefaults = true;
-        ctx.applySf2Cc10ToPan = true;
         ctx.useSf2SpecModulatorResolver = true;
 
         std::vector<ResolvedZone> zones;
@@ -1370,6 +1452,89 @@ namespace {
                 1000.0 * (2.0 * Sf2SpecNormalize7Bit(ctx.ccValues[10]) - 1.0)));
             Require(zone.generators[GEN_Pan] == expectedPan, message);
         }
+    }
+
+    void TestSf2SpecCompatibilityModeIgnoresLegacyApplyFlag() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        XAmeCreateOptions modeSpecWithApply{};
+        modeSpecWithApply.structSize = sizeof(modeSpecWithApply);
+        modeSpecWithApply.compatibilityFlags = XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS;
+        modeSpecWithApply.compatibilityMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+
+        XAmeCreateOptions modeSpecWithoutApply = modeSpecWithApply;
+        modeSpecWithoutApply.compatibilityFlags = XAME_COMPAT_NONE;
+
+        const SynthCompatOptions withApplyCompat = ResolveCompatOptionsForCreateOptions(&modeSpecWithApply);
+        const SynthCompatOptions withoutApplyCompat = ResolveCompatOptionsForCreateOptions(&modeSpecWithoutApply);
+        Require(withApplyCompat.useSf2SpecModulatorResolver,
+            "SF2_SPEC_204 mode should force the SF2 spec modulator resolver");
+        Require(!withApplyCompat.applySf2ChannelDefaults,
+            "SF2_SPEC_204 mode should ignore APPLY_SF2_CHANNEL_DEFAULT_MODULATORS");
+        Require(withoutApplyCompat.useSf2SpecModulatorResolver,
+            "SF2_SPEC_204 mode should keep the SF2 spec modulator resolver enabled");
+        Require(!withoutApplyCompat.applySf2ChannelDefaults,
+            "SF2_SPEC_204 mode without APPLY flag should keep legacy defaults disabled");
+
+        auto makeCtx = [&](const SynthCompatOptions& compat) {
+            ModulatorContext ctx{};
+            SetDefaultMidiControllers(ctx);
+            ctx.ccValues[7] = 0;
+            ctx.ccValues[10] = 127;
+            ctx.ccValues[11] = 0;
+            ctx.ccValues[91] = 127;
+            ctx.ccValues[93] = 127;
+            ctx.applySf2ChannelDefaults = compat.applySf2ChannelDefaults;
+            ctx.useSf2SpecModulatorResolver = compat.useSf2SpecModulatorResolver;
+            return ctx;
+        };
+
+        const ModulatorContext withApplyCtx = makeCtx(withApplyCompat);
+        const ModulatorContext withoutApplyCtx = makeCtx(withoutApplyCompat);
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& withApplyZone = RequireSingleZone(sf2, 60, 32768, &withApplyCtx, zones);
+        const ResolvedZone& withoutApplyZone = RequireSingleZone(sf2, 60, 32768, &withoutApplyCtx, zones);
+        Require(std::memcmp(withApplyZone.generators,
+                            withoutApplyZone.generators,
+                            sizeof(withApplyZone.generators)) == 0,
+            "SF2_SPEC_204 mode should produce identical default-modulator results regardless of APPLY flag");
+
+        const i32 expectedFilter = std::clamp(
+            13500 + static_cast<i32>(std::lround(-2400.0 * (1.0 - (32768.0 / 65536.0)))),
+            1500, 13500);
+        Require(withApplyZone.generators[GEN_InitialFilterFc] == expectedFilter,
+            "SF2_SPEC_204 mode should still apply implicit velocity->filter default via the spec resolver");
+        Require(withApplyZone.generators[GEN_Pan] == 500,
+            "SF2_SPEC_204 mode should still apply implicit CC10->pan default via the spec resolver");
+        const i32 expectedReverb = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(withApplyCtx.ccValues[91])));
+        const i32 expectedChorus = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(withApplyCtx.ccValues[93])));
+        Require(withApplyZone.generators[GEN_ReverbEffectsSend] == expectedReverb,
+            "SF2_SPEC_204 mode should still apply implicit CC91->reverb default via the spec resolver");
+        Require(withApplyZone.generators[GEN_ChorusEffectsSend] == expectedChorus,
+            "SF2_SPEC_204 mode should still apply implicit CC93->chorus default via the spec resolver");
+    }
+
+    void TestEngineDefaultCompatibilityModePreservesLegacyApplyFlagMapping() {
+        XAmeCreateOptions engineDefaultOff{};
+        engineDefaultOff.structSize = sizeof(engineDefaultOff);
+        engineDefaultOff.compatibilityFlags = XAME_COMPAT_NONE;
+        engineDefaultOff.compatibilityMode = XAME_COMPAT_MODE_ENGINE_DEFAULT;
+
+        XAmeCreateOptions engineDefaultOn = engineDefaultOff;
+        engineDefaultOn.compatibilityFlags = XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS;
+
+        const SynthCompatOptions offCompat = ResolveCompatOptionsForCreateOptions(&engineDefaultOff);
+        const SynthCompatOptions onCompat = ResolveCompatOptionsForCreateOptions(&engineDefaultOn);
+        Require(!offCompat.useSf2SpecModulatorResolver && !offCompat.applySf2ChannelDefaults,
+            "ENGINE_DEFAULT without APPLY flag should keep legacy defaults disabled");
+        Require(!onCompat.useSf2SpecModulatorResolver && onCompat.applySf2ChannelDefaults,
+            "ENGINE_DEFAULT with APPLY flag should preserve legacy default-modulator compatibility behavior");
     }
 
     void TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents() {
@@ -3123,17 +3288,8 @@ namespace {
 
         SynthCompatOptions legacy{};
         legacy.applySf2ChannelDefaults = true;
-        legacy.applySf2VelocityToInitialAttenuation = true;
-        legacy.applySf2Cc7ToInitialAttenuation = true;
-        legacy.applySf2Cc10ToPan = true;
-        legacy.applySf2Cc11ToInitialAttenuation = true;
 
         SynthCompatOptions spec = legacy;
-        spec.applySf2ChannelDefaults = false;
-        spec.applySf2VelocityToInitialAttenuation = false;
-        spec.applySf2Cc7ToInitialAttenuation = false;
-        spec.applySf2Cc10ToPan = false;
-        spec.applySf2Cc11ToInitialAttenuation = false;
         spec.useSf2SpecModulatorResolver = true;
 
         const AudioGoldenSignature legacySig =
@@ -3141,15 +3297,15 @@ namespace {
         const AudioGoldenSignature specSig =
             RenderSf2GoldenSignature(sf2Bytes, midiBytes, spec);
 
-        constexpr std::array<i16, 8> expectedLegacyLeft = { 0, 9, 6, 3, 1, 0, 2, 1 };
-        constexpr std::array<i16, 8> expectedLegacyRight = { 0, 11, 8, 4, 1, 0, 0, -2 };
+        constexpr std::array<i16, 8> expectedLegacyLeft = { 0, 16, 11, 6, 2, 0, 3, 1 };
+        constexpr std::array<i16, 8> expectedLegacyRight = { 0, 20, 15, 8, 2, 1, 1, -3 };
         constexpr std::array<i16, 8> expectedSpecLeft = { 0, 19, 14, 7, 2, 0, 2, -1 };
         constexpr std::array<i16, 8> expectedSpecRight = { 0, 24, 18, 9, 3, 1, 3, -2 };
 
         Require(legacySig.frames == 11264u, "Legacy golden render frame count changed");
-        Require(legacySig.pcmHash == 613923961705685982ull, "Legacy golden PCM hash changed");
-        Require(legacySig.signedSum == -283, "Legacy golden signed sample sum changed");
-        Require(legacySig.absSum == 23819u, "Legacy golden absolute sample sum changed");
+        Require(legacySig.pcmHash == 7149921718845400420ull, "Legacy golden PCM hash changed");
+        Require(legacySig.signedSum == -280, "Legacy golden signed sample sum changed");
+        Require(legacySig.absSum == 43206u, "Legacy golden absolute sample sum changed");
         Require(legacySig.leftTaps == expectedLegacyLeft, "Legacy golden left tap samples changed");
         Require(legacySig.rightTaps == expectedLegacyRight, "Legacy golden right tap samples changed");
 
@@ -4465,66 +4621,88 @@ namespace {
         {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.channelPressure = 127;
             ctx.ccValues[1] = 127;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
             Require(zone.generators[GEN_VibLfoToPitch] == 100,
-                "Channel pressure and CC1 defaults should sum into VibLfoToPitch");
+                "Spec resolver channel pressure and CC1 defaults should sum into VibLfoToPitch");
         }
 
         {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc7ToInitialAttenuation = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[7] = 0;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_InitialAttenuation] == 960,
-                "CC7 default should drive initial attenuation");
+            const i32 expectedAtten = ExpectedSpecDefaultInitialAttenuation(
+                65535u, ctx.ccValues[7], ctx.ccValues[11]);
+            {
+                char message[256];
+                std::snprintf(message, sizeof(message),
+                    "Spec resolver CC7 default should drive initial attenuation (actual=%d expected=%d)",
+                    zone.generators[GEN_InitialAttenuation], expectedAtten);
+                Require(zone.generators[GEN_InitialAttenuation] == expectedAtten, message);
+            }
         }
 
         {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc10ToPan = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[10] = 127;
             ctx.ccValues[91] = 127;
             ctx.ccValues[93] = 127;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 500,
-                "CC10 default should drive pan");
-            Require(zone.generators[GEN_ReverbEffectsSend] == 200,
-                "CC91 default should drive reverb send");
-            Require(zone.generators[GEN_ChorusEffectsSend] == 200,
-                "CC93 default should drive chorus send");
+            const i32 expectedPan = std::clamp(
+                Sf2SpecEvaluateModAmount(1000, 0x028Au, Sf2SpecNormalize7Bit(ctx.ccValues[10])),
+                -500, 500);
+            const i32 expectedReverb = Sf2SpecEvaluateModAmount(
+                200, 0x00DBu, Sf2SpecNormalize7Bit(ctx.ccValues[91]));
+            const i32 expectedChorus = Sf2SpecEvaluateModAmount(
+                200, 0x00DDu, Sf2SpecNormalize7Bit(ctx.ccValues[93]));
+            Require(zone.generators[GEN_Pan] == expectedPan,
+                "Spec resolver CC10 default should drive pan");
+            Require(zone.generators[GEN_ReverbEffectsSend] == expectedReverb,
+                "Spec resolver CC91 default should drive reverb send");
+            Require(zone.generators[GEN_ChorusEffectsSend] == expectedChorus,
+                "Spec resolver CC93 default should drive chorus send");
         }
 
         {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc11ToInitialAttenuation = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[11] = 0;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_InitialAttenuation] == 960,
-                "CC11 default should drive initial attenuation");
+            const i32 expectedAtten = ExpectedSpecDefaultInitialAttenuation(
+                65535u, ctx.ccValues[7], ctx.ccValues[11]);
+            Require(zone.generators[GEN_InitialAttenuation] == expectedAtten,
+                "Spec resolver CC11 default should drive initial attenuation");
         }
 
         {
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.pitchBend = 8191;
             ctx.pitchWheelSensitivitySemitones = 12;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            const i32 pitchCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune];
-            Require(pitchCents == 1200,
-                "Pitch wheel default should feed initial pitch from pitch wheel sensitivity");
+            const i32 pitchCents = zone.sf2InitialPitchAddCents;
+            const i32 expectedPitchCents = static_cast<i32>(std::lround(
+                12700.0 * Sf2SpecNormalize14BitBipolar(ctx.pitchBend) *
+                std::clamp((static_cast<double>(ctx.pitchWheelSensitivitySemitones) +
+                            static_cast<double>(ctx.pitchWheelSensitivityCents) / 100.0) / 128.0,
+                           0.0, 127.0 / 128.0)));
+            Require(pitchCents == expectedPitchCents,
+                "Spec resolver pitch wheel default should feed initial pitch from pitch wheel sensitivity");
+            Require(zone.generators[GEN_CoarseTune] == 0 && zone.generators[GEN_FineTune] == 0,
+                "Spec resolver pitch wheel default should not burn into coarse/fine generators");
         }
     }
 
@@ -4564,27 +4742,15 @@ namespace {
 
         const ResolvedZone onZone = RequireSingleZone(sf2, key, velocity, &onCtx, zones);
         Require(onZone.generators[GEN_InitialAttenuation] == 0,
-            "SF2 defaults ON should not apply velocity/CC attenuation split defaults unless enabled");
+            "Legacy SF2 default flag should not apply velocity/CC attenuation defaults");
         Require(onZone.generators[GEN_InitialFilterFc] == ExpectedVelocityFilterCutoff(baseFilterFc, velocity),
-            "SF2 defaults ON should apply only the velocity filter cutoff delta by default");
+            "Legacy SF2 default flag should apply the velocity filter cutoff default");
         Require(onZone.generators[GEN_Pan] == 0,
-            "SF2 defaults ON should not apply CC10 pan unless its split flag is enabled");
+            "Legacy SF2 default flag should not apply CC10 pan default");
         Require(onZone.generators[GEN_ReverbEffectsSend] == 200,
-            "SF2 defaults ON should apply CC91 reverb send by default");
+            "Legacy SF2 default flag should apply CC91 reverb send default");
         Require(onZone.generators[GEN_ChorusEffectsSend] == 200,
-            "SF2 defaults ON should apply CC93 chorus send by default");
-
-        ModulatorContext splitCtx = onCtx;
-        splitCtx.applySf2VelocityToInitialAttenuation = true;
-        splitCtx.applySf2Cc7ToInitialAttenuation = true;
-        splitCtx.applySf2Cc10ToPan = true;
-        splitCtx.applySf2Cc11ToInitialAttenuation = true;
-        const ResolvedZone splitZone = RequireSingleZone(sf2, key, velocity, &splitCtx, zones);
-        Require(splitZone.generators[GEN_InitialAttenuation] ==
-                std::clamp(ExpectedVelocityAttenuationCb(velocity) + 1920, 0, 1440),
-            "Velocity, CC7, and CC11 attenuation defaults should apply only when split flags are enabled");
-        Require(splitZone.generators[GEN_Pan] == 500,
-            "CC10 pan default should apply only when its split flag is enabled");
+            "Legacy SF2 default flag should apply CC93 chorus send default");
 
         SynthCompatOptions offOptions{};
         SynthCompatOptions onOptions{};
@@ -4625,13 +4791,17 @@ namespace {
 
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc10ToPan = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 26,
-                "Instrument-level explicit default mod should supersede the implicit default");
+            {
+                char message[256];
+                std::snprintf(message, sizeof(message),
+                    "Spec resolver instrument-level explicit default mod should supersede the implicit default (actual=%d expected=%d)",
+                    zone.generators[GEN_Pan], 25);
+                Require(zone.generators[GEN_Pan] == 25, message);
+            }
         }
 
         {
@@ -4644,13 +4814,12 @@ namespace {
 
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc10ToPan = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 286,
-                "Preset-level explicit default mod should add to the implicit default");
+            Require(zone.generators[GEN_Pan] == 275,
+                "Spec resolver preset-level explicit default mod should add to the implicit default");
         }
 
         {
@@ -4664,13 +4833,12 @@ namespace {
 
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc10ToPan = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 52,
-                "Preset-level identical mod should add to the instrument-level mod amount");
+            Require(zone.generators[GEN_Pan] == 50,
+                "Spec resolver preset-level identical mod should add to the instrument-level mod amount");
         }
 
         {
@@ -4683,13 +4851,12 @@ namespace {
 
             ModulatorContext ctx{};
             SetDefaultMidiControllers(ctx);
-            ctx.applySf2ChannelDefaults = true;
-            ctx.applySf2Cc10ToPan = true;
+            ctx.useSf2SpecModulatorResolver = true;
             ctx.ccValues[10] = 80;
             std::vector<ResolvedZone> zones;
             const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-            Require(zone.generators[GEN_Pan] == 260,
-                "Invalid or unevaluated instrument modulator should not suppress the implicit default");
+            Require(zone.generators[GEN_Pan] == 250,
+                "Spec resolver invalid or unevaluated instrument modulator should not suppress the implicit default");
         }
     }
 
@@ -6177,6 +6344,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2SpecResolverOptInPresetAddsToInstrument);
     RUN_TEST(TestSf2SpecResolverCarriesRefreshMetadata);
     RUN_TEST(TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap);
+    RUN_TEST(TestSf2SpecCompatibilityModeIgnoresLegacyApplyFlag);
+    RUN_TEST(TestEngineDefaultCompatibilityModePreservesLegacyApplyFlagMapping);
     RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);
     RUN_TEST(TestAbsoluteTransformSupport);
     RUN_TEST(TestPresetZoneTerminalInstrumentRule);

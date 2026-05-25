@@ -59,7 +59,7 @@ typedef enum XAmeCompatibilityFlags_ {
     XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION = 1u << 1,
     /* Non-spec legacy compatibility mode: multiply SF2 preset send with MIDI channel send instead of using the default modulator-driven SF2 behavior. 非仕様の旧互換モードとして、既定の SF2 modulator 駆動動作の代わりに SF2 send と MIDI チャンネル send を乗算合成します。 */
     XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS = 1u << 2,
-    /* Apply selected SF2 implicit default modulators while preserving global channel controls. SF2 の暗黙 default modulator のうち選択されたものを有効化し、グローバルなチャンネル制御は維持します。 */
+    /* Deprecated: legacy SF2 default-modulator compatibility switch. Ignored when compatibilityMode is XAME_COMPAT_MODE_SF2_SPEC_204. 非推奨: 旧 SF2 default modulator 互換スイッチです。compatibilityMode が XAME_COMPAT_MODE_SF2_SPEC_204 の場合は無視されます。 */
     XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS = 1u << 3,
     /* Enable the experimental post-mix output stage for extra headroom and smoother loudness. 実験的な post-mix 出力段を有効化し、ヘッドルームと滑らかな音量感を調整します。 */
     XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE = 1u << 4,

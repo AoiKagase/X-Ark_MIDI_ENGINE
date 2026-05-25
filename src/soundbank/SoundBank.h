@@ -27,13 +27,6 @@ struct ModulatorContext {
     u8 pitchWheelSensitivityCents = 0;
     const i32* nrpnOffsets = nullptr;
     bool applySf2ChannelDefaults = false;
-    bool applySf2VelocityToInitialAttenuation = false;
-    bool applySf2VelocityToFilterCutoff = true;
-    bool applySf2Cc7ToInitialAttenuation = false;
-    bool applySf2Cc10ToPan = false;
-    bool applySf2Cc11ToInitialAttenuation = false;
-    bool applySf2Cc91ToReverbSend = true;
-    bool applySf2Cc93ToChorusSend = true;
     bool useSf2SpecModulatorResolver = false;
 };
 
