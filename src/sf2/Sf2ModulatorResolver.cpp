@@ -122,18 +122,22 @@ double ApplySourceShape(double x, u16 sourceOper) {
 }
 
 double Normalize7Bit(u8 value) {
-    return static_cast<double>(std::min<u8>(value, 127u)) / 127.0;
+    return static_cast<double>(std::min<u8>(value, 127u)) / 128.0;
 }
 
 double Normalize14BitBipolar(i16 value) {
+    constexpr double kPitchWheelMax = 8191.0 / 8192.0;
     if (value >= 0) {
-        return std::clamp(static_cast<double>(value) / 8191.0, 0.0, 1.0);
+        return std::clamp(static_cast<double>(value) / 8192.0, 0.0, kPitchWheelMax);
     }
     return std::clamp(static_cast<double>(value) / 8192.0, -1.0, 0.0);
 }
 
 double NormalizeVelocity(u16 velocity) {
-    return std::clamp(static_cast<double>(velocity) / 65535.0, 0.0, 1.0);
+    // Internal velocity is 16-bit, but SF2 source mapping is defined in 7-bit MIDI domain.
+    const u16 velocity7 = static_cast<u16>(
+        (static_cast<u32>(velocity) * 127u + 32767u) / 65535u);
+    return Normalize7Bit(static_cast<u8>(std::min<u16>(velocity7, 127u)));
 }
 
 DecodeSourceResult DecodeSource(u16 sourceOper, u8 key, u16 velocity, const ModulatorContext* ctx, bool allowLinkSource) {
@@ -197,8 +201,8 @@ DecodeSourceResult DecodeSource(u16 sourceOper, u8 key, u16 velocity, const Modu
                 return result;
             }
             x = std::clamp((static_cast<double>(ctx->pitchWheelSensitivitySemitones) +
-                            static_cast<double>(ctx->pitchWheelSensitivityCents) / 100.0) / 127.0,
-                           0.0, 1.0);
+                            static_cast<double>(ctx->pitchWheelSensitivityCents) / 100.0) / 128.0,
+                           0.0, 127.0 / 128.0);
             result.dependencies = Sf2ModulatorDependency::PitchWheelSensitivity;
             break;
         default:
