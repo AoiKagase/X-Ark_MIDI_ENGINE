@@ -109,11 +109,16 @@ bool TryParseChannelMaskArgument(const char* valueText, const char* optionName, 
 }
 
 bool TryParseCompatibilityModeArgument(const char* valueText, unsigned int& outMode) {
-    const long modeValue = std::strtol(valueText, nullptr, 10);
-    if (modeValue >= static_cast<long>(XAME_COMPAT_MODE_ENGINE_DEFAULT) &&
-        modeValue <= static_cast<long>(XAME_COMPAT_MODE_SF2_RENDER_TUNED)) {
-        outMode = static_cast<unsigned int>(modeValue);
-        return true;
+    char* numericEnd = nullptr;
+    const long modeValue = std::strtol(valueText, &numericEnd, 10);
+    if (numericEnd != valueText && numericEnd != nullptr && *numericEnd == '\0') {
+        if (modeValue >= static_cast<long>(XAME_COMPAT_MODE_ENGINE_DEFAULT) &&
+            modeValue <= static_cast<long>(XAME_COMPAT_MODE_SF2_RENDER_TUNED)) {
+            outMode = static_cast<unsigned int>(modeValue);
+            return true;
+        }
+        std::fprintf(stderr, "Invalid --compat-mode numeric value: %s\n", valueText);
+        return false;
     }
 
     std::string normalized(valueText);

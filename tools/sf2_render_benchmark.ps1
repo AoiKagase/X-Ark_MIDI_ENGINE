@@ -45,13 +45,13 @@ function Require-File {
 function Invoke-And-Capture {
     param(
         [string]$Exe,
-        [string[]]$Args,
+        [string[]]$ExeArgs,
         [string]$LogPath
     )
-    $output = & $Exe @Args 2>&1
+    $output = & $Exe @ExeArgs 2>&1
     $output | Out-File -FilePath $LogPath -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed ($LASTEXITCODE): $Exe $($Args -join ' ')"
+        throw "Command failed ($LASTEXITCODE): $Exe $($ExeArgs -join ' ')"
     }
     return $output
 }
@@ -113,12 +113,12 @@ function Render-Case {
     $tunedArgs += @("--compat-mode", "sf2-render-tuned")
 
     Write-Host "Rendering case: $CaseName"
-    Invoke-And-Capture -Exe $testExe -Args $specArgs -LogPath (Join-Path $caseDir "render_spec.log") | Out-Null
-    Invoke-And-Capture -Exe $testExe -Args $tunedArgs -LogPath (Join-Path $caseDir "render_tuned.log") | Out-Null
+    Invoke-And-Capture -Exe $testExe -ExeArgs $specArgs -LogPath (Join-Path $caseDir "render_spec.log") | Out-Null
+    Invoke-And-Capture -Exe $testExe -ExeArgs $tunedArgs -LogPath (Join-Path $caseDir "render_tuned.log") | Out-Null
 
-    $diffOut = Invoke-And-Capture -Exe $diffExe -Args @($specWav, $tunedWav, "$DiffThreshold") -LogPath (Join-Path $caseDir "compare_spec_vs_tuned.log")
-    $clipSpecOut = Invoke-And-Capture -Exe $clipExe -Args @($specWav, "250", "20") -LogPath (Join-Path $caseDir "clip_spec.log")
-    $clipTunedOut = Invoke-And-Capture -Exe $clipExe -Args @($tunedWav, "250", "20") -LogPath (Join-Path $caseDir "clip_tuned.log")
+    $diffOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($specWav, $tunedWav, "$DiffThreshold") -LogPath (Join-Path $caseDir "compare_spec_vs_tuned.log")
+    $clipSpecOut = Invoke-And-Capture -Exe $clipExe -ExeArgs @($specWav, "250", "20") -LogPath (Join-Path $caseDir "clip_spec.log")
+    $clipTunedOut = Invoke-And-Capture -Exe $clipExe -ExeArgs @($tunedWav, "250", "20") -LogPath (Join-Path $caseDir "clip_tuned.log")
 
     $summaryLines = @(
         "Case: $CaseName",
