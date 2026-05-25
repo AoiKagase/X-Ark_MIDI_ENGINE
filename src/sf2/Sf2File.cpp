@@ -47,22 +47,14 @@ enum class PdtaSubchunkOrder : u8 {
     Done = 9,
 };
 
-constexpr u16 kModSrcVelocity = 2u;
 constexpr u16 kModSrcChannelPressure = 13u;
 constexpr u16 kModSrcPitchWheel = 0x020Eu;
 constexpr u16 kModSrcPitchWheelSensitivity = 16u;
 constexpr u16 kModSrcCc1 = 0x0081u;
-constexpr u16 kModSrcCc7 = 0x0587u;
-constexpr u16 kModSrcCc10 = 0x028Au;
-constexpr u16 kModSrcCc11 = 0x058Bu;
-constexpr u16 kModSrcCc91 = 0x00DBu;
-constexpr u16 kModSrcCc93 = 0x00DDu;
 constexpr u16 kModSrcLink = 127u;
 constexpr u16 kModDestInitialPitch = 59u;
 constexpr i16 kDefaultCc1ToVibLfoPitchCents = 50;
 constexpr i16 kDefaultChannelPressureToVibLfoPitchCents = 50;
-constexpr i16 kDefaultCc91ToReverbSend = 200;
-constexpr i16 kDefaultCc93ToChorusSend = 200;
 // sfModTransOper と sfModSrcOper の curve type は別物。
 // sfModSrcOper の concave / convex / switch は DecodeModSourceValue() が処理し、
 // sfModTransOper は SF2 2.01 で定義されている Linear / Absolute のみ扱う。
@@ -118,10 +110,6 @@ inline u16 ResolveForcedVelocity(u16 velocity, const ResolvedZone& zone) {
     return velocity;
 }
 
-inline i32 ComputeDefaultVelocityFilterCutoffDelta(u16 velocity) {
-    return static_cast<i32>(std::lround(-2400.0 * (1.0 - static_cast<double>(velocity) / 65535.0)));
-}
-
 bool ValidateChunkElementCount(u32 count, u32 maxCount, const char* chunkName, std::string& outError) {
     if (count > maxCount) {
         outError = std::string("SF2 chunk too large: ") + chunkName;
@@ -171,22 +159,8 @@ bool IsRangeGeneratorPlacementValid(u16 oper, int positionInZone, u16 firstOperI
     return true;
 }
 
-bool IsPlainVelocitySource(u16 oper) {
-    return oper == kModSrcVelocity;
-}
-
 bool IsLinkModSource(u16 oper) {
     return (oper & 0x7Fu) == kModSrcLink && (oper & 0x80u) == 0;
-}
-
-bool IsVelocityToInitialFilterFcMod(const SFModList& mod) {
-    if (mod.sfModDestOper != GEN_InitialFilterFc || mod.sfModTransOper != kModTransformLinear) {
-        return false;
-    }
-    if (!IsPlainVelocitySource(mod.sfModSrcOper)) {
-        return false;
-    }
-    return mod.sfModAmtSrcOper == 0;
 }
 
 bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
@@ -199,20 +173,6 @@ bool IsCc1ToVibLfoPitchMod(const SFModList& mod) {
 bool IsChannelPressureToVibLfoPitchMod(const SFModList& mod) {
     return mod.sfModSrcOper == kModSrcChannelPressure &&
            mod.sfModDestOper == GEN_VibLfoToPitch &&
-           mod.sfModAmtSrcOper == 0 &&
-           mod.sfModTransOper == kModTransformLinear;
-}
-
-bool IsCc91ToReverbSendMod(const SFModList& mod) {
-    return mod.sfModSrcOper == kModSrcCc91 &&
-           mod.sfModDestOper == GEN_ReverbEffectsSend &&
-           mod.sfModAmtSrcOper == 0 &&
-           mod.sfModTransOper == kModTransformLinear;
-}
-
-bool IsCc93ToChorusSendMod(const SFModList& mod) {
-    return mod.sfModSrcOper == kModSrcCc93 &&
-           mod.sfModDestOper == GEN_ChorusEffectsSend &&
            mod.sfModAmtSrcOper == 0 &&
            mod.sfModTransOper == kModTransformLinear;
 }
@@ -1706,9 +1666,6 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                               effectiveKey, effectiveVelocity, ctx, outZone, &defaultState, true);
     }
 
-    if (ctx && ctx->applySf2ChannelDefaults && !defaultState.hasVelocityToFilterFcMod) {
-        ApplyModulatorDelta(outZone, GEN_InitialFilterFc, ComputeDefaultVelocityFilterCutoffDelta(effectiveVelocity));
-    }
     if (ctx && !defaultState.hasChannelPressureToVibLfoPitchMod && ctx->channelPressure != 0) {
         const i32 delta = static_cast<i32>(std::lround(
             static_cast<double>(kDefaultChannelPressureToVibLfoPitchCents) *
@@ -1720,20 +1677,6 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
             static_cast<double>(kDefaultCc1ToVibLfoPitchCents) *
             (static_cast<double>(ctx->ccValues[1]) / 127.0)));
         ApplyModulatorDelta(outZone, GEN_VibLfoToPitch, delta);
-    }
-    if (ctx && ctx->applySf2ChannelDefaults &&
-        !defaultState.hasCc91ToReverbSendMod && ctx->ccValues[91] != 0) {
-        const i32 delta = static_cast<i32>(std::lround(
-            static_cast<double>(kDefaultCc91ToReverbSend) *
-            (static_cast<double>(ctx->ccValues[91]) / 127.0)));
-        ApplyModulatorDelta(outZone, GEN_ReverbEffectsSend, delta);
-    }
-    if (ctx && ctx->applySf2ChannelDefaults &&
-        !defaultState.hasCc93ToChorusSendMod && ctx->ccValues[93] != 0) {
-        const i32 delta = static_cast<i32>(std::lround(
-            static_cast<double>(kDefaultCc93ToChorusSend) *
-            (static_cast<double>(ctx->ccValues[93]) / 127.0)));
-        ApplyModulatorDelta(outZone, GEN_ChorusEffectsSend, delta);
     }
     if (ctx && !defaultState.hasPitchWheelToInitialPitchMod && ctx->pitchBend != 0) {
         const i32 rangeCents = static_cast<i32>(ctx->pitchWheelSensitivitySemitones) * 100 +
@@ -1851,11 +1794,8 @@ void Sf2File::ApplyModulatorEntries(const std::vector<SFModList>& mods, int modS
         if (!evalOutput(i) || entries[i].ignored || cycle[i]) continue;
 
         if (outDefaultState) {
-            outDefaultState->hasVelocityToFilterFcMod |= IsVelocityToInitialFilterFcMod(mod);
             outDefaultState->hasChannelPressureToVibLfoPitchMod |= IsChannelPressureToVibLfoPitchMod(mod);
             outDefaultState->hasCc1ToVibLfoPitchMod |= IsCc1ToVibLfoPitchMod(mod);
-            outDefaultState->hasCc91ToReverbSendMod |= IsCc91ToReverbSendMod(mod);
-            outDefaultState->hasCc93ToChorusSendMod |= IsCc93ToChorusSendMod(mod);
             outDefaultState->hasPitchWheelToInitialPitchMod |= IsPitchWheelToInitialPitchMod(mod);
         }
 

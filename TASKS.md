@@ -42,30 +42,30 @@
 
 ## TODO: `multiply` / `apply default modulators` 廃止計画
 
-- [ ] 廃止後の固定挙動を最終決定する。
+- [x] 廃止後の固定挙動を最終決定する。
   - SF2 effects send は `SF2_SPEC_204` では resolver 解決値を使用。
   - legacy 経路では `multiply` を持たない前提で send 合成方針を確定（現状維持 or 仕様寄せのどちらかを明文化）。
   - `apply default modulators` なしで legacy 経路の implicit default をどう扱うかを確定。
-- [ ] C API から `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` と `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を削除する。
+- [x] C API から `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` と `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を削除する。
   - 対象: `include/XArkMidiEngine.h`
-- [ ] C# API から `CompatibilityFlags.MultiplySf2MidiEffectsSends` と `CompatibilityFlags.ApplySf2ChannelDefaultModulators` を削除する。
+- [x] C# API から `CompatibilityFlags.MultiplySf2MidiEffectsSends` と `CompatibilityFlags.ApplySf2ChannelDefaultModulators` を削除する。
   - 対象: `XArkMidiEngine.cs`
-- [ ] 互換オプション解決ロジックから両フラグ経路を削除する。
+- [x] 互換オプション解決ロジックから両フラグ経路を削除する。
   - 対象: `src/ApiCompatOptions.cpp`, `src/synth/Voice.h`
-- [ ] 音声処理側の到達不能分岐を削除して単純化する。
+- [x] 音声処理側の到達不能分岐を削除して単純化する。
   - 対象: `src/synth/Voice.cpp` (`MixEffectsSend`, `RefreshEffectSends`)
   - 対象: `src/sf2/Sf2File.cpp` (`ctx->applySf2ChannelDefaults` 分岐)
   - 対象: `src/synth/Synthesizer.cpp` (`ctx.applySf2ChannelDefaults` 伝播)
-- [ ] GUI で廃止済み項目が再混入しないことを確認する（現状は除去済み）。
+- [x] GUI で廃止済み項目が再混入しないことを確認する（現状は除去済み）。
   - 対象: `tools/XArkMidiGuiPlayer/MainForm.cs`
-- [ ] テストを整理する。
+- [x] テストを整理する。
   - 削除/置換: 両フラグの有効性を前提にしたテスト
   - 追加/維持: 廃止後の固定挙動（spec mode / legacy mode）検証
   - 対象: `tests/sf2_compliance.cpp`
-- [ ] ドキュメントを更新する。
+- [x] ドキュメントを更新する。
   - `README.md` の列挙・サンプルコード・互換モード説明から両フラグ記述を削除
   - 変更理由と代替設定（`compatibilityMode`）を明記
-- [ ] 最終確認を実施する。
+- [x] 最終確認を実施する。
   - `Sf2Compliance` 全件パス
   - GUI ビルド成功
   - APIヘッダとラッパーの公開面に削除漏れがないことを確認

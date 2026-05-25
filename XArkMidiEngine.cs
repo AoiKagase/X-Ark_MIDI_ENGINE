@@ -66,11 +66,6 @@ public static class XArkMidiEngine
         Sf2ZeroLengthLoopRetrigger = 1 << 0,
         /// <summary>Apply pitch correction for SF2 sample playback. SF2 サンプル再生時のピッチ補正を有効にします。</summary>
         EnableSf2SamplePitchCorrection = 1 << 1,
-        /// <summary>Non-spec legacy compatibility mode: multiply SF2 preset send with MIDI channel send instead of the default modulator-driven SF2 behavior. Ignored when <see cref="CompatibilityMode.Sf2Spec204"/> is selected. 非仕様の旧互換モードとして、既定の SF2 modulator 駆動動作の代わりに SF2 send と MIDI チャンネル send を乗算合成します。<see cref="CompatibilityMode.Sf2Spec204"/> 指定時は無視されます。</summary>
-        MultiplySf2MidiEffectsSends = 1 << 2,
-        /// <summary>Deprecated legacy SF2 default-modulator compatibility switch. Ignored when <see cref="CompatibilityMode.Sf2Spec204"/> is selected. 非推奨の旧 SF2 default modulator 互換スイッチです。<see cref="CompatibilityMode.Sf2Spec204"/> 指定時は無視されます。</summary>
-        [Obsolete("Deprecated legacy SF2 default-modulator compatibility switch. Ignored in SF2_SPEC_204 mode.", false)]
-        ApplySf2ChannelDefaultModulators = 1 << 3,
         /// <summary>Enable the experimental post-mix output stage for extra headroom and smoother loudness. 実験的な post-mix 出力段を有効化し、ヘッドルームと滑らかな音量感を調整します。</summary>
         EnableEnhancedOutputStage = 1 << 4,
         /// <summary>Use the natural preset for the enhanced output stage. If unset, enhanced output uses the louder preset. enhanced output stage の Natural プリセットを使います。未指定時は音量感寄りのプリセットです。</summary>

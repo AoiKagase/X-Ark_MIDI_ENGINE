@@ -945,7 +945,6 @@ void Synthesizer::HandleNoteOn(u8 ch, u8 key, u16 vel) {
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
-    ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
     ctx.useSf2SpecModulatorResolver = compatOptions_.useSf2SpecModulatorResolver;
 
     u8 resolvedProgram = state.program;
@@ -1463,7 +1462,6 @@ void Synthesizer::RefreshSf2ControllersForChannel(u8 ch, u16 changedModulatorDep
     ctx.pitchWheelSensitivitySemitones = state.pitchBendRangeSemitones;
     ctx.pitchWheelSensitivityCents = state.pitchBendRangeCents;
     ctx.nrpnOffsets = state.sf2Nrpn.generatorOffsets;
-    ctx.applySf2ChannelDefaults = compatOptions_.applySf2ChannelDefaults;
     ctx.useSf2SpecModulatorResolver = compatOptions_.useSf2SpecModulatorResolver;
     voicePool_.RefreshSf2Controllers(ch, *soundBank_, ctx, changedModulatorDependencies,
                                      state.VolumeFactor(), state.pan32, state.reverbSend32, state.chorusSend32);

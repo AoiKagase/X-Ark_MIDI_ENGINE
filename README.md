@@ -95,8 +95,15 @@ cmake --build build/cmake
   - `XAME_COMPAT_NONE`
   - `XAME_COMPAT_SF2_ZERO_LENGTH_LOOP_RETRIGGER`
   - `XAME_COMPAT_ENABLE_SF2_SAMPLE_PITCH_CORRECTION`
-  - `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS`
-  - `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS`
+  - `XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE`
+  - `XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL`
+  - `XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM`
+  - `XAME_COMPAT_DISABLE_INTERNAL_EFFECTS`
+  - `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`
+- `XAmeCompatibilityMode`
+  - `XAME_COMPAT_MODE_ENGINE_DEFAULT`
+  - `XAME_COMPAT_MODE_SF2_LEGACY`
+  - `XAME_COMPAT_MODE_SF2_SPEC_204`
 
 ### エンジン生成 API
 
@@ -119,6 +126,7 @@ cmake --build build/cmake
 - `maxSf2PdtaEntries`
 - `maxDlsPoolTableEntries`
 - `compatibilityFlags`
+- `compatibilityMode`
 - `sf2RomBankPath`
 - `sf2RomBankPathUtf8`
 
@@ -283,9 +291,8 @@ short[] pcm = engine.RenderAll();
 
 ```csharp
 var options = XArkMidiEngine.CreateOptions.Default();
-options.CompatibilityFlags =
-    XArkMidiEngine.CompatibilityFlags.EnableSf2SamplePitchCorrection |
-    XArkMidiEngine.CompatibilityFlags.ApplySf2ChannelDefaultModulators;
+options.CompatibilityFlags = XArkMidiEngine.CompatibilityFlags.EnableSf2SamplePitchCorrection;
+options.CompatibilityMode = XArkMidiEngine.CompatibilityMode.Sf2Spec204;
 
 using var engine = new XArkMidiEngine.Engine(
     "example.mid",
@@ -353,14 +360,15 @@ Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_
 
 互換モード補足:
 
+- SF2 の互換挙動は `compatibilityMode` を基準に選択します。
+  - `XAME_COMPAT_MODE_ENGINE_DEFAULT`: エンジン既定挙動。`compatibilityFlags` を通常どおり解釈します。
+  - `XAME_COMPAT_MODE_SF2_LEGACY`: legacy SF2 resolver を強制します（旧互換向け）。
+  - `XAME_COMPAT_MODE_SF2_SPEC_204`: spec modulator resolver を強制します（推奨）。
 - `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにし、implicit default modulator も spec resolver のみで処理します。
   既定の legacy 互換モードでは、実運用互換のため instrument-level の sample/substitution destination（例: sample address offset, sampleModes, keynum, velocity）も処理します。
 - `sfModTransOper` は SF2 仕様定義の `linear` と `absolute` を処理します。仕様外 transform 値は unsupported として無効化されます。
-- `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` は非推奨です。
-  `XAME_COMPAT_MODE_SF2_SPEC_204` では無視され、spec resolver 側の implicit default modulator が使用されます。
 - SF2 send と MIDI send の最終ミキシング方針は既定で加算です。
-  `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` は legacy/diagnostic 向けです。
-  `XAME_COMPAT_MODE_SF2_SPEC_204` では無視され、spec resolver で解決された Reverb/Chorus send をそのまま使用します。
+  SF2 では resolver で解決された Reverb/Chorus send をそのまま使用し、`sf2ReverbSendScale` / `sf2ChorusSendScale` で最終スケーリングします。
 
 ## 注意事項
 

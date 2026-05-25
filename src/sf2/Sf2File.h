@@ -70,11 +70,8 @@ public:
 
 private:
     struct DefaultModulatorState {
-        bool hasVelocityToFilterFcMod = false;
         bool hasChannelPressureToVibLfoPitchMod = false;
         bool hasCc1ToVibLfoPitchMod = false;
-        bool hasCc91ToReverbSendMod = false;
-        bool hasCc93ToChorusSendMod = false;
         bool hasPitchWheelToInitialPitchMod = false;
     };
 

@@ -42,10 +42,7 @@ f32 NormalizeSf2EffectsSend(i32 value) {
     return std::clamp(static_cast<f32>(value) / 1000.0f, 0.0f, 1.0f);
 }
 
-f32 MixEffectsSend(f32 presetSend, f32 channelSend, const SynthCompatOptions& compatOptions) {
-    if (compatOptions.multiplySf2MidiEffectsSends) {
-        return std::clamp(presetSend * channelSend, 0.0f, 1.0f);
-    }
+f32 MixEffectsSend(f32 presetSend, f32 channelSend) {
     return std::clamp(presetSend + channelSend, 0.0f, 1.0f);
 }
 
@@ -813,8 +810,8 @@ void Voice::UpdateChannelMix(f32 volumeFactor, u32 pan32, u32 reverbSend32, u32 
         f32 panGainR = std::sqrt(0.5f * (1.0f + channelPan));
         channelGainL = volumeFactor * panGainL;
         channelGainR = volumeFactor * panGainR;
-        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
-        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
+        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend);
+        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend);
     }
     RefreshOutputGains();
 }
@@ -836,20 +833,11 @@ void Voice::ApplyPan(f32 pan) {
 
 void Voice::RefreshEffectSends() {
     if (soundBankKind == SoundBankKind::Sf2) {
-        const bool useLegacyMultiply =
-            compatOptions.multiplySf2MidiEffectsSends &&
-            !compatOptions.useSf2SpecModulatorResolver;
-        const f32 baseReverbSend = useLegacyMultiply
-            ? presetReverbSend * channelReverbSend
-            : presetReverbSend;
-        const f32 baseChorusSend = useLegacyMultiply
-            ? presetChorusSend * channelChorusSend
-            : presetChorusSend;
-        reverbSend = std::clamp(baseReverbSend * compatOptions.sf2ReverbSendScale, 0.0f, 1.0f);
-        chorusSend = std::clamp(baseChorusSend * compatOptions.sf2ChorusSendScale, 0.0f, 1.0f);
+        reverbSend = std::clamp(presetReverbSend * compatOptions.sf2ReverbSendScale, 0.0f, 1.0f);
+        chorusSend = std::clamp(presetChorusSend * compatOptions.sf2ChorusSendScale, 0.0f, 1.0f);
     } else {
-        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend, compatOptions);
-        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend, compatOptions);
+        reverbSend = MixEffectsSend(presetReverbSend, channelReverbSend);
+        chorusSend = MixEffectsSend(presetChorusSend, channelChorusSend);
     }
 }
 
