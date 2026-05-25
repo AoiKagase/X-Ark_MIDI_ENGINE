@@ -225,7 +225,7 @@ public sealed class MainForm : Form
         var root = new TableLayoutPanel {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 9,
+            RowCount = 8,
             Padding = new Padding(20),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -233,9 +233,8 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124f));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 66.6f)); // ChannelLevelGroup
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f)); // ChannelGrid
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
 
@@ -297,8 +296,7 @@ public sealed class MainForm : Form
         seekPanel.Controls.Add(_seekTrackBar, 0, 0);
         seekPanel.Controls.Add(_timeLabel, 1, 0);
 
-        ConfigureCreateOptionsPanel();
-        _createOptionsPanel.Controls.Add(_createOptionsHeader);
+        ConfigureDetailsPanel();
         ConfigureGrid();
         _channelLevelGroup.Controls.Add(_channelLevelMeter);
 
@@ -306,15 +304,14 @@ public sealed class MainForm : Form
         root.Controls.Add(controlPanel, 0, 1);
         root.Controls.Add(seekPanel, 0, 2);
         root.Controls.Add(_detailsPanel, 0, 3);
-        root.Controls.Add(_createOptionsPanel, 0, 4);
-        root.Controls.Add(_channelLevelGroup, 0, 5);
-        root.Controls.Add(_channelGrid, 0, 6);
-        root.Controls.Add(_keyboardLabel, 0, 7);
-        root.Controls.Add(_keyboard, 0, 8);
+        root.Controls.Add(_channelLevelGroup, 0, 4);
+        root.Controls.Add(_channelGrid, 0, 5);
+        root.Controls.Add(_keyboardLabel, 0, 6);
+        root.Controls.Add(_keyboard, 0, 7);
         Controls.Add(root);
     }
 
-    private void ConfigureCreateOptionsPanel()
+    private void ConfigureDetailsPanel()
     {
         // 常に表示させたい項目を保持するため、あえて別のレイアウトを作る
         var rootLayout = new TableLayoutPanel {
@@ -324,6 +321,7 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 2,
         };
+        rootLayout.Controls.Add(_createOptionsHeader, 0, 0);
 
         var layout = new TableLayoutPanel {
             AutoSize = true,
@@ -368,7 +366,8 @@ public sealed class MainForm : Form
         layout.Controls.Add(flagsPanel, 1, 1);
         layout.SetColumnSpan(flagsPanel, 6);
 
-        _detailsPanel.Controls.Add(layout);
+        rootLayout.Controls.Add(layout, 0, 1);
+        _detailsPanel.Controls.Add(rootLayout);
         ConfigureCreateOptionToolTips();
         UpdateCreateOptionsEnabledState();
     }
@@ -489,6 +488,8 @@ public sealed class MainForm : Form
         _channelGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.White;
         _channelGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         _channelGrid.ColumnHeadersHeight = 32;
+        _channelGrid.MinimumSize = new Size(0, 32 + (4 * 28) + 2);
+        _channelGrid.MaximumSize = new Size(0, 32 + (16 * 28) + 2);
 
         _channelGrid.DataSource = _channels;
         // ... rest of column definitions ...
