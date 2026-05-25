@@ -35,7 +35,7 @@ public sealed class MainForm : Form
         Enabled = false,
     };
     private readonly Label _statusLabel = new() { AutoSize = true, Text = "Idle" };
-    private readonly OutputStageMeterControl _outputStageMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(340, 46), Margin = new Padding(8, 0, 0, 0) };
+    private readonly OutputStageMeterControl _outputStageMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(200, 46), Margin = new Padding(8, 0, 0, 0) };
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
     // グループをPanelに変更
@@ -2085,7 +2085,6 @@ internal sealed class ChannelLevelMeterControl : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        e.Graphics.Clear(BackColor);
 
         var width = ClientSize.Width;
         var height = ClientSize.Height;
@@ -2096,12 +2095,10 @@ internal sealed class ChannelLevelMeterControl : Control
         int meterHeight = Math.Max(12, height - legendHeight - 24);
         int slotWidth = Math.Max(12, (width - 6 * 15) / 16);
 
-        using var backBrush = new SolidBrush(Color.FromArgb(210, 210, 210));
         DrawLegend(e.Graphics, width);
 
         for (int i = 0; i < 16; ++i) {
             var x = i * (slotWidth + 6);
-            e.Graphics.FillRectangle(backBrush, x, meterTop, slotWidth, meterHeight);
             
             int barW = (slotWidth - 4) / 3;
             DrawMeter(e.Graphics, x + 1, meterTop, barW, meterHeight, _dryLevels[i], _dryPeaks[i], ChannelColor(_dryLevels[i], (_soloMask & (1u << i)) != 0));
