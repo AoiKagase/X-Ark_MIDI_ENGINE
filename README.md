@@ -250,8 +250,7 @@ int main(void) {
 注意:
 
 - 現在の C# ラッパーは UTF-8 版 API を使います。
-- `CreateOptions` は `StructSize`、各種上限値、`CompatibilityFlags` を公開しています。
-- C ヘッダにある `sf2RomBankPath` / `sf2RomBankPathUtf8` は、現時点の C# `CreateOptions` では公開していません。
+- `CreateOptions` は `StructSize`、各種上限値、`CompatibilityFlags`、`sf2RomBankPath` / `sf2RomBankPathUtf8` を公開しています。
 
 ### C# 使用例
 
@@ -352,10 +351,11 @@ Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_
   - reverb / chorus send
   - tuning / root / exclusive class
 
-既知の制限:
+互換モード補足:
 
-- 一部の modulator destination は未対応です。
-- `sfModTransOper` は `linear` と `absolute` のみ対応しています。
+- `XAME_COMPAT_USE_SF2_SPEC_MODULATOR_RESOLVER`（または `XAME_COMPAT_MODE_SF2_SPEC_204`）有効時は、SF2 仕様に合わせて non-value generator 宛て modulator destination を無効扱いにします。
+  既定の legacy 互換モードでは、実運用互換のため instrument-level の sample/substitution destination（例: sample address offset, sampleModes, keynum, velocity）も処理します。
+- `sfModTransOper` は SF2 仕様定義の `linear` と `absolute` を処理します。仕様外 transform 値は unsupported として無効化されます。
 - CC7 / CC10 / CC11 の implicit default modulator は既定で無効です。
   必要なら `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` を指定してください。
 - SF2 send と MIDI send の最終ミキシング方針は既定で加算です。

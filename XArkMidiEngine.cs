@@ -129,10 +129,18 @@ public static class XArkMidiEngine
         /// </summary>
         public CompatibilityFlags CompatibilityFlags;
 
-        // Native XAmeCreateOptions reserves these pointer slots for optional ROM bank paths.
-        // Managed wrapper currently does not expose those path setters.
-        private IntPtr _sf2RomBankPath;
-        private IntPtr _sf2RomBankPathUtf8;
+        /// <summary>
+        /// Optional UTF-16 path to an external SF2 ROM sample bank used by ROM-backed samples.
+        /// NULL の場合は UTF-8 側を参照し、両方 NULL の場合は ROM サンプル参照を無効化します。
+        /// </summary>
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string Sf2RomBankPath;
+        /// <summary>
+        /// Optional UTF-8 path to an external SF2 ROM sample bank used by ROM-backed samples.
+        /// <see cref="Sf2RomBankPath"/> が指定されている場合はそちらが優先されます。
+        /// </summary>
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
+        public string Sf2RomBankPathUtf8;
 
         /// <summary>
         /// Optional high-level compatibility mode override.
