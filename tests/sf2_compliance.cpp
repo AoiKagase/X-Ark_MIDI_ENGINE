@@ -1520,6 +1520,108 @@ namespace {
             "SF2_SPEC_204 mode should still apply implicit CC93->chorus default via the spec resolver");
     }
 
+    void TestSf2SpecCompatibilityModeIgnoresLegacyMultiplyFlag() {
+        XAmeCreateOptions options{};
+        options.structSize = sizeof(options);
+        options.compatibilityFlags = XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS;
+        options.compatibilityMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+
+        const SynthCompatOptions compat = ResolveCompatOptionsForCreateOptions(&options);
+        Require(compat.useSf2SpecModulatorResolver,
+            "SF2_SPEC_204 mode should force the SF2 spec modulator resolver");
+        Require(!compat.multiplySf2MidiEffectsSends,
+            "SF2_SPEC_204 mode should ignore MULTIPLY_SF2_MIDI_EFFECTS_SENDS");
+
+        Voice voice;
+        voice.soundBankKind = SoundBankKind::Sf2;
+        voice.compatOptions = compat;
+        voice.presetReverbSend = 0.25f;
+        voice.presetChorusSend = 0.4f;
+        voice.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
+        Require(NearlyEqual(voice.reverbSend, 0.25f, 1.0e-6),
+            "SF2_SPEC_204 mode should keep reverb send at the spec-resolved preset value");
+        Require(NearlyEqual(voice.chorusSend, 0.4f, 1.0e-6),
+            "SF2_SPEC_204 mode should keep chorus send at the spec-resolved preset value");
+    }
+
+    void TestSf2LegacyCompatibilityModeKeepsLegacyMultiplyFlag() {
+        XAmeCreateOptions options{};
+        options.structSize = sizeof(options);
+        options.compatibilityFlags = XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS;
+        options.compatibilityMode = XAME_COMPAT_MODE_SF2_LEGACY;
+
+        const SynthCompatOptions compat = ResolveCompatOptionsForCreateOptions(&options);
+        Require(!compat.useSf2SpecModulatorResolver,
+            "SF2_LEGACY mode should disable the SF2 spec modulator resolver");
+        Require(compat.multiplySf2MidiEffectsSends,
+            "SF2_LEGACY mode should keep MULTIPLY_SF2_MIDI_EFFECTS_SENDS behavior");
+
+        Voice voice;
+        voice.soundBankKind = SoundBankKind::Sf2;
+        voice.compatOptions = compat;
+        voice.presetReverbSend = 0.25f;
+        voice.presetChorusSend = 0.4f;
+        voice.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
+        Require(NearlyEqual(voice.reverbSend, 0.125f, 1.0e-6),
+            "SF2_LEGACY mode should keep legacy reverb send multiplication");
+        Require(NearlyEqual(voice.chorusSend, 0.1f, 1.0e-6),
+            "SF2_LEGACY mode should keep legacy chorus send multiplication");
+    }
+
+    void TestSf2SpecResolverEffectsSendAvoidsVoiceDoubleApply() {
+        MinimalSf2Config config;
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        XAmeCreateOptions options{};
+        options.structSize = sizeof(options);
+        options.compatibilityFlags = XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS;
+        options.compatibilityMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+        const SynthCompatOptions compat = ResolveCompatOptionsForCreateOptions(&options);
+        Require(compat.useSf2SpecModulatorResolver,
+            "SF2 spec mode should enable the spec resolver for effect send ownership");
+        Require(!compat.multiplySf2MidiEffectsSends,
+            "SF2 spec mode should disable legacy multiply while using the spec resolver");
+
+        ModulatorContext ctx{};
+        SetDefaultMidiControllers(ctx);
+        ctx.ccValues[91] = 100;
+        ctx.ccValues[93] = 64;
+        ctx.applySf2ChannelDefaults = compat.applySf2ChannelDefaults;
+        ctx.useSf2SpecModulatorResolver = compat.useSf2SpecModulatorResolver;
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
+        const i32 expectedReverbGen = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(ctx.ccValues[91])));
+        const i32 expectedChorusGen = static_cast<i32>(std::lround(
+            200.0 * Sf2SpecNormalize7Bit(ctx.ccValues[93])));
+        Require(zone.generators[GEN_ReverbEffectsSend] == expectedReverbGen,
+            "SF2 spec resolver should map CC91 into ReverbEffectsSend");
+        Require(zone.generators[GEN_ChorusEffectsSend] == expectedChorusGen,
+            "SF2 spec resolver should map CC93 into ChorusEffectsSend");
+
+        Voice voice;
+        voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(),
+            0, 0, 0, 60, 65535, 1, 44100, 0.0, SoundBankKind::Sf2, compat);
+        voice.UpdateChannelMix(1.0f, 0x80000000u, FloatToU32(0.5f), FloatToU32(0.25f));
+
+        const f32 expectedReverbSend = std::clamp(static_cast<f32>(expectedReverbGen) / 1000.0f, 0.0f, 1.0f);
+        const f32 expectedChorusSend = std::clamp(static_cast<f32>(expectedChorusGen) / 1000.0f, 0.0f, 1.0f);
+        Require(NearlyEqual(voice.reverbSend, expectedReverbSend, 1.0e-6),
+            "SF2 spec mode should use resolver-owned reverb send without Voice-side double application");
+        Require(NearlyEqual(voice.chorusSend, expectedChorusSend, 1.0e-6),
+            "SF2 spec mode should use resolver-owned chorus send without Voice-side double application");
+
+        const f32 legacyMultReverb = std::clamp(expectedReverbSend * voice.channelReverbSend, 0.0f, 1.0f);
+        const f32 legacyMultChorus = std::clamp(expectedChorusSend * voice.channelChorusSend, 0.0f, 1.0f);
+        Require(!NearlyEqual(voice.reverbSend, legacyMultReverb, 1.0e-6),
+            "SF2 spec mode should not re-apply CC91 through legacy multiply in Voice");
+        Require(!NearlyEqual(voice.chorusSend, legacyMultChorus, 1.0e-6),
+            "SF2 spec mode should not re-apply CC93 through legacy multiply in Voice");
+    }
+
     void TestEngineDefaultCompatibilityModePreservesLegacyApplyFlagMapping() {
         XAmeCreateOptions engineDefaultOff{};
         engineDefaultOff.structSize = sizeof(engineDefaultOff);
@@ -6345,6 +6447,9 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2SpecResolverCarriesRefreshMetadata);
     RUN_TEST(TestSf2SpecResolverSuppressesLegacyDefaultFlagOverlap);
     RUN_TEST(TestSf2SpecCompatibilityModeIgnoresLegacyApplyFlag);
+    RUN_TEST(TestSf2SpecCompatibilityModeIgnoresLegacyMultiplyFlag);
+    RUN_TEST(TestSf2LegacyCompatibilityModeKeepsLegacyMultiplyFlag);
+    RUN_TEST(TestSf2SpecResolverEffectsSendAvoidsVoiceDoubleApply);
     RUN_TEST(TestEngineDefaultCompatibilityModePreservesLegacyApplyFlagMapping);
     RUN_TEST(TestSf2SpecResolverPitchWheelDefaultUsesSensitivityCents);
     RUN_TEST(TestAbsoluteTransformSupport);

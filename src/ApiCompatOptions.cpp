@@ -51,8 +51,9 @@ SynthCompatOptions ResolveCompatOptionsForCreateOptions(const XAmeCreateOptions*
         break;
     case XAME_COMPAT_MODE_SF2_SPEC_204:
         compatOptions.useSf2SpecModulatorResolver = true;
-        // Deprecated legacy default-modulator flag is intentionally ignored in explicit SF2 spec mode.
+        // Deprecated legacy default-modulator flags are intentionally ignored in explicit SF2 spec mode.
         compatOptions.applySf2ChannelDefaults = false;
+        compatOptions.multiplySf2MidiEffectsSends = false;
         break;
     case XAME_COMPAT_MODE_ENGINE_DEFAULT:
     default:
@@ -60,12 +61,13 @@ SynthCompatOptions ResolveCompatOptionsForCreateOptions(const XAmeCreateOptions*
     }
 
     if (compatOptions.useSf2SpecModulatorResolver) {
-        // Spec resolver owns implicit SF2 defaults. Keep legacy injection disabled.
+        // Spec resolver owns implicit SF2 defaults and effect-send resolution.
+        // Keep legacy default-modulator injection and legacy SF2/MIDI send multiplication disabled.
         compatOptions.applySf2ChannelDefaults = false;
+        compatOptions.multiplySf2MidiEffectsSends = false;
     }
 
     return compatOptions;
 }
 
 } // namespace XArkMidi
-

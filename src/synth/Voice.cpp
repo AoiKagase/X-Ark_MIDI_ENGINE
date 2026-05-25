@@ -836,10 +836,13 @@ void Voice::ApplyPan(f32 pan) {
 
 void Voice::RefreshEffectSends() {
     if (soundBankKind == SoundBankKind::Sf2) {
-        const f32 baseReverbSend = compatOptions.multiplySf2MidiEffectsSends
+        const bool useLegacyMultiply =
+            compatOptions.multiplySf2MidiEffectsSends &&
+            !compatOptions.useSf2SpecModulatorResolver;
+        const f32 baseReverbSend = useLegacyMultiply
             ? presetReverbSend * channelReverbSend
             : presetReverbSend;
-        const f32 baseChorusSend = compatOptions.multiplySf2MidiEffectsSends
+        const f32 baseChorusSend = useLegacyMultiply
             ? presetChorusSend * channelChorusSend
             : presetChorusSend;
         reverbSend = std::clamp(baseReverbSend * compatOptions.sf2ReverbSendScale, 0.0f, 1.0f);

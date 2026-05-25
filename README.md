@@ -359,7 +359,8 @@ Linux / macOS の CMake ビルドでは、既定で `XArkMidiTest`、`dump_midi_
 - `XAME_COMPAT_APPLY_SF2_CHANNEL_DEFAULT_MODULATORS` は非推奨です。
   `XAME_COMPAT_MODE_SF2_SPEC_204` では無視され、spec resolver 側の implicit default modulator が使用されます。
 - SF2 send と MIDI send の最終ミキシング方針は既定で加算です。
-  `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` を指定すると乗算に切り替えられます。
+  `XAME_COMPAT_MULTIPLY_SF2_MIDI_EFFECTS_SENDS` は legacy/diagnostic 向けです。
+  `XAME_COMPAT_MODE_SF2_SPEC_204` では無視され、spec resolver で解決された Reverb/Chorus send をそのまま使用します。
 
 ## 注意事項
 
