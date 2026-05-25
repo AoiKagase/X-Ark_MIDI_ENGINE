@@ -39,7 +39,7 @@ public sealed class MainForm : Form
     private readonly TrackBar _seekTrackBar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1, TickStyle = TickStyle.None, Enabled = false };
     private readonly Label _timeLabel = new() { AutoSize = true, Text = "00:00 / 00:00", Anchor = AnchorStyles.Left };
     // グループをPanelに変更
-    private readonly Panel _createOptionsPanel = new() { Dock = DockStyle.Top, AutoSize = true, BackColor = Color.White, Padding = new Padding(8) };
+    private readonly Panel _createOptionsPanel = new() { Dock = DockStyle.Top, AutoSize = true, BackColor = PanelBg, Padding = new Padding(8) };
     private readonly Label _createOptionsHeader = new() { Text = "Engine Create Options", Dock = DockStyle.Top, Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold), Margin = new Padding(0, 0, 0, 8) };
     private readonly NumericUpDown _maxSampleDataBytesUpDown = new() {
         Width = 150,
@@ -2100,10 +2100,15 @@ internal sealed class ChannelLevelMeterControl : Control
         for (int i = 0; i < 16; ++i) {
             var x = i * (slotWidth + 6);
             
+            // チャンネル単位（3本1セット）で枠を描画
+            using var borderPen = new Pen(Color.FromArgb(120, 255, 255, 255));
+            e.Graphics.DrawRectangle(borderPen, x, meterTop, slotWidth, meterHeight);
+            
             int barW = (slotWidth - 4) / 3;
-            DrawMeter(e.Graphics, x + 1, meterTop, barW, meterHeight, _dryLevels[i], _dryPeaks[i], ChannelColor(_dryLevels[i], (_soloMask & (1u << i)) != 0));
-            DrawMeter(e.Graphics, x + 1 + barW + 1, meterTop, barW, meterHeight, _reverbLevels[i], _reverbPeaks[i], ReverbLegendColor);
-            DrawMeter(e.Graphics, x + 1 + (barW + 1) * 2, meterTop, barW, meterHeight, _chorusLevels[i], _chorusPeaks[i], ChorusLegendColor);
+            // 内側のゲージ描画
+            DrawMeter(e.Graphics, x + 2, meterTop + 1, barW, meterHeight - 2, _dryLevels[i], _dryPeaks[i], ChannelColor(_dryLevels[i], (_soloMask & (1u << i)) != 0));
+            DrawMeter(e.Graphics, x + 2 + barW + 1, meterTop + 1, barW, meterHeight - 2, _reverbLevels[i], _reverbPeaks[i], ReverbLegendColor);
+            DrawMeter(e.Graphics, x + 2 + (barW + 1) * 2, meterTop + 1, barW, meterHeight - 2, _chorusLevels[i], _chorusPeaks[i], ChorusLegendColor);
         }
     }
 
@@ -2116,6 +2121,8 @@ internal sealed class ChannelLevelMeterControl : Control
 
         using var normalBrush = new SolidBrush(c);
         using var clipBrush = new SolidBrush(Color.Red);
+        // ピークインジケーターをより目立たせるための明るい色
+        using var peakPen = new Pen(Color.FromArgb(255, 255, 255, 255), 2.0f);
 
         for (int i = 0; i < totalSegs; i++) {
             var rect = new Rectangle(x, y + h - (i + 1) * (segH + gapH) + gapH, w, segH);
@@ -2123,7 +2130,8 @@ internal sealed class ChannelLevelMeterControl : Control
                 g.FillRectangle(i >= totalSegs * 0.9 ? clipBrush : normalBrush, rect);
             }
             if (i == peakSeg) {
-                g.FillRectangle(Brushes.Black, x, rect.Y, w, 1);
+                // ピークラインをより太く、明るく描画
+                g.DrawLine(peakPen, x, rect.Y + (segH / 2), x + w, rect.Y + (segH / 2));
             }
         }
     }
