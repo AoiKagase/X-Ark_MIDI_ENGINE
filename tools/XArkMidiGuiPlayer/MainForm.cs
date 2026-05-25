@@ -152,11 +152,12 @@ public sealed class MainForm : Form
     private readonly Button _toggleDetailsButton = new() { Text = "詳細設定...", AutoSize = true };
     private bool _showDetails = false;
     private readonly Panel _detailsPanel = new() { Dock = DockStyle.Top, Visible = false };
-    // Theme Colors
-    public static readonly Color PrimaryBg = Color.FromArgb(245, 245, 247);
+    // Modernized Theme Colors
+    public static readonly Color PrimaryBg = Color.FromArgb(20, 20, 22);
+    public static readonly Color PanelBg = Color.FromArgb(30, 30, 32);
+    public static readonly Color BorderColor = Color.FromArgb(45, 45, 48);
+    public static readonly Color TextColor = Color.FromArgb(220, 220, 220);
     public static readonly Color AccentColor = Color.FromArgb(0, 120, 215);
-    public static readonly Color PanelBg = Color.White;
-    public static readonly Color BorderColor = Color.FromArgb(220, 220, 220);
 
     // Modernized Theme Colors for Meters
     public static readonly Color DryColor = Color.FromArgb(100, 180, 120);
@@ -185,15 +186,36 @@ public sealed class MainForm : Form
         MinimumSize = new Size(980, 620);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = PrimaryBg;
+        ForeColor = TextColor;
 
-        // Apply FlatStyle to all buttons (simplified for this context)
+        // Apply FlatStyle to all buttons
         foreach (var btn in new[] { _browseMidiButton, _browseSoundFontButton, _playButton, _stopButton, _exportWavButton, _effectsOptionsButton, _toggleDetailsButton })
         {
             btn.FlatStyle = FlatStyle.Flat;
             btn.FlatAppearance.BorderSize = 0;
-            btn.BackColor = Color.White;
+            btn.BackColor = PanelBg;
+            btn.ForeColor = TextColor;
         }
 
+        foreach (var tb in new[] { _midiPathTextBox, _soundFontPathTextBox })
+        {
+            tb.BackColor = PanelBg;
+            tb.ForeColor = TextColor;
+            tb.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        foreach (var num in new[] { _maxSampleDataBytesUpDown, _maxSf2PdtaEntriesUpDown, _maxDlsPoolTableEntriesUpDown, _sf2ReverbSendScaleUpDown, _sf2ChorusSendScaleUpDown, _reverbReturnScaleUpDown, _chorusReturnScaleUpDown, _masterReverbSendScaleUpDown, _chorusToReverbScaleUpDown, _outputGainScaleUpDown })
+        {
+            num.BackColor = PanelBg;
+            num.ForeColor = TextColor;
+        }
+
+        _outputStageComboBox.BackColor = PanelBg;
+        _outputStageComboBox.ForeColor = TextColor;
+
+        _channelLevelGroup.ForeColor = TextColor;
+        _keyboardLabel.ForeColor = TextColor;
+        _createOptionsHeader.ForeColor = TextColor;
         for (int i = 0; i < ChannelCount; ++i) {
             _channels.Add(new ChannelRow {
                 Channel = i + 1,
@@ -2178,101 +2200,66 @@ internal sealed class OutputStageMeterControl : Control
     {
         DoubleBuffered = true;
         ResizeRedraw = true;
-        BackColor = SystemColors.Control;
-        Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
+        BackColor = Color.FromArgb(30, 30, 30); // Dark background
+        ForeColor = Color.FromArgb(200, 200, 200);
+        Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
     }
 
     public XArkMidiEngine.OutputStageMeter Meter
     {
         get => _meter;
-        set
-        {
-            _meter = value;
-            Invalidate();
-        }
+        set { _meter = value; Invalidate(); }
     }
 
-    public void Clear()
-    {
-        Meter = default;
-    }
+    public void Clear() => Meter = default;
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        e.Graphics.Clear(BackColor);
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        if (_meter.ProcessedFrames == 0) return;
 
         using var textBrush = new SolidBrush(ForeColor);
-        const int modeWidth = 118;
-        if (_meter.ProcessedFrames == 0) {
-            e.Graphics.DrawString("Out: --", Font, textBrush, 0, 14);
-            return;
-        }
+        e.Graphics.DrawString($"Mode: {_meter.Mode}", Font, textBrush, 4, 4);
 
-        var modeText = $"Out: {_meter.Mode}";
-        var modeSize = e.Graphics.MeasureString(modeText, Font);
-        if (modeSize.Width <= modeWidth - 4) {
-            e.Graphics.DrawString(modeText, Font, textBrush, 0, 2);
-        } else {
-            e.Graphics.DrawString("Out", Font, textBrush, 0, 2);
-            e.Graphics.DrawString(_meter.Mode.ToString(), Font, textBrush, 0, 18);
-        }
+        const int barHeight = 8;
+        const int labelWidth = 40;
+        int barWidth = (ClientSize.Width - labelWidth - 20) / 2;
+        int topY = 24;
 
-        const int labelWidth = 34;
-        const int barHeight = 7;
-        const int gapX = 10;
-        const int rowGap = 16;
-        const int leftX = modeWidth + labelWidth;
-        const int topY = 3;
-        int availableWidth = Math.Max(72, ClientSize.Width - leftX - gapX - labelWidth - 2);
-        int barWidth = Math.Max(24, availableWidth / 2);
-
-        DrawBar(e.Graphics, "In", _meter.InputPeak, 1.20f, leftX, topY, barWidth, barHeight, labelWidth, PeakColor(_meter.InputPeak));
-        DrawBar(e.Graphics, "Out", _meter.OutputPeak, 1.00f, leftX + barWidth + gapX + labelWidth, topY, barWidth, barHeight, labelWidth, PeakColor(_meter.OutputPeak));
-        DrawBar(e.Graphics, "Dense", _meter.DensityGain, 1.00f, leftX, topY + rowGap, barWidth, barHeight, labelWidth, GainColor(_meter.DensityGain));
-        DrawBar(e.Graphics, "Peak", _meter.PeakGain, 1.00f, leftX + barWidth + gapX + labelWidth, topY + rowGap, barWidth, barHeight, labelWidth, GainColor(_meter.PeakGain));
+        DrawBar(e.Graphics, "In", _meter.InputPeak, 1.20f, labelWidth, topY, barWidth, barHeight, PeakColor(_meter.InputPeak));
+        DrawBar(e.Graphics, "Out", _meter.OutputPeak, 1.00f, labelWidth + barWidth + 10, topY, barWidth, barHeight, PeakColor(_meter.OutputPeak));
+        DrawBar(e.Graphics, "Dense", _meter.DensityGain, 1.00f, labelWidth, topY + 16, barWidth, barHeight, GainColor(_meter.DensityGain));
+        DrawBar(e.Graphics, "Peak", _meter.PeakGain, 1.00f, labelWidth + barWidth + 10, topY + 16, barWidth, barHeight, GainColor(_meter.PeakGain));
     }
 
-    private void DrawBar(Graphics graphics, string label, float value, float scale, int x, int y, int width, int height, int labelWidth, Color fillColor)
+    private void DrawBar(Graphics g, string label, float val, float scale, int x, int y, int w, int h, Color color)
     {
         using var textBrush = new SolidBrush(ForeColor);
-        graphics.DrawString(label, Font, textBrush, x - labelWidth, y - 4);
+        g.DrawString(label, Font, textBrush, x - labelWidth(g), y - 2);
 
-        var frame = new Rectangle(x, y, width, height);
-        using var backBrush = new SolidBrush(Color.FromArgb(230, 230, 230));
-        using var borderPen = new Pen(Color.FromArgb(150, 150, 150));
-        graphics.FillRectangle(backBrush, frame);
-        graphics.DrawRectangle(borderPen, frame);
+        var bgRect = new System.Drawing.Drawing2D.GraphicsPath();
+        bgRect.AddArc(x, y, h, h, 90, 180);
+        bgRect.AddArc(x + w - h, y, h, h, 270, 180);
+        bgRect.CloseFigure();
+        g.FillPath(new SolidBrush(Color.FromArgb(60, 60, 60)), bgRect);
 
-        float normalized = scale <= 0.0f ? 0.0f : Math.Clamp(value / scale, 0.0f, 1.0f);
-        int fillWidth = Math.Clamp((int)Math.Round((width - 2) * normalized), 0, width - 2);
-        if (fillWidth > 0) {
-            using var fillBrush = new SolidBrush(fillColor);
-            graphics.FillRectangle(fillBrush, x + 1, y + 1, fillWidth, Math.Max(1, height - 2));
+        float normalized = Math.Clamp(val / scale, 0.0f, 1.0f);
+        if (normalized > 0.01f) {
+            var barRect = new System.Drawing.Drawing2D.GraphicsPath();
+            int fillW = Math.Max(h, (int)(w * normalized));
+            barRect.AddArc(x, y, h, h, 90, 180);
+            barRect.AddArc(x + fillW - h, y, h, h, 270, 180);
+            barRect.CloseFigure();
+            g.FillPath(new SolidBrush(color), barRect);
         }
     }
 
-    private static Color PeakColor(float value)
-    {
-        if (value >= 0.98f) {
-            return Color.FromArgb(214, 70, 56);
-        }
-        if (value >= 0.85f) {
-            return Color.FromArgb(226, 156, 48);
-        }
-        return Color.FromArgb(64, 150, 94);
-    }
+    private int labelWidth(Graphics g) => (int)g.MeasureString("Dense", Font).Width;
 
-    private static Color GainColor(float value)
-    {
-        if (value <= 0.80f) {
-            return Color.FromArgb(76, 128, 200);
-        }
-        if (value <= 0.94f) {
-            return Color.FromArgb(84, 158, 168);
-        }
-        return Color.FromArgb(120, 172, 88);
-    }
+    private static Color PeakColor(float v) => v >= 0.98f ? Color.FromArgb(231, 76, 60) : v >= 0.85f ? Color.FromArgb(241, 196, 15) : Color.FromArgb(46, 204, 113);
+    private static Color GainColor(float v) => v <= 0.80f ? Color.FromArgb(52, 152, 219) : v <= 0.94f ? Color.FromArgb(155, 89, 182) : Color.FromArgb(231, 76, 60);
 }
 
 internal sealed class PianoKeyboardControl : Control
