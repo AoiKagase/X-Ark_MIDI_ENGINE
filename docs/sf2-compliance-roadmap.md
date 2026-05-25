@@ -17,10 +17,11 @@
 - stricter NRPN generator ranges/units
 - realtime controller refresh coverage
 - public compatibility mode design
+- golden audio regression tests
 
 ## Remaining work
 
-- golden audio regression tests
+- none (checkpoint scope complete)
 
 ## Validation
 

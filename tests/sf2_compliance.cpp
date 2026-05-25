@@ -859,6 +859,70 @@ namespace {
         return numerator / denominator;
     }
 
+    void Require(bool condition, const char* message);
+
+    struct AudioGoldenSignature {
+        u64 frames = 0;
+        u64 pcmHash = 1469598103934665603ull;
+        i64 signedSum = 0;
+        u64 absSum = 0;
+        std::array<i16, 8> leftTaps{};
+        std::array<i16, 8> rightTaps{};
+    };
+
+    u64 Fnv1aAppendU16(u64 hash, u16 value) {
+        hash ^= static_cast<u8>(value & 0xFFu);
+        hash *= 1099511628211ull;
+        hash ^= static_cast<u8>((value >> 8) & 0xFFu);
+        hash *= 1099511628211ull;
+        return hash;
+    }
+
+    AudioGoldenSignature RenderSf2GoldenSignature(const std::vector<u8>& sf2Bytes,
+                                                  const std::vector<u8>& midiBytes,
+                                                  const SynthCompatOptions& options) {
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(sf2Bytes.data(), sf2Bytes.size()), sf2.ErrorMessage().c_str());
+
+        MidiFile midi;
+        Require(midi.LoadFromMemory(midiBytes.data(), midiBytes.size()), midi.ErrorMessage().c_str());
+
+        Synthesizer synth;
+        Require(synth.Init(&midi, &sf2, 44100, 2, options), synth.ErrorMessage().c_str());
+
+        AudioGoldenSignature signature{};
+        constexpr std::array<u64, 8> kTapFrames = { 0, 64, 128, 256, 512, 1024, 2048, 4096 };
+        size_t nextTap = 0;
+        std::array<i16, 1024> buffer{};
+        for (int guard = 0; guard < 400 && !synth.IsFinished(); ++guard) {
+            const u32 written = synth.Render(buffer.data(), 512);
+            if (written == 0) {
+                break;
+            }
+
+            for (u32 i = 0; i < written; ++i) {
+                const i16 left = buffer[i * 2];
+                const i16 right = buffer[i * 2 + 1];
+                signature.pcmHash = Fnv1aAppendU16(signature.pcmHash, static_cast<u16>(left));
+                signature.pcmHash = Fnv1aAppendU16(signature.pcmHash, static_cast<u16>(right));
+                signature.signedSum += static_cast<i32>(left) + static_cast<i32>(right);
+                signature.absSum += static_cast<u64>(std::abs(static_cast<i32>(left)));
+                signature.absSum += static_cast<u64>(std::abs(static_cast<i32>(right)));
+
+                while (nextTap < kTapFrames.size() && signature.frames == kTapFrames[nextTap]) {
+                    signature.leftTaps[nextTap] = left;
+                    signature.rightTaps[nextTap] = right;
+                    ++nextTap;
+                }
+                ++signature.frames;
+            }
+        }
+
+        Require(synth.IsFinished(),
+            "Golden audio signature render should finish within the guard window");
+        return signature;
+    }
+
     void Require(bool condition, const char* message) {
         if (!condition) {
             std::fprintf(stderr, "FAILED [%s]: %s\n", g_currentTestName, message);
@@ -2981,6 +3045,62 @@ namespace {
 
         Require(disabledFrames < enabledFrames,
             "Disabling internal effects should bypass post-mix reverb/chorus tail rendering");
+    }
+
+    void TestSf2GoldenAudioRegressionSignatures() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterFc, 9800));
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterQ, 150));
+        config.instGens.push_back(MakeSignedGen(GEN_Pan, 120));
+        config.instMods.push_back(MakeMod(0, GEN_StartAddrsOffset, 4, 0, 0));
+        config.instMods.push_back(MakeMod(0, GEN_EndAddrsOffset, -3, 0, 0));
+        config.instMods.push_back(MakeMod(2, GEN_InitialFilterFc, 900, 0, 0));
+        config.instMods.push_back(MakeMod(0x0081u, GEN_Pan, 200, 0, 0));
+
+        const std::vector<u8> sf2Bytes = BuildMinimalSf2(config);
+        const std::vector<u8> midiBytes = BuildSingleNoteMidi();
+
+        SynthCompatOptions legacy{};
+        legacy.applySf2ChannelDefaults = true;
+        legacy.applySf2VelocityToInitialAttenuation = true;
+        legacy.applySf2Cc7ToInitialAttenuation = true;
+        legacy.applySf2Cc10ToPan = true;
+        legacy.applySf2Cc11ToInitialAttenuation = true;
+
+        SynthCompatOptions spec = legacy;
+        spec.applySf2ChannelDefaults = false;
+        spec.applySf2VelocityToInitialAttenuation = false;
+        spec.applySf2Cc7ToInitialAttenuation = false;
+        spec.applySf2Cc10ToPan = false;
+        spec.applySf2Cc11ToInitialAttenuation = false;
+        spec.useSf2SpecModulatorResolver = true;
+
+        const AudioGoldenSignature legacySig =
+            RenderSf2GoldenSignature(sf2Bytes, midiBytes, legacy);
+        const AudioGoldenSignature specSig =
+            RenderSf2GoldenSignature(sf2Bytes, midiBytes, spec);
+
+        constexpr std::array<i16, 8> expectedLegacyLeft = { 0, 9, 6, 3, 1, 0, 2, 1 };
+        constexpr std::array<i16, 8> expectedLegacyRight = { 0, 11, 8, 4, 1, 0, 0, -2 };
+        constexpr std::array<i16, 8> expectedSpecLeft = { 0, 19, 14, 7, 2, 0, 2, -1 };
+        constexpr std::array<i16, 8> expectedSpecRight = { 0, 24, 18, 9, 3, 1, 3, -2 };
+
+        Require(legacySig.frames == 11264u, "Legacy golden render frame count changed");
+        Require(legacySig.pcmHash == 11803931783063108560ull, "Legacy golden PCM hash changed");
+        Require(legacySig.signedSum == -281, "Legacy golden signed sample sum changed");
+        Require(legacySig.absSum == 23827u, "Legacy golden absolute sample sum changed");
+        Require(legacySig.leftTaps == expectedLegacyLeft, "Legacy golden left tap samples changed");
+        Require(legacySig.rightTaps == expectedLegacyRight, "Legacy golden right tap samples changed");
+
+        Require(specSig.frames == 11264u, "Spec golden render frame count changed");
+        Require(specSig.pcmHash == 6396362925860688376ull, "Spec golden PCM hash changed");
+        Require(specSig.signedSum == -158, "Spec golden signed sample sum changed");
+        Require(specSig.absSum == 46920u, "Spec golden absolute sample sum changed");
+        Require(specSig.leftTaps == expectedSpecLeft, "Spec golden left tap samples changed");
+        Require(specSig.rightTaps == expectedSpecRight, "Spec golden right tap samples changed");
+
+        Require(legacySig.pcmHash != specSig.pcmHash,
+            "Golden signatures should differ between legacy and spec resolver modes");
     }
 
     void TestPublicCompatibilityFlagsRemainStable() {
@@ -6021,6 +6141,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestPostMixEffectsReverbLowTrimKeepsTailBalanced);
     RUN_TEST(TestSynthCompatCanDisableInternalEffects);
     RUN_TEST(TestSynthesizerCanDisableInternalEffectsTail);
+    RUN_TEST(TestSf2GoldenAudioRegressionSignatures);
     RUN_TEST(TestPublicCompatibilityFlagsRemainStable);
     RUN_TEST(TestNegativeSampleOffsetsArePreserved);
     RUN_TEST(TestSampleGeneratorModulatorDestinationsIgnored);
