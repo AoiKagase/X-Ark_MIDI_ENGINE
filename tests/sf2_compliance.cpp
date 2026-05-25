@@ -790,6 +790,14 @@ namespace {
         return gen;
     }
 
+    SFGenList MakeRangeGen(u16 oper, u8 lo, u8 hi) {
+        SFGenList gen{};
+        gen.sfGenOper = oper;
+        gen.genAmount.ranges.lo = lo;
+        gen.genAmount.ranges.hi = hi;
+        return gen;
+    }
+
     SFModList MakeMod(u16 src, u16 dest, i16 amount, u16 amtSrc, u16 transform) {
         SFModList mod{};
         mod.sfModSrcOper = src;
@@ -1522,7 +1530,7 @@ namespace {
             "Duplicate modulators should ignore the earlier definition");
     }
 
-    void TestDuplicateModulatorsWithDifferentTransformsAreDistinct() {
+    void TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 100, 0, 0));
         config.instMods.push_back(MakeMod(2, GEN_InitialFilterQ, 300, 0, 2));
@@ -1533,8 +1541,8 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
-        Require(zone.generators[GEN_InitialFilterQ] == 400,
-            "Different transform modulators should remain distinct and both apply");
+        Require(zone.generators[GEN_InitialFilterQ] == 300,
+            "Different transform duplicates should keep only the last definition");
     }
 
     void TestSf2ModulatorResolverSameZoneDuplicateRule() {
@@ -1550,7 +1558,7 @@ namespace {
         Require(resolved[0].mod.sfModTransOper == 0, "The transform of the last duplicate definition should be preserved");
     }
 
-    void TestSf2ModulatorResolverDifferentTransformsDoNotShareIdentity() {
+    void TestSf2ModulatorResolverDifferentTransformsUseLastDefinition() {
         const SFModList mods[] = {
             MakeMod(0x0502u, GEN_InitialAttenuation, 100, 0, 0),
             MakeMod(0x0502u, GEN_InitialAttenuation, 300, 0, 2),
@@ -1558,7 +1566,9 @@ namespace {
         const Sf2ModulatorZone zone{ Sf2ModulatorLevel::InstrumentLocal, mods, 2 };
         const std::vector<Sf2ResolvedModulator> resolved = BuildSf2EffectiveModulators({ zone }, false);
 
-        Require(resolved.size() == 2, "Different transforms should not collapse to the same modulator identity");
+        Require(resolved.size() == 1, "Different transform duplicates should collapse to one modulator identity");
+        Require(resolved[0].mod.modAmount == 300, "The last duplicate definition should remain");
+        Require(resolved[0].mod.sfModTransOper == 2, "The transform of the last duplicate definition should remain");
     }
 
     void TestSf2ModulatorResolverSevenBitNormalizationUsesSpecHeadroom() {
@@ -5093,11 +5103,7 @@ namespace {
     void TestVelocityZoneBoundary() {
         MinimalSf2Config config;
         // velRange lo=64, hi=127 のゾーンを作る
-        SFGenList velRange{};
-        velRange.sfGenOper = GEN_VelRange;
-        velRange.genAmount.ranges.lo = 64;
-        velRange.genAmount.ranges.hi = 127;
-        config.instGens.push_back(velRange);
+        config.instGens.push_back(MakeRangeGen(GEN_VelRange, 64, 127));
 
         const std::vector<u8> bytes = BuildMinimalSf2(config);
         Sf2File sf2;
@@ -5126,6 +5132,42 @@ namespace {
         Require(!hit,
             "Velocity just below boundary (vel7=63) should miss velRange lo=64");
 
+    }
+
+    void TestMisplacedRangeGeneratorsIgnored() {
+        MinimalSf2Config config;
+        config.presetGens.push_back(MakeSignedGen(GEN_Pan, 120));
+        config.presetGens.push_back(MakeRangeGen(GEN_KeyRange, 60, 60));
+        config.presetGens.push_back(MakeRangeGen(GEN_VelRange, 127, 127));
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterQ, 200));
+        config.instGens.push_back(MakeRangeGen(GEN_KeyRange, 60, 60));
+        config.instGens.push_back(MakeRangeGen(GEN_VelRange, 127, 127));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 64, 50000, nullptr, zones);
+        Require(zone.generators[GEN_Pan] == 120,
+            "Misplaced key/velocity ranges should be ignored without affecting neighboring generators");
+    }
+
+    void TestVelocityRangeAfterKeyRangeRemainsEffective() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeRangeGen(GEN_KeyRange, 60, 60));
+        config.instGens.push_back(MakeRangeGen(GEN_VelRange, 100, 127));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 60, 65535, zones, nullptr),
+            "Velocity range after key range should still be treated as a valid placement");
+        zones.clear();
+        Require(!sf2.FindZones(0, 0, 60, 20000, zones, nullptr),
+            "Velocity range after key range should still filter out lower velocities");
     }
 
     // ---------------------------------------------------------------------------
@@ -6090,7 +6132,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestInstrumentZoneTerminalSampleRule);
     RUN_TEST(TestPresetLevelIllegalSampleGeneratorsIgnored);
     RUN_TEST(TestDuplicateModulatorsUseLastDefinition);
-    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsAreDistinct);
+    RUN_TEST(TestDuplicateModulatorsWithDifferentTransformsUseLastDefinition);
     RUN_TEST(TestLinkedModulatorsFeedTargetSource);
     RUN_TEST(TestUnsupportedTransformReporting);
     RUN_TEST(TestUnsupportedAmountSourceIgnored);
@@ -6185,6 +6227,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2NrpnGeneratorRangesAndUnits);
     RUN_TEST(TestSoftPedalAffectsNewNoteOnOnly);
     RUN_TEST(TestVelocityZoneBoundary);
+    RUN_TEST(TestMisplacedRangeGeneratorsIgnored);
+    RUN_TEST(TestVelocityRangeAfterKeyRangeRemainsEffective);
     RUN_TEST(TestSm24Detection);
     RUN_TEST(TestSm24RequiresIfil204);
     RUN_TEST(TestSm24SizeIgnored);
@@ -6212,7 +6256,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestShortLoopIsAccepted);
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
-    RUN_TEST(TestSf2ModulatorResolverDifferentTransformsDoNotShareIdentity);
+    RUN_TEST(TestSf2ModulatorResolverDifferentTransformsUseLastDefinition);
     RUN_TEST(TestSf2ModulatorResolverSevenBitNormalizationUsesSpecHeadroom);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST

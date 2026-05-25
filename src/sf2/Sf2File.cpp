@@ -171,6 +171,17 @@ bool IsIllegalPresetGenerator(u16 oper) {
     }
 }
 
+bool IsRangeGeneratorPlacementValid(u16 oper, int positionInZone, u16 firstOperInZone) {
+    if (oper == GEN_KeyRange) {
+        return positionInZone == 0;
+    }
+    if (oper == GEN_VelRange) {
+        return positionInZone == 0 ||
+               (positionInZone == 1 && firstOperInZone == GEN_KeyRange);
+    }
+    return true;
+}
+
 bool IsPlainVelocitySource(u16 oper) {
     return oper == kModSrcVelocity;
 }
@@ -271,7 +282,7 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
 
     std::vector<ZoneModEntry> entries;
     entries.reserve(modEnd - modStart);
-    std::map<std::tuple<u16, u16, u16, u16>, int> duplicateMap;
+    std::map<std::tuple<u16, u16, u16>, int> duplicateMap;
 
     for (int i = modStart; i < modEnd; ++i) {
         const SFModList& mod = mods[i];
@@ -292,8 +303,7 @@ std::vector<ZoneModEntry> BuildEffectiveZoneModEntries(const std::vector<SFModLi
 
         const auto key = std::make_tuple(mod.sfModSrcOper,
                                          mod.sfModDestOper,
-                                         mod.sfModAmtSrcOper,
-                                         mod.sfModTransOper);
+                                         mod.sfModAmtSrcOper);
         auto it = duplicateMap.find(key);
         if (it != duplicateMap.end()) {
             entries[it->second].ignored = true;
@@ -1433,12 +1443,23 @@ bool Sf2File::AnalyzePresetBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, u8& 
     if (genEnd > genMax) genEnd = genMax;
 
     bool hasInstrument = false;
+    int positionInZone = 0;
+    u16 firstOperInZone = 0xFFFFu;
     for (int g = genStart; g < genEnd; ++g) {
         const u16 oper = presetGens_[g].sfGenOper;
         if (oper == GEN_Instrument) {
             outInstrumentIdx = presetGens_[g].genAmount.wAmount;
             hasInstrument = true;
             break;
+        }
+        if (positionInZone == 0) {
+            firstOperInZone = oper;
+        }
+        const bool validRangePlacement =
+            IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+        ++positionInZone;
+        if (!validRangePlacement) {
+            continue;
         }
         if (oper == GEN_KeyRange) {
             outKeyLo = presetGens_[g].genAmount.ranges.lo;
@@ -1474,12 +1495,23 @@ bool Sf2File::AnalyzeInstrumentBag(int bagIdx, bool& outIsGlobal, u8& outKeyLo, 
     if (genEnd > genMax) genEnd = genMax;
 
     bool hasSampleId = false;
+    int positionInZone = 0;
+    u16 firstOperInZone = 0xFFFFu;
     for (int g = genStart; g < genEnd; ++g) {
         const u16 oper = instGens_[g].sfGenOper;
         if (oper == GEN_SampleID) {
             outSampleIdx = instGens_[g].genAmount.wAmount;
             hasSampleId = true;
             break;
+        }
+        if (positionInZone == 0) {
+            firstOperInZone = oper;
+        }
+        const bool validRangePlacement =
+            IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+        ++positionInZone;
+        if (!validRangePlacement) {
+            continue;
         }
         if (oper == GEN_KeyRange) {
             outKeyLo = instGens_[g].genAmount.ranges.lo;
@@ -1531,9 +1563,20 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         int pgenMax  = static_cast<int>(presetGens_.size());
         if (genStart < 0 || genStart > pgenMax) genStart = pgenMax;
         if (genEnd   > pgenMax) genEnd = pgenMax;
+        int positionInZone = 0;
+        u16 firstOperInZone = 0xFFFFu;
         for (int g = genStart; g < genEnd; ++g) {
             u16 oper = presetGens_[g].sfGenOper;
             if (oper == GEN_Instrument) break;
+            if (positionInZone == 0) {
+                firstOperInZone = oper;
+            }
+            const bool validRangePlacement =
+                IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+            ++positionInZone;
+            if (!validRangePlacement) {
+                continue;
+            }
             if (oper >= GEN_COUNT) continue;
             if (IsIllegalPresetGenerator(oper)) continue;
             if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
@@ -1553,9 +1596,20 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
         int igenMax  = static_cast<int>(instGens_.size());
         if (genStart < 0 || genStart > igenMax) genStart = igenMax;
         if (genEnd   > igenMax) genEnd = igenMax;
+        int positionInZone = 0;
+        u16 firstOperInZone = 0xFFFFu;
         for (int g = genStart; g < genEnd; ++g) {
             u16 oper = instGens_[g].sfGenOper;
             if (oper == GEN_SampleID) break;
+            if (positionInZone == 0) {
+                firstOperInZone = oper;
+            }
+            const bool validRangePlacement =
+                IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+            ++positionInZone;
+            if (!validRangePlacement) {
+                continue;
+            }
             if (oper >= GEN_COUNT) continue;
             if (oper == GEN_SampleID || oper == GEN_SampleModes ||
                 oper == GEN_KeyRange || oper == GEN_VelRange) {
@@ -2171,9 +2225,20 @@ void Sf2File::GetGeneratorLayer(int genStart, int genEnd, i32 outGens[GEN_COUNT]
     if (genStart > genMax) return;
     if (genEnd > genMax) genEnd = genMax;
 
+    int positionInZone = 0;
+    u16 firstOperInZone = 0xFFFFu;
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = presetGens_[g].sfGenOper;
         if (oper == GEN_Instrument) break;
+        if (positionInZone == 0) {
+            firstOperInZone = oper;
+        }
+        const bool validRangePlacement =
+            IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+        ++positionInZone;
+        if (!validRangePlacement) {
+            continue;
+        }
         if (oper >= GEN_COUNT) continue;
         if (IsIllegalPresetGenerator(oper)) continue;
         outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(presetGens_[g].genAmount.shAmount));
@@ -2194,9 +2259,20 @@ void Sf2File::GetPresetGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) const 
     if (genStart < 0 || genStart > pgenMax) genStart = pgenMax;
     if (genEnd > pgenMax) genEnd = pgenMax;
 
+    int positionInZone = 0;
+    u16 firstOperInZone = 0xFFFFu;
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = presetGens_[g].sfGenOper;
         if (oper == GEN_Instrument) break;
+        if (positionInZone == 0) {
+            firstOperInZone = oper;
+        }
+        const bool validRangePlacement =
+            IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+        ++positionInZone;
+        if (!validRangePlacement) {
+            continue;
+        }
         if (oper >= GEN_COUNT) continue;
         if (IsIllegalPresetGenerator(oper)) continue;
         if (oper == GEN_SampleID || oper == GEN_KeyRange || oper == GEN_VelRange || oper == GEN_Instrument) {
@@ -2221,9 +2297,20 @@ void Sf2File::GetInstrumentGeneratorLayer(int bagIdx, i32 outGens[GEN_COUNT]) co
     if (genStart < 0 || genStart > igenMax) genStart = igenMax;
     if (genEnd > igenMax) genEnd = igenMax;
 
+    int positionInZone = 0;
+    u16 firstOperInZone = 0xFFFFu;
     for (int g = genStart; g < genEnd; ++g) {
         u16 oper = instGens_[g].sfGenOper;
         if (oper == GEN_SampleID) break;
+        if (positionInZone == 0) {
+            firstOperInZone = oper;
+        }
+        const bool validRangePlacement =
+            IsRangeGeneratorPlacementValid(oper, positionInZone, firstOperInZone);
+        ++positionInZone;
+        if (!validRangePlacement) {
+            continue;
+        }
         if (oper >= GEN_COUNT) continue;
         if (oper == GEN_SampleID || oper == GEN_SampleModes || oper == GEN_KeyRange || oper == GEN_VelRange) {
             outGens[oper] = ClampGeneratorValue(oper, static_cast<i32>(instGens_[g].genAmount.wAmount));

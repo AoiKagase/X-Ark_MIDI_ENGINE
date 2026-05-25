@@ -255,7 +255,7 @@ Sf2ModulatorValidity ValidateModulatorDefinition(const SFModList& mod, Sf2Modula
 std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
     std::vector<WorkingModulator> entries;
     entries.reserve(zone.count);
-    std::map<std::tuple<u16, u16, u16, u16>, int> duplicateMap;
+    std::map<std::tuple<u16, u16, u16>, int> duplicateMap;
     std::map<int, int> rawToEntry;
 
     for (size_t i = 0; i < zone.count; ++i) {
@@ -276,8 +276,7 @@ std::vector<WorkingModulator> NormalizeZone(const Sf2ModulatorZone& zone) {
 
         const auto key = std::make_tuple(mod.sfModSrcOper,
                                          mod.sfModDestOper,
-                                         mod.sfModAmtSrcOper,
-                                         mod.sfModTransOper);
+                                         mod.sfModAmtSrcOper);
         const auto duplicate = duplicateMap.find(key);
         if (duplicate != duplicateMap.end()) {
             entries[duplicate->second].ignored = true;
