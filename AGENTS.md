@@ -66,3 +66,13 @@ C# wrapper: `XArkMidiEngine.cs` with `Engine` class and `RenderAll()` helper.
 - AVX2 が利用可能な場合は自動的に有効化される（ランタイム検出）
 
 @RTK.md
+
+## SF2_RENDER_TUNED Guardrails
+
+- Do not copy, translate, or port external synthesizer code.
+- Do not add program-number-specific tuning.
+- Do not claim Sound Blaster/Audigy/Creative/EMU compatibility.
+- Keep `SF2_SPEC_204` unchanged unless explicitly requested.
+- Keep `SF2_RENDER_TUNED` changes isolated.
+- Run `sf2_compliance` after SF2-related changes.
+- Prefer small commits.

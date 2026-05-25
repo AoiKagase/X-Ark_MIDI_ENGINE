@@ -69,3 +69,14 @@
   - `Sf2Compliance` 全件パス
   - GUI ビルド成功
   - APIヘッダとラッパーの公開面に削除漏れがないことを確認
+
+## TODO: `SF2_RENDER_TUNED` phased roadmap
+
+- [x] Phase 0: Add `docs/sf2-render-tuned-roadmap.md` (documentation-only; no DSP changes).
+- [ ] Phase 1: Benchmark harness for `FluidR3_GM2-2.SF2` + `fighting-the-spirit.mid` (Ch2 solo path included).
+- [ ] Phase 2: Dry analysis first (`InternalEffect OFF`) and isolate interpolation/filter/layer/output gaps.
+- [ ] Phase 3: Resampler experiments in `SF2_RENDER_TUNED` only; keep `SF2_SPEC_204` unchanged.
+- [ ] Phase 4: Filter-response experiments in `SF2_RENDER_TUNED` only; keep resolver/NRPN unchanged.
+- [ ] Phase 5: InternalEffect headroom experiments after dry output convergence.
+- [ ] Phase 6: Output-stage protection experiments without aggressive compression.
+- [ ] Add property-based diagnostics (no program-number/file-name-specific tuning branches).
