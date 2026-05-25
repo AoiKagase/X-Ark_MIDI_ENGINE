@@ -848,6 +848,17 @@ namespace {
         return std::fabs(lhs - rhs) <= epsilon;
     }
 
+    f64 ComputeBiquadDcGain(const Voice& voice) {
+        const f64 denominator = 1.0 + static_cast<f64>(voice.filterA1) + static_cast<f64>(voice.filterA2);
+        if (std::fabs(denominator) < 1.0e-12) {
+            return 0.0;
+        }
+        const f64 numerator = static_cast<f64>(voice.filterB0) +
+            static_cast<f64>(voice.filterB1) +
+            static_cast<f64>(voice.filterB2);
+        return numerator / denominator;
+    }
+
     void Require(bool condition, const char* message) {
         if (!condition) {
             std::fprintf(stderr, "FAILED [%s]: %s\n", g_currentTestName, message);
@@ -4016,6 +4027,44 @@ namespace {
         Require(voice.vibLfoToPitchCents == 75.0f, "VibLfoToPitch should initialize vibrato pitch depth");
     }
 
+    void TestFilterQSpecLikeResponse() {
+        auto makeVoice = [](i32 filterFc, i32 filterQ) {
+            MinimalSf2Config config;
+            config.instGens.push_back(MakeSignedGen(GEN_InitialFilterFc, static_cast<i16>(filterFc)));
+            config.instGens.push_back(MakeSignedGen(GEN_InitialFilterQ, static_cast<i16>(filterQ)));
+
+            const std::vector<u8> bytes = BuildMinimalSf2(config);
+            Sf2File sf2;
+            Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+            std::vector<ResolvedZone> zones;
+            const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, nullptr, zones);
+
+            Voice voice;
+            voice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(), 0, 0, 0, 60, 65535, 1, 44100, 0.0,
+                SoundBankKind::Sf2, SynthCompatOptions{});
+            return voice;
+        };
+
+        const Voice qZero = makeVoice(9000, 0);
+        const Voice qHundred = makeVoice(9000, 100);
+        const f64 dcGainZero = ComputeBiquadDcGain(qZero);
+        const f64 dcGainHundred = ComputeBiquadDcGain(qHundred);
+        const f64 expectedDcGainHundred = std::pow(10.0, -100.0 / 400.0);
+
+        Require(NearlyEqual(dcGainZero, 1.0, 1.0e-5),
+            "initialFilterQ=0 should keep filter DC gain near unity");
+        Require(NearlyEqual(dcGainHundred, expectedDcGainHundred, 2.0e-5),
+            "initialFilterQ should reduce DC gain by half the specified dB amount");
+
+        const Voice highCutoffNoQ = makeVoice(13500, 0);
+        const Voice highCutoffWithQ = makeVoice(13500, 100);
+        Require(!highCutoffNoQ.filterEnabled,
+            "initialFilterFc open cutoff with zero Q should keep filter bypassed");
+        Require(highCutoffWithQ.filterEnabled,
+            "initialFilterQ above zero should keep the filter active at open cutoff");
+    }
+
     void TestPressureSources() {
         MinimalSf2Config config;
         config.instMods.push_back(MakeMod(10, GEN_Pan, 500, 0, 0));
@@ -5793,6 +5842,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestEnvelopePitchAndKeynumScaling);
     RUN_TEST(TestEnvelopeReleaseRecalculation);
     RUN_TEST(TestFilterAndLfoInitialization);
+    RUN_TEST(TestFilterQSpecLikeResponse);
     RUN_TEST(TestPressureSources);
     RUN_TEST(TestPitchWheelSensitivityAmountSource);
     RUN_TEST(TestRemainingDefaultModulators);

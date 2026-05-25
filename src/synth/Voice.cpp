@@ -105,8 +105,15 @@ f64 CentsToHertz(i32 cents) {
 }
 
 f32 FilterQCbToQ(i32 qCb) {
-    const f32 normalized = static_cast<f32>(std::clamp(qCb, kFilterQCbMin, kFilterQCbMax)) / static_cast<f32>(kFilterQCbMax);
-    return std::clamp(0.7071f + normalized * 11.0f, 0.7071f, 12.0f);
+    const f32 clampedQCb = static_cast<f32>(std::clamp(qCb, kFilterQCbMin, kFilterQCbMax));
+    // SF2 initialFilterQ is specified in centibels above DC at cutoff.
+    return std::pow(10.0f, clampedQCb / 200.0f);
+}
+
+f32 FilterQCbToDcGain(i32 qCb) {
+    const f32 clampedQCb = static_cast<f32>(std::clamp(qCb, kFilterQCbMin, kFilterQCbMax));
+    // SF2 spec: DC gain is reduced by half of the specified initialFilterQ gain.
+    return std::pow(10.0f, -clampedQCb / 400.0f);
 }
 
 void ComputeLowPassCoeffs(i32 fcCents, i32 qCb, u32 sampleRate,
@@ -116,11 +123,12 @@ void ComputeLowPassCoeffs(i32 fcCents, i32 qCb, u32 sampleRate,
     const f64 sinW = std::sin(omega);
     const f64 cosW = std::cos(omega);
     const f64 q = static_cast<f64>(FilterQCbToQ(qCb));
+    const f64 dcGain = static_cast<f64>(FilterQCbToDcGain(qCb));
     const f64 alpha = sinW / (2.0 * q);
     const f64 a0 = 1.0 + alpha;
-    b0 = static_cast<f32>(((1.0 - cosW) * 0.5) / a0);
-    b1 = static_cast<f32>((1.0 - cosW) / a0);
-    b2 = static_cast<f32>(((1.0 - cosW) * 0.5) / a0);
+    b0 = static_cast<f32>((((1.0 - cosW) * 0.5) / a0) * dcGain);
+    b1 = static_cast<f32>(((1.0 - cosW) / a0) * dcGain);
+    b2 = static_cast<f32>((((1.0 - cosW) * 0.5) / a0) * dcGain);
     a1 = static_cast<f32>((-2.0 * cosW) / a0);
     a2 = static_cast<f32>((1.0 - alpha) / a0);
 }
@@ -456,7 +464,8 @@ void Voice::ApplyResolvedZoneLfoState(const i32* gen) {
     vibLfoPhaseStep = HertzToPhaseStep(CentsToHertz(gen[GEN_FreqVibLFO]), outputSampleRate);
     vibLfoToPitchCents = static_cast<f32>(gen[GEN_VibLfoToPitch]);
 
-    filterEnabled = (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
+    filterEnabled = (filterCurrentFcCents < 13500 || filterQCb > 0 ||
+        filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
     if (filterEnabled) {
         ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
     }
@@ -511,7 +520,8 @@ void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = filterBaseFcCents;
     useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);
-    filterEnabled = (filterCurrentFcCents < 13500 || filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
+    filterEnabled = (filterCurrentFcCents < 13500 || filterQCb > 0 ||
+        filterModEnvToFcCents != 0 || modLfoToFilterFcCents != 0.0f);
     if (filterEnabled) {
         ComputeLowPassCoeffs(filterCurrentFcCents, filterQCb, outputSampleRate, filterB0, filterB1, filterB2, filterA1, filterA2);
     }
