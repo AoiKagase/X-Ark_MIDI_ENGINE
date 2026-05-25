@@ -2013,6 +2013,10 @@ internal sealed class ChannelLevelMeterControl : Control
     private readonly float[] _dryLevels = new float[16];
     private readonly float[] _reverbLevels = new float[16];
     private readonly float[] _chorusLevels = new float[16];
+    private readonly float[] _dryPeaks = new float[16];
+    private readonly float[] _reverbPeaks = new float[16];
+    private readonly float[] _chorusPeaks = new float[16];
+    private readonly long[] _peakHoldTicks = new long[48];
     private uint _muteMask;
     private uint _soloMask;
 
@@ -2024,28 +2028,32 @@ internal sealed class ChannelLevelMeterControl : Control
         Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
     }
 
-    public void SetLevels(
-        IReadOnlyList<float> audioPeaks,
-        IReadOnlyList<float> reverbSendPeaks,
-        IReadOnlyList<float> chorusSendPeaks,
-        uint muteMask,
-        uint soloMask)
+    public void SetLevels(IReadOnlyList<float> audioPeaks, IReadOnlyList<float> reverbSendPeaks, IReadOnlyList<float> chorusSendPeaks, uint muteMask, uint soloMask)
     {
         _muteMask = muteMask;
         _soloMask = soloMask;
-        for (int i = 0; i < _dryLevels.Length; ++i) {
+        long now = Environment.TickCount64;
+        for (int i = 0; i < 16; ++i) {
             _dryLevels[i] = SmoothLevel(_dryLevels[i], i < audioPeaks.Count ? audioPeaks[i] : 0.0f);
+            UpdatePeak(_dryLevels[i], ref _dryPeaks[i], ref _peakHoldTicks[i], now);
             _reverbLevels[i] = SmoothLevel(_reverbLevels[i], i < reverbSendPeaks.Count ? reverbSendPeaks[i] : 0.0f);
+            UpdatePeak(_reverbLevels[i], ref _reverbPeaks[i], ref _peakHoldTicks[16 + i], now);
             _chorusLevels[i] = SmoothLevel(_chorusLevels[i], i < chorusSendPeaks.Count ? chorusSendPeaks[i] : 0.0f);
+            UpdatePeak(_chorusLevels[i], ref _chorusPeaks[i], ref _peakHoldTicks[32 + i], now);
         }
         Invalidate();
     }
 
+    private static void UpdatePeak(float level, ref float peak, ref long holdUntil, long now)
+    {
+        if (level > peak) { peak = level; holdUntil = now + 600; }
+        else if (now > holdUntil) { peak = Math.Max(level, peak * 0.92f); }
+    }
+
     public void Clear()
     {
-        Array.Clear(_dryLevels, 0, _dryLevels.Length);
-        Array.Clear(_reverbLevels, 0, _reverbLevels.Length);
-        Array.Clear(_chorusLevels, 0, _chorusLevels.Length);
+        Array.Clear(_dryLevels, 0, 16); Array.Clear(_reverbLevels, 0, 16); Array.Clear(_chorusLevels, 0, 16);
+        Array.Clear(_dryPeaks, 0, 16); Array.Clear(_reverbPeaks, 0, 16); Array.Clear(_chorusPeaks, 0, 16);
         _muteMask = 0;
         _soloMask = 0;
         Invalidate();
@@ -2058,43 +2066,45 @@ internal sealed class ChannelLevelMeterControl : Control
 
         var width = ClientSize.Width;
         var height = ClientSize.Height;
-        if (width <= 0 || height <= 0) {
-            return;
-        }
+        if (width <= 0 || height <= 0) return;
 
-        const int channelCount = 16;
-        const int gap = 4;
-        const int legendHeight = 18;
-        const int labelHeight = 18;
-        var meterTop = 6 + legendHeight;
-        var meterHeight = Math.Max(12, height - labelHeight - meterTop - 6);
-        var slotWidth = Math.Max(10, (width - gap * (channelCount - 1)) / channelCount);
+        const int legendHeight = 20;
+        int meterTop = 4 + legendHeight;
+        int meterHeight = Math.Max(12, height - legendHeight - 24);
+        int slotWidth = Math.Max(12, (width - 6 * 15) / 16);
 
-        using var labelBrush = new SolidBrush(ForeColor);
-        using var framePen = new Pen(Color.FromArgb(150, 150, 150));
-        using var mutedBrush = new SolidBrush(Color.FromArgb(214, 214, 214));
-        using var backBrush = new SolidBrush(Color.FromArgb(232, 232, 232));
-
+        using var backBrush = new SolidBrush(Color.FromArgb(210, 210, 210));
         DrawLegend(e.Graphics, width);
 
-        for (int i = 0; i < channelCount; ++i) {
-            var x = i * (slotWidth + gap);
-            var frame = new Rectangle(x, meterTop, slotWidth, meterHeight);
-            var isMuted = (_muteMask & (1u << i)) != 0;
-            var isSoloed = (_soloMask & (1u << i)) != 0;
-            e.Graphics.FillRectangle(isMuted ? mutedBrush : backBrush, frame);
-            e.Graphics.DrawRectangle(framePen, frame);
+        for (int i = 0; i < 16; ++i) {
+            var x = i * (slotWidth + 6);
+            e.Graphics.FillRectangle(backBrush, x, meterTop, slotWidth, meterHeight);
+            
+            int barW = (slotWidth - 4) / 3;
+            DrawMeter(e.Graphics, x + 1, meterTop, barW, meterHeight, _dryLevels[i], _dryPeaks[i], ChannelColor(_dryLevels[i], (_soloMask & (1u << i)) != 0));
+            DrawMeter(e.Graphics, x + 1 + barW + 1, meterTop, barW, meterHeight, _reverbLevels[i], _reverbPeaks[i], ReverbLegendColor);
+            DrawMeter(e.Graphics, x + 1 + (barW + 1) * 2, meterTop, barW, meterHeight, _chorusLevels[i], _chorusPeaks[i], ChorusLegendColor);
+        }
+    }
 
-            var innerWidth = Math.Max(1, slotWidth - 2);
-            var barGap = innerWidth >= 9 ? 1 : 0;
-            var barWidth = Math.Max(1, (innerWidth - barGap * 2) / 3);
-            DrawSubMeter(e.Graphics, x + 1, meterTop + 1, barWidth, meterHeight - 2, _dryLevels[i], ChannelColor(_dryLevels[i], isSoloed));
-            DrawSubMeter(e.Graphics, x + 1 + barWidth + barGap, meterTop + 1, barWidth, meterHeight - 2, _reverbLevels[i], ReverbLegendColor);
-            DrawSubMeter(e.Graphics, x + 1 + (barWidth + barGap) * 2, meterTop + 1, barWidth, meterHeight - 2, _chorusLevels[i], ChorusLegendColor);
+    private void DrawMeter(Graphics g, int x, int y, int w, int h, float l, float p, Color c)
+    {
+        int segH = 3; int gapH = 1;
+        int totalSegs = h / (segH + gapH);
+        int litSegs = (int)(l * totalSegs);
+        int peakSeg = (int)(p * totalSegs);
 
-            var label = (i + 1).ToString();
-            var labelSize = e.Graphics.MeasureString(label, Font);
-            e.Graphics.DrawString(label, Font, labelBrush, x + (slotWidth - labelSize.Width) * 0.5f, meterTop + meterHeight + 1);
+        using var normalBrush = new SolidBrush(c);
+        using var clipBrush = new SolidBrush(Color.Red);
+
+        for (int i = 0; i < totalSegs; i++) {
+            var rect = new Rectangle(x, y + h - (i + 1) * (segH + gapH) + gapH, w, segH);
+            if (i < litSegs) {
+                g.FillRectangle(i >= totalSegs * 0.9 ? clipBrush : normalBrush, rect);
+            }
+            if (i == peakSeg) {
+                g.FillRectangle(Brushes.Black, x, rect.Y, w, 1);
+            }
         }
     }
 
@@ -2113,13 +2123,9 @@ internal sealed class ChannelLevelMeterControl : Control
         for (int i = 0; i < labels.Length; ++i) {
             itemWidths[i] = swatchSize + 4 + (int)Math.Ceiling(graphics.MeasureString(labels[i].Item1, Font).Width);
             totalWidth += itemWidths[i];
-            if (i > 0) {
-                totalWidth += itemGap;
-            }
+            if (i > 0) totalWidth += itemGap;
         }
-        if (totalWidth > width - 8) {
-            return;
-        }
+        if (totalWidth > width - 8) return;
 
         var x = Math.Max(0, width - totalWidth - 4);
         const int y = 4;
