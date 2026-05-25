@@ -226,6 +226,7 @@ struct ResolvedZone {
     i32 presetBagIndex = -1;
     i32 instrumentBagIndex = -1;
     i32 sampleId = -1;
+    i32 sf2InitialPitchAddCents = 0;
     u16 sf2ModulatorDependencies = 0;
     u8 sf2ModulatorDestinationClasses = 0;
     u8 sf2ModulatorChannelControllerDestinationClasses = 0;

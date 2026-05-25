@@ -1512,6 +1512,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
     outZone.presetBagIndex = presetBagIdx;
     outZone.instrumentBagIndex = instBagIdx;
     outZone.sampleId = -1;
+    outZone.sf2InitialPitchAddCents = 0;
     const i32* defaults = GetSF2GeneratorDefaults();
     constexpr i32 kUnset = std::numeric_limits<i32>::min();
 
@@ -1671,7 +1672,7 @@ void Sf2File::ResolveZone(int globalPresetBagIdx, int globalInstBagIdx, int inst
                 continue;
             }
             if (evaluation.destination == GEN_COUNT) {
-                ApplyModulatorDelta(outZone, kModDestInitialPitch, evaluation.amount);
+                outZone.sf2InitialPitchAddCents += evaluation.amount;
             } else {
                 ApplyModulatorDelta(outZone, evaluation.destination, evaluation.amount);
             }

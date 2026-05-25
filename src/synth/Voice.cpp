@@ -478,16 +478,23 @@ void Voice::ApplyResolvedZoneMixState(const ResolvedZone& zone) {
     RefreshOutputGains();
 }
 
-void Voice::ApplyResolvedZonePitchState(const i32* gen, i32 effectiveKey) {
+void Voice::ApplyResolvedZonePitchState(const ResolvedZone& zone, i32 effectiveKey) {
+    const i32* gen = zone.generators;
     const i32 rootKey = (gen[GEN_OverridingRootKey] >= 0) ? gen[GEN_OverridingRootKey] : sampleHeader->originalPitch;
     const f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    const f64 fineTune = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(sampleHeader, compatOptions);
-    const f64 coarseTune = static_cast<f64>(gen[GEN_CoarseTune]);
+    const i32 totalTuneCents = std::clamp(
+        gen[GEN_CoarseTune] * 100 + gen[GEN_FineTune] + zone.sf2InitialPitchAddCents,
+        -12099,
+        12099);
+    const f64 coarseFineSemitones = static_cast<f64>(totalTuneCents) / 100.0;
+    const f64 samplePitchCorrectionSemitones =
+        EffectiveSamplePitchCorrection(sampleHeader, compatOptions) / 100.0;
     if (specialRoute.enabled && specialRoute.clampAboveRoot &&
         specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
         effectiveKey = specialRoute.clampRootKey;
     }
-    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor + coarseTune + fineTune / 100.0;
+    f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor +
+                        coarseFineSemitones - samplePitchCorrectionSemitones;
     if (specialRoute.enabled) {
         baseSemitones += specialRoute.detuneSemitones;
     }
@@ -531,7 +538,7 @@ void Voice::ApplyResolvedZoneDestinationClassState(const ResolvedZone& zone, i32
         ApplyResolvedZoneFilterState(zone);
     }
     if ((sf2DestinationClasses & pitchMask) != 0) {
-        ApplyResolvedZonePitchState(gen, effectiveKey);
+        ApplyResolvedZonePitchState(zone, effectiveKey);
     }
 }
 
@@ -672,11 +679,13 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
                   : smp->originalPitch;
     // ScaleTuning: cents/semitone (デフォルト100 = 通常の半音スケール)
     f64 scaleTuningFactor = static_cast<f64>(gen[GEN_ScaleTuning]) / 100.0;
-    // SF2 sample header pitchCorrection is part of the sample's original pitch.
-    // A positive correction means the recorded sample is sharper than originalPitch,
-    // so playback for a target key must subtract it from the resampling offset.
-    f64 fineTune          = static_cast<f64>(gen[GEN_FineTune]) - EffectiveSamplePitchCorrection(smp, this->compatOptions); // cents
-    f64 coarseTune        = static_cast<f64>(gen[GEN_CoarseTune]);                        // semitones
+    const i32 totalTuneCents = std::clamp(
+        gen[GEN_CoarseTune] * 100 + gen[GEN_FineTune] + zone.sf2InitialPitchAddCents,
+        -12099,
+        12099);
+    const f64 coarseFineSemitones = static_cast<f64>(totalTuneCents) / 100.0;
+    const f64 samplePitchCorrectionSemitones =
+        EffectiveSamplePitchCorrection(smp, this->compatOptions) / 100.0;
 
     if (specialRoute.enabled && specialRoute.clampAboveRoot &&
         specialRoute.clampRootKey >= 0 && effectiveKey > specialRoute.clampRootKey) {
@@ -684,8 +693,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     }
 
     f64 baseSemitones = static_cast<f64>(effectiveKey - rootKey) * scaleTuningFactor
-                      + coarseTune
-                      + fineTune / 100.0;
+                      + coarseFineSemitones
+                      - samplePitchCorrectionSemitones;
     if (specialRoute.enabled) {
         baseSemitones += specialRoute.detuneSemitones;
     }
@@ -701,8 +710,8 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
                    / static_cast<f64>(sampleRate);
     if (portamentoSourceKey >= 0 && portamentoTime > 0) {
         const f64 sourceSemitones = static_cast<f64>(portamentoSourceKey - rootKey) * scaleTuningFactor
-                                  + coarseTune
-                                  + fineTune / 100.0;
+                                  + coarseFineSemitones
+                                  - samplePitchCorrectionSemitones;
         portamentoOffsetSemitones = sourceSemitones - baseSemitones;
         const f64 t = static_cast<f64>(portamentoTime) / 127.0;
         const f64 glideSeconds = 0.012 + t * t * 0.75;

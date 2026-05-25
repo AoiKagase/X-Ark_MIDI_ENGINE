@@ -1304,7 +1304,7 @@ namespace {
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
-        const i32 totalCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune];
+        const i32 totalCents = zone.sf2InitialPitchAddCents;
         const double pitchWheel = Sf2SpecNormalize14BitBipolar(ctx.pitchBend);
         const double sensitivity = std::clamp(
             (static_cast<double>(ctx.pitchWheelSensitivitySemitones) +
@@ -1314,6 +1314,8 @@ namespace {
         const i32 expectedCents = static_cast<i32>(std::lround(12700.0 * pitchWheel * sensitivity));
         Require(totalCents == expectedCents,
             "Spec resolver pitch wheel default should use SF2 source headroom mapping");
+        Require(zone.generators[GEN_CoarseTune] == 0 && zone.generators[GEN_FineTune] == 0,
+            "Spec resolver internal initial-pitch node should not burn into coarse/fine generators");
     }
 
     void TestBagIndexHelpersSkipGlobalZones() {

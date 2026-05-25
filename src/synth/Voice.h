@@ -238,7 +238,7 @@ private:
     void ApplyResolvedZoneEnvelopeState(const i32* gen, i32 effectiveKey);
     void ApplyResolvedZoneLfoState(const i32* gen);
     void ApplyResolvedZoneMixState(const ResolvedZone& zone);
-    void ApplyResolvedZonePitchState(const i32* gen, i32 effectiveKey);
+    void ApplyResolvedZonePitchState(const ResolvedZone& zone, i32 effectiveKey);
     void ApplyResolvedZoneFilterState(const ResolvedZone& zone);
     void ApplyResolvedZoneDestinationClassState(const ResolvedZone& zone, i32 effectiveKey, u8 sf2DestinationClasses);
     void ApplyResolvedZoneControllerState(const ResolvedZone& zone, i32 effectiveKey);
