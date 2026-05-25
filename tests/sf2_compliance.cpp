@@ -809,6 +809,24 @@ namespace {
         ctx.pitchWheelSensitivitySemitones = 2;
     }
 
+    double Sf2SpecNormalize7Bit(u8 value) {
+        return static_cast<double>(std::min<u8>(value, 127u)) / 128.0;
+    }
+
+    double Sf2SpecNormalize14BitBipolar(i16 value) {
+        constexpr double kPitchWheelMax = 8191.0 / 8192.0;
+        if (value >= 0) {
+            return std::clamp(static_cast<double>(value) / 8192.0, 0.0, kPitchWheelMax);
+        }
+        return std::clamp(static_cast<double>(value) / 8192.0, -1.0, 0.0);
+    }
+
+    double Sf2SpecNormalizeVelocity16(u16 velocity) {
+        const u16 velocity7 = static_cast<u16>(
+            (static_cast<u32>(velocity) * 127u + 32767u) / 65535u);
+        return Sf2SpecNormalize7Bit(static_cast<u8>(std::min<u16>(velocity7, 127u)));
+    }
+
     i32 ExpectedVelocityAttenuationCb(u16 velocity) {
         if (velocity == 0) return 960;
         if (velocity >= 65535) return 0;
@@ -1263,7 +1281,9 @@ namespace {
             std::snprintf(message, sizeof(message),
                 "Spec resolver should own default modulators and avoid legacy default-modulator double application (actual=%d)",
                 zone.generators[GEN_Pan]);
-            Require(zone.generators[GEN_Pan] == 260, message);
+            const i32 expectedPan = static_cast<i32>(std::lround(
+                1000.0 * (2.0 * Sf2SpecNormalize7Bit(ctx.ccValues[10]) - 1.0)));
+            Require(zone.generators[GEN_Pan] == expectedPan, message);
         }
     }
 
@@ -1283,8 +1303,15 @@ namespace {
         std::vector<ResolvedZone> zones;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, 65535, &ctx, zones);
         const i32 totalCents = zone.generators[GEN_CoarseTune] * 100 + zone.generators[GEN_FineTune];
-        Require(totalCents == 200,
-            "Spec resolver pitch wheel default should map +8191 at 2 semitones to about +200 cents");
+        const double pitchWheel = Sf2SpecNormalize14BitBipolar(ctx.pitchBend);
+        const double sensitivity = std::clamp(
+            (static_cast<double>(ctx.pitchWheelSensitivitySemitones) +
+             static_cast<double>(ctx.pitchWheelSensitivityCents) / 100.0) / 128.0,
+            0.0,
+            127.0 / 128.0);
+        const i32 expectedCents = static_cast<i32>(std::lround(12700.0 * pitchWheel * sensitivity));
+        Require(totalCents == expectedCents,
+            "Spec resolver pitch wheel default should use SF2 source headroom mapping");
     }
 
     void TestBagIndexHelpersSkipGlobalZones() {
@@ -1455,20 +1482,24 @@ namespace {
         Require(resolved.size() == 2, "Different transforms should not collapse to the same modulator identity");
     }
 
-    void TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange() {
+    void TestSf2ModulatorResolverSevenBitNormalizationUsesSpecHeadroom() {
         const SFModList cc127Mods[] = {
-            MakeMod(static_cast<u16>(0x80u | 7u), GEN_Pan, 1, 0, 0),
+            MakeMod(static_cast<u16>(0x80u | 7u), GEN_Pan, 128, 0, 0),
         };
         const SFModList keyMods[] = {
-            MakeMod(3u, GEN_InitialAttenuation, 1, 0, 0),
+            MakeMod(3u, GEN_InitialAttenuation, 128, 0, 0),
         };
         const SFModList channelPressureMods[] = {
-            MakeMod(13u, GEN_InitialFilterQ, 1, 0, 0),
+            MakeMod(13u, GEN_InitialFilterQ, 128, 0, 0),
+        };
+        const SFModList velocityMods[] = {
+            MakeMod(2u, GEN_ChorusEffectsSend, 128, 0, 0),
         };
 
         const Sf2ModulatorZone ccZone{ Sf2ModulatorLevel::InstrumentLocal, cc127Mods, 1 };
         const Sf2ModulatorZone keyZone{ Sf2ModulatorLevel::InstrumentLocal, keyMods, 1 };
         const Sf2ModulatorZone channelPressureZone{ Sf2ModulatorLevel::InstrumentLocal, channelPressureMods, 1 };
+        const Sf2ModulatorZone velocityZone{ Sf2ModulatorLevel::InstrumentLocal, velocityMods, 1 };
 
         ModulatorContext ctx{};
         ctx.ccValues[7] = 127;
@@ -1477,23 +1508,28 @@ namespace {
         const auto cc127Resolved = BuildSf2EffectiveModulators({ ccZone }, false);
         const auto keyResolved = BuildSf2EffectiveModulators({ keyZone }, false);
         const auto channelPressureResolved = BuildSf2EffectiveModulators({ channelPressureZone }, false);
+        const auto velocityResolved = BuildSf2EffectiveModulators({ velocityZone }, false);
 
         const auto cc127Evaluated = EvaluateSf2Modulators(cc127Resolved, 60, 65535, &ctx);
         const auto key127Evaluated = EvaluateSf2Modulators(keyResolved, 127, 65535, &ctx);
         const auto channelPressure127Evaluated = EvaluateSf2Modulators(channelPressureResolved, 60, 65535, &ctx);
+        const auto velocity127Evaluated = EvaluateSf2Modulators(velocityResolved, 60, 65535, &ctx);
 
-        Require(cc127Evaluated.size() == 1 && cc127Evaluated[0].amount == 1,
-            "CC127 should decode to a source value of 1.0");
-        Require(key127Evaluated.size() == 1 && key127Evaluated[0].amount == 1,
-            "Key127 should decode to a source value of 1.0");
-        Require(channelPressure127Evaluated.size() == 1 && channelPressure127Evaluated[0].amount == 1,
-            "Channel pressure 127 should decode to a source value of 1.0");
+        Require(cc127Evaluated.size() == 1 && cc127Evaluated[0].amount == 127,
+            "CC127 should decode to 127/128 in SF2 domain");
+        Require(key127Evaluated.size() == 1 && key127Evaluated[0].amount == 127,
+            "Key127 should decode to 127/128 in SF2 domain");
+        Require(channelPressure127Evaluated.size() == 1 && channelPressure127Evaluated[0].amount == 127,
+            "Channel pressure 127 should decode to 127/128 in SF2 domain");
+        Require(velocity127Evaluated.size() == 1 && velocity127Evaluated[0].amount == 127,
+            "Velocity max should decode to 127/128 in SF2 domain");
 
         ctx.ccValues[7] = 0;
         ctx.channelPressure = 0;
         const auto cc0Evaluated = EvaluateSf2Modulators(cc127Resolved, 60, 65535, &ctx);
         const auto key0Evaluated = EvaluateSf2Modulators(keyResolved, 0, 65535, &ctx);
         const auto channelPressure0Evaluated = EvaluateSf2Modulators(channelPressureResolved, 60, 65535, &ctx);
+        const auto velocity0Evaluated = EvaluateSf2Modulators(velocityResolved, 60, 0, &ctx);
 
         Require(cc0Evaluated.size() == 1 && cc0Evaluated[0].amount == 0,
             "CC0 should remain a source value of 0.0");
@@ -1501,6 +1537,8 @@ namespace {
             "Key0 should remain a source value of 0.0");
         Require(channelPressure0Evaluated.size() == 1 && channelPressure0Evaluated[0].amount == 0,
             "Channel pressure 0 should remain a source value of 0.0");
+        Require(velocity0Evaluated.size() == 1 && velocity0Evaluated[0].amount == 0,
+            "Velocity 0 should remain a source value of 0.0");
     }
 
     void TestLinkedModulatorsFeedTargetSource() {
@@ -4452,7 +4490,7 @@ namespace {
         std::vector<ResolvedZone> zones;
         const u16 quarterVelocity = 16384;
         const ResolvedZone& zone = RequireSingleZone(sf2, 60, quarterVelocity, &ctx, zones);
-        const double x = static_cast<double>(quarterVelocity) / 65535.0;
+        const double x = Sf2SpecNormalizeVelocity16(quarterVelocity);
         
         auto concaveFunc = [](double v) {
             if (v <= 0.0) return 0.0;
@@ -4495,7 +4533,8 @@ namespace {
         ctx.ccValues[1] = 64;
         ctx.ccValues[11] = 0;
         ctx.channelPressure = 64;
-        const i32 defaultPanOffset = static_cast<i32>(std::lround(1000.0 * (2.0 * (63.0 / 127.0) - 1.0)));
+        const i32 defaultPanOffset = static_cast<i32>(std::lround(
+            1000.0 * (2.0 * Sf2SpecNormalize7Bit(ctx.ccValues[10]) - 1.0)));
 
         std::vector<ResolvedZone> zones;
         const ResolvedZone& lowKeyZone = RequireSingleZone(sf2, 63, 65535, &ctx, zones);
@@ -4523,7 +4562,7 @@ namespace {
             std::snprintf(message, sizeof(message),
                 "Channel pressure convex curve should mirror the SF2 log-based characteristic (actual=%d)",
                 highKeyZone.generators[GEN_ModEnvToPitch]);
-            Require(highKeyZone.generators[GEN_ModEnvToPitch] == 438, message);
+            Require(highKeyZone.generators[GEN_ModEnvToPitch] == 437, message);
         }
     }
 
@@ -4558,7 +4597,7 @@ namespace {
                 std::snprintf(message, sizeof(message),
                     "Linked source should sum all valid branches using the current 7-bit controller scale (actual=%d)",
                     evaluated[0].amount);
-                Require(evaluated[0].amount == 300, message);
+                Require(evaluated[0].amount == 298, message);
             }
         }
     }
@@ -5797,7 +5836,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestMissingSmplRejected);
     RUN_TEST(TestSf2ModulatorResolverSameZoneDuplicateRule);
     RUN_TEST(TestSf2ModulatorResolverDifferentTransformsDoNotShareIdentity);
-    RUN_TEST(TestSf2ModulatorResolverSevenBitNormalizationUsesFullRange);
+    RUN_TEST(TestSf2ModulatorResolverSevenBitNormalizationUsesSpecHeadroom);
     RUN_TEST(TestNonMonotonicPbagRejected);
 #undef RUN_TEST
     std::printf("sf2_compliance: all tests passed\n");
