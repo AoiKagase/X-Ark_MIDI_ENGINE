@@ -3379,6 +3379,166 @@ namespace {
             "Applying channel pitch again on top of the resolved SF2 zone would double the bend");
     }
 
+    void TestSf2RuntimeRefreshPressureUsesClassSnapshots() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(10, GEN_Pan, 500, 0, 0));
+        config.instMods.push_back(MakeMod(13, GEN_InitialAttenuation, 200, 0, 0));
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext initialCtx{};
+        SetDefaultMidiControllers(initialCtx);
+        initialCtx.useSf2SpecModulatorResolver = true;
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 60, 65535, zones, &initialCtx), "Expected zone resolution for pressure refresh test");
+        Require(zones.size() == 1, "Expected exactly one zone for pressure refresh test");
+
+        VoicePool pool;
+        pool.NoteOn(zones,
+                    sf2.SampleData(),
+                    sf2.SampleData24(),
+                    sf2.SampleDataCount(),
+                    0,
+                    0,
+                    0,
+                    60,
+                    65535,
+                    44100,
+                    0.0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    SynthCompatOptions{});
+        Require(pool.ActiveCount() == 1, "Pressure refresh test should create one active voice");
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        Voice& voice = probe.voices_[probe.activeIndices_[0]];
+        const f32 originalBaseGainL = voice.baseGainL;
+        const f32 originalBaseGainR = voice.baseGainR;
+        const f32 originalAttenuation = voice.attenuation;
+
+        ModulatorContext polyCtx = initialCtx;
+        polyCtx.polyPressure[60] = 127;
+
+        pool.RefreshSf2Controllers(
+            0, sf2, polyCtx,
+            static_cast<u16>(Sf2ModulatorDependency::ChannelPressure),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.baseGainR > voice.baseGainL,
+            "Mix-class refresh should apply the latest pan snapshot even when triggered via channel-pressure dependency");
+        Require(NearlyEqual(voice.attenuation, originalAttenuation, 1.0e-6),
+            "Channel-pressure refresh with zero pressure should keep attenuation unchanged");
+
+        pool.RefreshSf2Controllers(
+            0, sf2, polyCtx,
+            static_cast<u16>(Sf2ModulatorDependency::PolyPressure),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.baseGainR > voice.baseGainL,
+            "Poly-pressure refresh should apply mix destination updates");
+        Require(NearlyEqual(voice.attenuation, originalAttenuation, 1.0e-6),
+            "Poly-pressure refresh should not apply channel-pressure attenuation");
+
+        const f32 attenuationAfterPoly = voice.attenuation;
+        ModulatorContext pressureCtx = polyCtx;
+        pressureCtx.channelPressure = 127;
+        const f32 baseGainLAfterPoly = voice.baseGainL;
+        const f32 baseGainRAfterPoly = voice.baseGainR;
+
+        pool.RefreshSf2Controllers(
+            0, sf2, pressureCtx,
+            static_cast<u16>(Sf2ModulatorDependency::PolyPressure),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.attenuation < attenuationAfterPoly,
+            "Mix-class refresh triggered by poly-pressure should apply the latest channel-pressure attenuation snapshot");
+
+        pool.RefreshSf2Controllers(
+            0, sf2, pressureCtx,
+            static_cast<u16>(Sf2ModulatorDependency::ChannelPressure),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.attenuation <= attenuationAfterPoly,
+            "Channel-pressure refresh should keep attenuation modulation applied");
+        Require(NearlyEqual(voice.baseGainL, baseGainLAfterPoly, 1.0e-6) &&
+                NearlyEqual(voice.baseGainR, baseGainRAfterPoly, 1.0e-6),
+            "Channel-pressure refresh should not disturb poly-pressure pan updates");
+    }
+
+    void TestSf2RuntimeRefreshPitchDependenciesUseClassSnapshots() {
+        MinimalSf2Config config;
+        config.instMods.push_back(MakeMod(static_cast<u16>(14 | 0x0200), GEN_CoarseTune, 120, 16, 0));
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        ModulatorContext initialCtx{};
+        SetDefaultMidiControllers(initialCtx);
+        initialCtx.useSf2SpecModulatorResolver = true;
+        initialCtx.pitchBend = 4096;
+        initialCtx.pitchWheelSensitivitySemitones = 2;
+
+        std::vector<ResolvedZone> zones;
+        Require(sf2.FindZones(0, 0, 60, 65535, zones, &initialCtx), "Expected zone resolution for pitch-wheel sensitivity refresh test");
+        Require(zones.size() == 1, "Expected exactly one zone for pitch-wheel sensitivity refresh test");
+
+        VoicePool pool;
+        pool.NoteOn(zones,
+                    sf2.SampleData(),
+                    sf2.SampleData24(),
+                    sf2.SampleDataCount(),
+                    0,
+                    0,
+                    0,
+                    60,
+                    65535,
+                    44100,
+                    0.0,
+                    1.0f,
+                    0x81020408u,
+                    0x50A14285u,
+                    0u,
+                    SoundBankKind::Sf2,
+                    SynthCompatOptions{});
+        Require(pool.ActiveCount() == 1, "Pitch-wheel sensitivity refresh test should create one active voice");
+
+        auto& probe = reinterpret_cast<VoicePoolProbe&>(pool);
+        Voice& voice = probe.voices_[probe.activeIndices_[0]];
+        const i64 originalStep = voice.sampleStepFixed;
+
+        ModulatorContext highSensitivityCtx = initialCtx;
+        highSensitivityCtx.pitchWheelSensitivitySemitones = 12;
+
+        pool.RefreshSf2Controllers(
+            0, sf2, highSensitivityCtx,
+            static_cast<u16>(Sf2ModulatorDependency::ChannelController),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.sampleStepFixed > originalStep,
+            "Channel-controller refresh can update pitch when controller-owned pitch destinations are present");
+
+        const i64 controllerStep = voice.sampleStepFixed;
+        ModulatorContext lowSensitivityCtx = highSensitivityCtx;
+        lowSensitivityCtx.pitchWheelSensitivitySemitones = 4;
+        pool.RefreshSf2Controllers(
+            0, sf2, lowSensitivityCtx,
+            static_cast<u16>(Sf2ModulatorDependency::PitchWheelSensitivity),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.sampleStepFixed < controllerStep,
+            "Pitch-wheel-sensitivity refresh should update pitch destinations");
+
+        const i64 sensitivityStep = voice.sampleStepFixed;
+        ModulatorContext bendCtx = lowSensitivityCtx;
+        bendCtx.pitchBend = 8191;
+
+        pool.RefreshSf2Controllers(
+            0, sf2, bendCtx,
+            static_cast<u16>(Sf2ModulatorDependency::PitchWheel),
+            1.0f, 0x81020408u, 0x50A14285u, 0u);
+        Require(voice.sampleStepFixed > sensitivityStep,
+            "Pitch-wheel refresh should update pitch destinations driven by pitch wheel");
+    }
+
     void TestSf2MixOnlyRefreshPreservesPitchAndFilterState() {
         MinimalSf2Config config;
         const std::vector<u8> bytes = BuildMinimalSf2(config);
@@ -5856,6 +6016,8 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2FifthLayerStaysIndependent);
     RUN_TEST(TestSpecialSf2RouteClampSurvivesControllerRefresh);
     RUN_TEST(TestSf2PitchPrecedence);
+    RUN_TEST(TestSf2RuntimeRefreshPressureUsesClassSnapshots);
+    RUN_TEST(TestSf2RuntimeRefreshPitchDependenciesUseClassSnapshots);
     RUN_TEST(TestSf2MixOnlyRefreshPreservesPitchAndFilterState);
     RUN_TEST(TestSf2PitchOnlyRefreshPreservesMixAndFilterState);
     RUN_TEST(TestSf2FilterOnlyRefreshPreservesMixAndPitchState);
