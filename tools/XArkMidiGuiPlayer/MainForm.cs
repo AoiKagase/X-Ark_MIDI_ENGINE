@@ -453,10 +453,15 @@ public sealed class MainForm : Form
             "SF2 サンプルに含まれる pitch correction を反映します。音程がずれて聞こえるバンク向けの補正です。");
         _optionToolTip.SetToolTip(_useSf2SpecModulatorResolverCheckBox,
             "SoundFont 2.04 仕様寄りの modulator resolver を使います。implicit default modulators も resolver 側で扱います。SF2 mode が Legacy の場合は無効、Spec 2.04 の場合は常に有効です。停止後の次回再生から反映されます。");
-        _compatibilityModeComboBox.Items.AddRange(new object[] { "Engine default", "SF2 legacy", "SF2 spec 2.04" });
+        _compatibilityModeComboBox.Items.AddRange(new object[] {
+            "Engine default",
+            "SF2 legacy",
+            "SF2 spec 2.04",
+            "SF2 render tuned"
+        });
         _compatibilityModeComboBox.SelectedIndex = 0;
         _optionToolTip.SetToolTip(_compatibilityModeComboBox,
-            "SF2 互換モードを選択します。Legacy は旧互換を強制し、Spec 2.04 は spec resolver を強制します。");
+            "SF2 互換モードを選択します。Legacy は旧互換を強制し、Spec 2.04 / Render tuned は spec resolver を強制します。");
         _optionToolTip.SetToolTip(_internalEffectsCheckBox,
             "合成後の内部リバーブ/コーラス処理を有効にします。OFF にすると SF2/MIDI のエフェクト send はドライ出力へ加算されません。");
         _optionToolTip.SetToolTip(_sf2ReverbSendScaleUpDown,
@@ -1095,13 +1100,15 @@ public sealed class MainForm : Form
         => _compatibilityModeComboBox.SelectedIndex switch {
             1 => XArkMidiEngine.CompatibilityMode.Sf2Legacy,
             2 => XArkMidiEngine.CompatibilityMode.Sf2Spec204,
+            3 => XArkMidiEngine.CompatibilityMode.Sf2RenderTuned,
             _ => XArkMidiEngine.CompatibilityMode.EngineDefault,
         };
 
     private void ApplyCompatibilityModeInterlocks()
     {
         var mode = SelectedCompatibilityMode;
-        if (mode == XArkMidiEngine.CompatibilityMode.Sf2Spec204) {
+        if (mode == XArkMidiEngine.CompatibilityMode.Sf2Spec204 ||
+            mode == XArkMidiEngine.CompatibilityMode.Sf2RenderTuned) {
             if (!_useSf2SpecModulatorResolverCheckBox.Checked) {
                 _useSf2SpecModulatorResolverCheckBox.Checked = true;
             }
