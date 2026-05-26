@@ -135,9 +135,8 @@ public sealed class MainForm : Form
         DropDownStyle = ComboBoxStyle.DropDownList,
         Width = 140,
     };
-    private readonly GroupBox _channelLevelGroup = new() { Dock = DockStyle.Fill, Text = "Channel Levels" };
-    private readonly ChannelLevelMeterControl _channelLevelMeter = new() { Dock = DockStyle.Fill, MinimumSize = new Size(0, 72) };
     private readonly DataGridView _channelGrid = new() { Dock = DockStyle.Fill };
+    private readonly Panel _legendPanel = new() { Dock = DockStyle.Top, Height = 24, Margin = new Padding(0, 0, 0, 8) };
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 50 };
     private readonly BindingList<ChannelRow> _channels = new();
     private readonly OpenFileDialog _midiDialog = new() { Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*" };
@@ -211,7 +210,6 @@ public sealed class MainForm : Form
         _compatibilityModeComboBox.BackColor = PanelBg;
         _compatibilityModeComboBox.ForeColor = TextColor;
 
-        _channelLevelGroup.ForeColor = TextColor;
         _keyboardLabel.ForeColor = TextColor;
         _createOptionsHeader.ForeColor = TextColor;
         for (int i = 0; i < ChannelCount; ++i) {
@@ -253,8 +251,8 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 66.6f)); // ChannelLevelGroup
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f)); // ChannelGrid
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Legend
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // ChannelGrid
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
 
@@ -318,17 +316,63 @@ public sealed class MainForm : Form
 
         ConfigureDetailsPanel();
         ConfigureGrid();
-        _channelLevelGroup.Controls.Add(_channelLevelMeter);
+        ConfigureLegend();
 
         root.Controls.Add(filePanel, 0, 0);
         root.Controls.Add(controlPanel, 0, 1);
         root.Controls.Add(seekPanel, 0, 2);
         root.Controls.Add(_detailsPanel, 0, 3);
-        root.Controls.Add(_channelLevelGroup, 0, 4);
+        root.Controls.Add(_legendPanel, 0, 4);
         root.Controls.Add(_channelGrid, 0, 5);
         root.Controls.Add(_keyboardLabel, 0, 6);
         root.Controls.Add(_keyboard, 0, 7);
         Controls.Add(root);
+    }
+
+    private void ConfigureLegend()
+    {
+        var layout = new FlowLayoutPanel {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(0),
+            WrapContents = false,
+        };
+
+        layout.Controls.Add(CreateLegendItem("Dry", DryColor));
+        layout.Controls.Add(new Label { Width = 10, AutoSize = false }); // Gap
+        layout.Controls.Add(CreateLegendItem("Reverb", ReverbColor));
+        layout.Controls.Add(new Label { Width = 10, AutoSize = false }); // Gap
+        layout.Controls.Add(CreateLegendItem("Chorus", ChorusColor));
+
+        _legendPanel.Controls.Add(layout);
+    }
+
+    private static Control CreateLegendItem(string text, Color color)
+    {
+        var panel = new FlowLayoutPanel {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0),
+        };
+
+        var swatch = new Panel {
+            Width = 12,
+            Height = 12,
+            BackColor = color,
+            Margin = new Padding(0, 5, 4, 0),
+        };
+
+        var label = new Label {
+            Text = text,
+            AutoSize = true,
+            ForeColor = TextColor,
+            Margin = new Padding(0, 2, 0, 0),
+        };
+
+        panel.Controls.Add(swatch);
+        panel.Controls.Add(label);
+        return panel;
     }
 
     private void ConfigureDetailsPanel()
@@ -486,6 +530,10 @@ public sealed class MainForm : Form
 
     private void ConfigureGrid()
     {
+        // ちらつき防止
+        typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.SetValue(_channelGrid, true);
+
         _channelGrid.AutoGenerateColumns = false;
         _channelGrid.AllowUserToAddRows = false;
         _channelGrid.AllowUserToDeleteRows = false;
@@ -547,7 +595,12 @@ public sealed class MainForm : Form
             DataPropertyName = nameof(ChannelRow.ProgramName),
             HeaderText = "Program Name",
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-            MinimumWidth = 260,
+            MinimumWidth = 200,
+            ReadOnly = true,
+        });
+        _channelGrid.Columns.Add(new DataGridViewLevelMeterColumn {
+            HeaderText = "Level Meter",
+            Width = 100,
             ReadOnly = true,
         });
         _channelGrid.Columns.Add(new DataGridViewTextBoxColumn {
@@ -999,16 +1052,22 @@ public sealed class MainForm : Form
     {
         if (_player is null) {
             for (int i = 0; i < ChannelCount; ++i) {
-                _channels[i].ActiveNotes = 0;
-                _channels[i].DryPeak = string.Empty;
-                _channels[i].ReverbSendPeak = string.Empty;
-                _channels[i].ChorusSendPeak = string.Empty;
-                _channels[i].ControllerSummary = string.Empty;
-                _channels[i].Lamp = string.Empty;
+                var row = _channels[i];
+                row.ActiveNotes = 0;
+                row.DryPeak = string.Empty;
+                row.ReverbSendPeak = string.Empty;
+                row.ChorusSendPeak = string.Empty;
+                row.ControllerSummary = string.Empty;
+                row.Lamp = string.Empty;
+                row.DryLevel = 0;
+                row.ReverbLevel = 0;
+                row.ChorusLevel = 0;
+                row.DryPeakHold = 0;
+                row.ReverbPeakHold = 0;
+                row.ChorusPeakHold = 0;
             }
             _keyboard.ActiveKeyMasks = new uint[KeyMaskWordCount];
             _keyboard.ClearTransientEvents();
-            _channelLevelMeter.Clear();
             UpdateLampStyles();
             UpdateKeyboardLabel();
             _outputStageMeter.Clear();
@@ -1019,6 +1078,7 @@ public sealed class MainForm : Form
         var snapshot = _player.GetChannelSnapshot();
         var channelEvents = _player.PopChannelKeyEvents();
         _suppressMaskEvents = true;
+        long now = Environment.TickCount64;
         try {
             for (int i = 0; i < ChannelCount; ++i) {
                 var row = _channels[i];
@@ -1038,12 +1098,21 @@ public sealed class MainForm : Form
                 row.Lamp = snapshot.ActiveNotes[i] > 0 ? "ON" : string.Empty;
                 row.On = (snapshot.MuteMask & (1u << i)) == 0;
                 row.Solo = (snapshot.SoloMask & (1u << i)) != 0;
+
+                // Update smoothed levels and peaks for grid gauge
+                row.DryLevel = SmoothLevel(row.DryLevel, snapshot.AudioPeaks[i]);
+                UpdatePeak(row.DryLevel, ref row._dryPeakHold, ref row.DryPeakHoldTicks, now);
+                row.ReverbLevel = SmoothLevel(row.ReverbLevel, snapshot.ReverbSendPeaks[i]);
+                UpdatePeak(row.ReverbLevel, ref row._reverbPeakHold, ref row.ReverbPeakHoldTicks, now);
+                row.ChorusLevel = SmoothLevel(row.ChorusLevel, snapshot.ChorusSendPeaks[i]);
+                UpdatePeak(row.ChorusLevel, ref row._chorusPeakHold, ref row.ChorusPeakHoldTicks, now);
             }
+            // ゲージのカラムを強制的に再描画させる
+            _channelGrid.InvalidateColumn(_channelGrid.Columns.Cast<DataGridViewColumn>().First(c => c is DataGridViewLevelMeterColumn).Index);
         } finally {
             _suppressMaskEvents = false;
         }
         var selectedChannel = SelectedChannelIndex();
-        _channelLevelMeter.SetLevels(snapshot.AudioPeaks, snapshot.ReverbSendPeaks, snapshot.ChorusSendPeaks, snapshot.MuteMask, snapshot.SoloMask);
         _keyboard.ActiveKeyMasks = snapshot.ActiveKeyMasks[selectedChannel];
         _keyboard.ApplyChannelEvents(selectedChannel, channelEvents);
         UpdateLampStyles();
@@ -1051,6 +1120,32 @@ public sealed class MainForm : Form
         _statusLabel.Text = _player.IsFinished ? "Finished" : "Playing";
         _outputStageMeter.Meter = _player.LatestOutputStageMeter;
         RefreshSeekUi();
+    }
+
+    private static void UpdatePeak(float level, ref float peak, ref long holdUntil, long now)
+    {
+        if (level > peak) { peak = level; holdUntil = now + 600; }
+        else if (now > holdUntil) { peak = Math.Max(level, peak * 0.92f); }
+    }
+
+    private static float SmoothLevel(float current, float peak)
+    {
+        var target = MathF.Sqrt(Math.Clamp(peak, 0.0f, 1.0f));
+        return Math.Max(target, current * 0.86f);
+    }
+
+    public static Color GetChannelColor(float level, bool soloed)
+    {
+        if (soloed) {
+            return Color.FromArgb(80, 132, 210);
+        }
+        if (level >= 0.85f) {
+            return Color.FromArgb(214, 70, 56);
+        }
+        if (level >= 0.55f) {
+            return Color.FromArgb(226, 156, 48);
+        }
+        return DryColor;
     }
 
     private async Task CommitSeekAsync()
@@ -1408,6 +1503,15 @@ public sealed class ChannelRow : INotifyPropertyChanged
     private string _dryPeak = string.Empty;
     private string _reverbSendPeak = string.Empty;
     private string _chorusSendPeak = string.Empty;
+    private float _dryLevel;
+    private float _reverbLevel;
+    private float _chorusLevel;
+    internal float _dryPeakHold;
+    internal float _reverbPeakHold;
+    internal float _chorusPeakHold;
+    internal long DryPeakHoldTicks;
+    internal long ReverbPeakHoldTicks;
+    internal long ChorusPeakHoldTicks;
     private string _controllerSummary = string.Empty;
     private string _lamp = string.Empty;
 
@@ -1420,6 +1524,12 @@ public sealed class ChannelRow : INotifyPropertyChanged
     public string DryPeak { get => _dryPeak; set => SetField(ref _dryPeak, value, nameof(DryPeak)); }
     public string ReverbSendPeak { get => _reverbSendPeak; set => SetField(ref _reverbSendPeak, value, nameof(ReverbSendPeak)); }
     public string ChorusSendPeak { get => _chorusSendPeak; set => SetField(ref _chorusSendPeak, value, nameof(ChorusSendPeak)); }
+    public float DryLevel { get => _dryLevel; set => SetField(ref _dryLevel, value, nameof(DryLevel)); }
+    public float ReverbLevel { get => _reverbLevel; set => SetField(ref _reverbLevel, value, nameof(ReverbLevel)); }
+    public float ChorusLevel { get => _chorusLevel; set => SetField(ref _chorusLevel, value, nameof(ChorusLevel)); }
+    public float DryPeakHold { get => _dryPeakHold; set => SetField(ref _dryPeakHold, value, nameof(DryPeakHold)); }
+    public float ReverbPeakHold { get => _reverbPeakHold; set => SetField(ref _reverbPeakHold, value, nameof(ReverbPeakHold)); }
+    public float ChorusPeakHold { get => _chorusPeakHold; set => SetField(ref _chorusPeakHold, value, nameof(ChorusPeakHold)); }
     public string ControllerSummary { get => _controllerSummary; set => SetField(ref _controllerSummary, value, nameof(ControllerSummary)); }
     public string Lamp { get => _lamp; set => SetField(ref _lamp, value, nameof(Lamp)); }
 
@@ -2052,176 +2162,6 @@ public readonly record struct ChannelSnapshot(
 
 public readonly record struct WavExportProgress(double CurrentSeconds, double TotalSeconds);
 
-internal sealed class ChannelLevelMeterControl : Control
-{
-    private static readonly Color DryLegendColor = MainForm.DryColor;
-    private static readonly Color ReverbLegendColor = MainForm.ReverbColor;
-    private static readonly Color ChorusLegendColor = MainForm.ChorusColor;
-
-    private readonly float[] _dryLevels = new float[16];
-    private readonly float[] _reverbLevels = new float[16];
-    private readonly float[] _chorusLevels = new float[16];
-    private readonly float[] _dryPeaks = new float[16];
-    private readonly float[] _reverbPeaks = new float[16];
-    private readonly float[] _chorusPeaks = new float[16];
-    private readonly long[] _peakHoldTicks = new long[48];
-    private uint _muteMask;
-    private uint _soloMask;
-
-    public ChannelLevelMeterControl()
-    {
-        DoubleBuffered = true;
-        ResizeRedraw = true;
-        BackColor = MainForm.PrimaryBg;
-        Font = SystemFonts.MessageBoxFont ?? new Font(FontFamily.GenericSansSerif, 8.0f, FontStyle.Regular);
-    }
-
-    public void SetLevels(IReadOnlyList<float> audioPeaks, IReadOnlyList<float> reverbSendPeaks, IReadOnlyList<float> chorusSendPeaks, uint muteMask, uint soloMask)
-    {
-        _muteMask = muteMask;
-        _soloMask = soloMask;
-        long now = Environment.TickCount64;
-        for (int i = 0; i < 16; ++i) {
-            _dryLevels[i] = SmoothLevel(_dryLevels[i], i < audioPeaks.Count ? audioPeaks[i] : 0.0f);
-            UpdatePeak(_dryLevels[i], ref _dryPeaks[i], ref _peakHoldTicks[i], now);
-            _reverbLevels[i] = SmoothLevel(_reverbLevels[i], i < reverbSendPeaks.Count ? reverbSendPeaks[i] : 0.0f);
-            UpdatePeak(_reverbLevels[i], ref _reverbPeaks[i], ref _peakHoldTicks[16 + i], now);
-            _chorusLevels[i] = SmoothLevel(_chorusLevels[i], i < chorusSendPeaks.Count ? chorusSendPeaks[i] : 0.0f);
-            UpdatePeak(_chorusLevels[i], ref _chorusPeaks[i], ref _peakHoldTicks[32 + i], now);
-        }
-        Invalidate();
-    }
-
-    private static void UpdatePeak(float level, ref float peak, ref long holdUntil, long now)
-    {
-        if (level > peak) { peak = level; holdUntil = now + 600; }
-        else if (now > holdUntil) { peak = Math.Max(level, peak * 0.92f); }
-    }
-
-    public void Clear()
-    {
-        Array.Clear(_dryLevels, 0, 16); Array.Clear(_reverbLevels, 0, 16); Array.Clear(_chorusLevels, 0, 16);
-        Array.Clear(_dryPeaks, 0, 16); Array.Clear(_reverbPeaks, 0, 16); Array.Clear(_chorusPeaks, 0, 16);
-        _muteMask = 0;
-        _soloMask = 0;
-        Invalidate();
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-
-        var width = ClientSize.Width;
-        var height = ClientSize.Height;
-        if (width <= 0 || height <= 0) return;
-
-        const int legendHeight = 20;
-        int meterTop = 4 + legendHeight;
-        int meterHeight = Math.Max(12, height - legendHeight - 24);
-        int slotWidth = Math.Max(12, (width - 6 * 15) / 16);
-
-        DrawLegend(e.Graphics, width);
-
-        for (int i = 0; i < 16; ++i) {
-            var x = i * (slotWidth + 6);
-            
-            // チャンネル単位（3本1セット）で枠を描画
-            using var borderPen = new Pen(Color.FromArgb(120, 255, 255, 255));
-            e.Graphics.DrawRectangle(borderPen, x, meterTop, slotWidth, meterHeight);
-            
-            int barW = (slotWidth - 4) / 3;
-            // 内側のゲージ描画
-            DrawMeter(e.Graphics, x + 2, meterTop + 1, barW, meterHeight - 2, _dryLevels[i], _dryPeaks[i], ChannelColor(_dryLevels[i], (_soloMask & (1u << i)) != 0));
-            DrawMeter(e.Graphics, x + 2 + barW + 1, meterTop + 1, barW, meterHeight - 2, _reverbLevels[i], _reverbPeaks[i], ReverbLegendColor);
-            DrawMeter(e.Graphics, x + 2 + (barW + 1) * 2, meterTop + 1, barW, meterHeight - 2, _chorusLevels[i], _chorusPeaks[i], ChorusLegendColor);
-        }
-    }
-
-    private void DrawMeter(Graphics g, int x, int y, int w, int h, float l, float p, Color c)
-    {
-        int segH = 3; int gapH = 1;
-        int totalSegs = h / (segH + gapH);
-        int litSegs = (int)(l * totalSegs);
-        int peakSeg = (int)(p * totalSegs);
-
-        using var normalBrush = new SolidBrush(c);
-        using var clipBrush = new SolidBrush(Color.Red);
-        // ピークインジケーターをより目立たせるための明るい色
-        using var peakPen = new Pen(Color.FromArgb(255, 255, 255, 255), 2.0f);
-
-        for (int i = 0; i < totalSegs; i++) {
-            var rect = new Rectangle(x, y + h - (i + 1) * (segH + gapH) + gapH, w, segH);
-            if (i < litSegs) {
-                g.FillRectangle(i >= totalSegs * 0.9 ? clipBrush : normalBrush, rect);
-            }
-            if (i == peakSeg) {
-                // ピークラインをより太く、明るく描画
-                g.DrawLine(peakPen, x, rect.Y + (segH / 2), x + w, rect.Y + (segH / 2));
-            }
-        }
-    }
-
-    private void DrawLegend(Graphics graphics, int width)
-    {
-        const int swatchSize = 8;
-        const int itemGap = 14;
-        var labels = new[] {
-            ("Dry", DryLegendColor),
-            ("Rev Send", ReverbLegendColor),
-            ("Cho Send", ChorusLegendColor),
-        };
-
-        var itemWidths = new int[labels.Length];
-        var totalWidth = 0;
-        for (int i = 0; i < labels.Length; ++i) {
-            itemWidths[i] = swatchSize + 4 + (int)Math.Ceiling(graphics.MeasureString(labels[i].Item1, Font).Width);
-            totalWidth += itemWidths[i];
-            if (i > 0) totalWidth += itemGap;
-        }
-        if (totalWidth > width - 8) return;
-
-        var x = Math.Max(0, width - totalWidth - 4);
-        const int y = 4;
-        using var textBrush = new SolidBrush(ForeColor);
-        for (int i = 0; i < labels.Length; ++i) {
-            using var swatchBrush = new SolidBrush(labels[i].Item2);
-            graphics.FillRectangle(swatchBrush, x, y + 3, swatchSize, swatchSize);
-            graphics.DrawString(labels[i].Item1, Font, textBrush, x + swatchSize + 4, y);
-            x += itemWidths[i] + itemGap;
-        }
-    }
-
-    private static Color ChannelColor(float level, bool soloed)
-    {
-        if (soloed) {
-            return Color.FromArgb(80, 132, 210);
-        }
-        if (level >= 0.85f) {
-            return Color.FromArgb(214, 70, 56);
-        }
-        if (level >= 0.55f) {
-            return Color.FromArgb(226, 156, 48);
-        }
-        return DryLegendColor;
-    }
-
-    private static float SmoothLevel(float current, float peak)
-    {
-        var target = MathF.Sqrt(Math.Clamp(peak, 0.0f, 1.0f));
-        return Math.Max(target, current * 0.86f);
-    }
-
-    private static void DrawSubMeter(Graphics graphics, int x, int y, int width, int height, float level, Color color)
-    {
-        var fillHeight = Math.Clamp((int)Math.Round(height * level), 0, height);
-        if (fillHeight <= 0) {
-            return;
-        }
-        using var fillBrush = new SolidBrush(color);
-        graphics.FillRectangle(fillBrush, x, y + height - fillHeight, width, fillHeight);
-    }
-}
-
 internal sealed class OutputStageMeterControl : Control
 {
     private XArkMidiEngine.OutputStageMeter _meter;
@@ -2551,4 +2491,94 @@ internal static class NativeMethods
 
     [DllImport("winmm.dll")]
     public static extern int waveOutClose(IntPtr hWaveOut);
+}
+
+public sealed class DataGridViewLevelMeterColumn : DataGridViewColumn
+{
+    public DataGridViewLevelMeterColumn() : base(new DataGridViewLevelMeterCell())
+    {
+    }
+
+    public override DataGridViewCell CellTemplate
+    {
+        get => base.CellTemplate;
+        set
+        {
+            if (value != null && !value.GetType().IsAssignableFrom(typeof(DataGridViewLevelMeterCell))) {
+                throw new InvalidCastException("Must be a DataGridViewLevelMeterCell");
+            }
+            base.CellTemplate = value;
+        }
+    }
+}
+
+public sealed class DataGridViewLevelMeterCell : DataGridViewCell
+{
+    public override Type ValueType => typeof(object);
+    public override Type FormattedValueType => typeof(object);
+
+    protected override void Paint(
+        Graphics graphics,
+        Rectangle clipBounds,
+        Rectangle cellBounds,
+        int rowIndex,
+        DataGridViewElementStates cellState,
+        object value,
+        object formattedValue,
+        string errorText,
+        DataGridViewCellStyle cellStyle,
+        DataGridViewAdvancedBorderStyle advancedBorderStyle,
+        DataGridViewPaintParts paintParts)
+    {
+        // 背景の描画
+        if ((paintParts & DataGridViewPaintParts.Background) != 0) {
+            using var backBrush = new SolidBrush(
+                (cellState & DataGridViewElementStates.Selected) != 0 ? cellStyle.SelectionBackColor : cellStyle.BackColor);
+            graphics.FillRectangle(backBrush, cellBounds);
+        }
+
+        // 境界線の描画
+        if ((paintParts & DataGridViewPaintParts.Border) != 0) {
+            PaintBorder(graphics, clipBounds, cellBounds, cellStyle, advancedBorderStyle);
+        }
+
+        if (OwningRow?.DataBoundItem is not ChannelRow row) {
+            return;
+        }
+
+        var x = cellBounds.X + 4;
+        var y = cellBounds.Y + 2;
+        var w = cellBounds.Width - 8;
+        var h = cellBounds.Height - 4;
+        if (w <= 0 || h <= 0) return;
+
+        int barH = Math.Max(1, (h - 4) / 3);
+        int gap = 2;
+
+        DrawHorizontalBar(graphics, x, y, w, barH, row.DryLevel, row.DryPeakHold, 
+            MainForm.GetChannelColor(row.DryLevel, row.Solo));
+        DrawHorizontalBar(graphics, x, y + barH + gap, w, barH, row.ReverbLevel, row.ReverbPeakHold, MainForm.ReverbColor);
+        DrawHorizontalBar(graphics, x, y + (barH + gap) * 2, w, barH, row.ChorusLevel, row.ChorusPeakHold, MainForm.ChorusColor);
+    }
+
+    private static void DrawHorizontalBar(Graphics g, int x, int y, int w, int h, float level, float peak, Color color)
+    {
+        // 背景枠
+        using var bgPen = new Pen(Color.FromArgb(40, Color.Gray));
+        g.DrawRectangle(bgPen, x, y, w, h);
+
+        // ゲージ本体
+        int fillW = (int)(Math.Clamp(level, 0f, 1f) * w);
+        if (fillW > 0) {
+            using var brush = new SolidBrush(color);
+            g.FillRectangle(brush, x + 1, y + 1, fillW, h - 1);
+        }
+
+        // ピーク
+        int peakX = (int)(Math.Clamp(peak, 0f, 1f) * w);
+        if (peakX > 0) {
+            using var peakPen = new Pen(Color.White, 1.0f);
+            g.DrawLine(peakPen, x + peakX, y, x + peakX, y + h);
+        }
+    }
 }
