@@ -37,6 +37,18 @@ rtk powershell -NoProfile -ExecutionPolicy Bypass -File tools/sf2_render_benchma
   -SoloChannel 2
 ```
 
+Timidity baseline run:
+
+```bat
+rtk powershell -NoProfile -ExecutionPolicy Bypass -File tools/sf2_render_benchmark.ps1 ^
+  -MidiPath "H:\musix\fighting-the-spirit.mid" ^
+  -SoundFontPath "H:\musix\FluidR3_GM2-2.SF2" ^
+  -OutputDir "build\bench\sf2_render_tuned_timidity" ^
+  -SoloChannel 2 ^
+  -ReferenceWavPath "H:\musix\fighting-the-spirit_timidity.wav" ^
+  -ReferenceLabel "timidity"
+```
+
 Dry-only run:
 
 ```bat
@@ -57,6 +69,8 @@ The script writes per-case outputs under `<OutputDir>\dry` and `<OutputDir>\wet`
 - `render_spec.log`
 - `render_tuned.log`
 - `compare_spec_vs_tuned.log` (`compare_wav_diff`)
+- `compare_spec_vs_<reference>.log` (`compare_wav_diff`, optional)
+- `compare_tuned_vs_<reference>.log` (`compare_wav_diff`, optional)
 - `clip_spec.log` (`analyze_wav_clipping`)
 - `clip_tuned.log` (`analyze_wav_clipping`)
 - `summary.txt`
@@ -66,3 +80,4 @@ The script writes per-case outputs under `<OutputDir>\dry` and `<OutputDir>\wet`
 - `XArkMidiTest` now supports `--compat-mode` for deterministic mode selection.
 - Dry run uses `--disable-internal-effects` to isolate source rendering behavior first.
 - Wet run keeps internal effects enabled for follow-up balance checks.
+- `-ReferenceWavPath` is optional and enables direct `spec/tuned vs reference` comparison in one run.

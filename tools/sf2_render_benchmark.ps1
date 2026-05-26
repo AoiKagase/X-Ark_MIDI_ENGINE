@@ -29,7 +29,11 @@ param(
     [ValidateRange(1, 32768)]
     [int]$DiffThreshold = 2000,
 
-    [switch]$DryOnly
+    [switch]$DryOnly,
+
+    [string]$ReferenceWavPath = "",
+
+    [string]$ReferenceLabel = "reference"
 )
 
 Set-StrictMode -Version Latest
@@ -67,6 +71,9 @@ Require-File -Path $SoundFontPath -Hint "Provide an existing SF2 path."
 Require-File -Path $testExe -Hint "Build tests first: cmake --build build/cmake --target XArkMidiTest compare_wav_diff analyze_wav_clipping"
 Require-File -Path $diffExe -Hint "Build tests first: cmake --build build/cmake --target compare_wav_diff"
 Require-File -Path $clipExe -Hint "Build tests first: cmake --build build/cmake --target analyze_wav_clipping"
+if ($ReferenceWavPath -ne "") {
+    Require-File -Path $ReferenceWavPath -Hint "Provide an existing reference WAV path."
+}
 
 if (-not (Test-Path -LiteralPath $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
@@ -119,6 +126,12 @@ function Render-Case {
     $diffOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($specWav, $tunedWav, "$DiffThreshold") -LogPath (Join-Path $caseDir "compare_spec_vs_tuned.log")
     $clipSpecOut = Invoke-And-Capture -Exe $clipExe -ExeArgs @($specWav, "250", "20") -LogPath (Join-Path $caseDir "clip_spec.log")
     $clipTunedOut = Invoke-And-Capture -Exe $clipExe -ExeArgs @($tunedWav, "250", "20") -LogPath (Join-Path $caseDir "clip_tuned.log")
+    $diffSpecVsRefOut = $null
+    $diffTunedVsRefOut = $null
+    if ($ReferenceWavPath -ne "") {
+        $diffSpecVsRefOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($specWav, $ReferenceWavPath, "$DiffThreshold") -LogPath (Join-Path $caseDir ("compare_spec_vs_" + $ReferenceLabel + ".log"))
+        $diffTunedVsRefOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($tunedWav, $ReferenceWavPath, "$DiffThreshold") -LogPath (Join-Path $caseDir ("compare_tuned_vs_" + $ReferenceLabel + ".log"))
+    }
 
     $summaryLines = @(
         "Case: $CaseName",
@@ -133,6 +146,21 @@ function Render-Case {
         "",
         "==== compare_wav_diff (spec vs tuned) ====",
         $diffOut,
+        ""
+    )
+    if ($ReferenceWavPath -ne "") {
+        $summaryLines += @(
+            "==== compare_wav_diff (spec vs " + $ReferenceLabel + ") ====",
+            $diffSpecVsRefOut,
+            "",
+            "==== compare_wav_diff (tuned vs " + $ReferenceLabel + ") ====",
+            $diffTunedVsRefOut,
+            ""
+        )
+    } else {
+        $summaryLines += @("")
+    }
+    $summaryLines += @(
         "",
         "==== analyze_wav_clipping (spec) ====",
         $clipSpecOut,

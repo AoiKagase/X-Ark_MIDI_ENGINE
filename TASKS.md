@@ -78,6 +78,7 @@
   - Added `docs/sf2-render-tuned-benchmark-harness.md` for fixed run procedure and output artifacts.
   - Extended `XArkMidiTest` options (`--compat-mode`, `--disable-internal-effects`, `--sample-rate`, `--channels`).
 - [ ] Phase 2: Dry analysis first (`InternalEffect OFF`) and isolate interpolation/filter/layer/output gaps.
+  - Working baseline (temporary): compare against `fighting-the-spirit_timidity.wav` first.
 - [ ] Phase 3: Resampler experiments in `SF2_RENDER_TUNED` only; keep `SF2_SPEC_204` unchanged.
 - [ ] Phase 4: Filter-response experiments in `SF2_RENDER_TUNED` only; keep resolver/NRPN unchanged.
 - [ ] Phase 5: InternalEffect headroom experiments after dry output convergence.
