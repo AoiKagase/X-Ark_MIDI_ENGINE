@@ -79,6 +79,9 @@
   - Extended `XArkMidiTest` options (`--compat-mode`, `--disable-internal-effects`, `--sample-rate`, `--channels`).
 - [ ] Phase 2: Dry analysis first (`InternalEffect OFF`) and isolate interpolation/filter/layer/output gaps.
   - Working baseline (temporary): compare against `fighting-the-spirit_timidity.wav` first.
+  - Added `tests/analyze_wav_tone.cpp` (`analyze_wav_tone`) for RMS + rough band-ratio diagnostics.
+  - Current finding: `fighting-the-spirit_timidity.wav` resembles full-mix low-band profile much more than Ch2-solo profile, so solo-vs-timidity metrics can overstate thickness gaps.
+  - Added property-based `SF2_RENDER_TUNED` loop-body compensation experiment (short-loop + high sample-step risk) without program-number branching.
 - [ ] Phase 3: Resampler experiments in `SF2_RENDER_TUNED` only; keep `SF2_SPEC_204` unchanged.
 - [ ] Phase 4: Filter-response experiments in `SF2_RENDER_TUNED` only; keep resolver/NRPN unchanged.
 - [ ] Phase 5: InternalEffect headroom experiments after dry output convergence.

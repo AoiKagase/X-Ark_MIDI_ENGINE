@@ -14,6 +14,7 @@
  *                                                     [--max-seconds <sec>] [--progress-seconds <sec>]
  *                                                     [--compat-mode <engine-default|sf2-legacy|sf2-spec-204|sf2-render-tuned|0-3>]
  *                                                     [--disable-internal-effects] [--sample-rate <hz>] [--channels <1|2>]
+ *                                                     [--output-stage <standard|enhanced-loud|enhanced-natural|enhanced-warm>]
  */
 
 #include <cstdio>
@@ -74,7 +75,8 @@ void PrintUsage(const char* exeName) {
                  "[--solo <1-16>] [--mute <1-16>] [--chunk <frames>] "
                  "[--max-seconds <sec>] [--progress-seconds <sec>] "
                  "[--compat-mode <engine-default|sf2-legacy|sf2-spec-204|sf2-render-tuned|0-3>] "
-                 "[--disable-internal-effects] [--sample-rate <hz>] [--channels <1|2>]\n",
+                 "[--disable-internal-effects] [--sample-rate <hz>] [--channels <1|2>] "
+                 "[--output-stage <standard|enhanced-loud|enhanced-natural|enhanced-warm>]\n",
                  exeName);
 }
 
@@ -165,6 +167,43 @@ bool TryParseChannelCountArgument(const char* valueText, unsigned int& outValue)
     return true;
 }
 
+enum class OutputStageOption {
+    Standard,
+    EnhancedLoud,
+    EnhancedNatural,
+    EnhancedWarm
+};
+
+bool TryParseOutputStageArgument(const char* valueText, OutputStageOption& outValue) {
+    std::string normalized(valueText);
+    for (char& c : normalized) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (c == '_') {
+            c = '-';
+        }
+    }
+
+    if (normalized == "standard" || normalized == "off" || normalized == "none") {
+        outValue = OutputStageOption::Standard;
+        return true;
+    }
+    if (normalized == "enhanced-loud" || normalized == "loud") {
+        outValue = OutputStageOption::EnhancedLoud;
+        return true;
+    }
+    if (normalized == "enhanced-natural" || normalized == "natural") {
+        outValue = OutputStageOption::EnhancedNatural;
+        return true;
+    }
+    if (normalized == "enhanced-warm" || normalized == "warm") {
+        outValue = OutputStageOption::EnhancedWarm;
+        return true;
+    }
+
+    std::fprintf(stderr, "Invalid --output-stage value: %s\n", valueText);
+    return false;
+}
+
 }
 
 int main(int argc, char* argv[]) {
@@ -187,6 +226,7 @@ int main(int argc, char* argv[]) {
     bool disableInternalEffects = false;
     unsigned int sampleRate = 44100;
     unsigned int numChannels = 2;
+    OutputStageOption outputStage = OutputStageOption::Standard;
     for (int i = 4; i < argc; ++i) {
         if (std::strcmp(argv[i], "--chunk") == 0 && i + 1 < argc) {
             long value = 0;
@@ -253,6 +293,13 @@ int main(int argc, char* argv[]) {
             ++i;
             continue;
         }
+        if (std::strcmp(argv[i], "--output-stage") == 0 && i + 1 < argc) {
+            if (!TryParseOutputStageArgument(argv[i + 1], outputStage)) {
+                return 1;
+            }
+            ++i;
+            continue;
+        }
         std::fprintf(stderr, "Unknown argument: %s\n", argv[i]);
         PrintUsage(argv[0]);
         return 1;
@@ -267,6 +314,22 @@ int main(int argc, char* argv[]) {
     }
     if (hasCompatibilityMode) {
         options.compatibilityMode = compatibilityMode;
+    }
+    switch (outputStage) {
+    case OutputStageOption::EnhancedLoud:
+        options.compatibilityFlags |= XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE;
+        break;
+    case OutputStageOption::EnhancedNatural:
+        options.compatibilityFlags |= XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE;
+        options.compatibilityFlags |= XAME_COMPAT_ENHANCED_OUTPUT_STAGE_NATURAL;
+        break;
+    case OutputStageOption::EnhancedWarm:
+        options.compatibilityFlags |= XAME_COMPAT_ENABLE_ENHANCED_OUTPUT_STAGE;
+        options.compatibilityFlags |= XAME_COMPAT_ENHANCED_OUTPUT_STAGE_WARM;
+        break;
+    case OutputStageOption::Standard:
+    default:
+        break;
     }
 
     XAmeEngine engine = nullptr;

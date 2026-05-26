@@ -1689,6 +1689,49 @@ namespace {
             "SF2_RENDER_TUNED should currently match SF2_SPEC_204 sf2ReverbSendScale");
         Require(NearlyEqual(specCompat.sf2ChorusSendScale, tunedCompat.sf2ChorusSendScale, 1.0e-6),
             "SF2_RENDER_TUNED should currently match SF2_SPEC_204 sf2ChorusSendScale");
+        Require(!specCompat.enableRenderTunedLoopBodyCompensation,
+            "SF2_SPEC_204 should keep render-tuned loop-body compensation disabled");
+        Require(tunedCompat.enableRenderTunedLoopBodyCompensation,
+            "SF2_RENDER_TUNED should enable render-tuned loop-body compensation");
+    }
+
+    void TestSf2RenderTunedLoopBodyCompensationUsesLoopProperties() {
+        MinimalSf2Config config;
+        config.instGens.push_back(MakeSignedGen(GEN_SampleModes, 1));
+        config.instGens.push_back(MakeSignedGen(GEN_StartloopAddrsOffset, 22));
+        config.instGens.push_back(MakeSignedGen(GEN_EndloopAddrsOffset, -22));
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterFc, 10800));
+        config.instGens.push_back(MakeSignedGen(GEN_InitialFilterQ, 240));
+
+        const std::vector<u8> bytes = BuildMinimalSf2(config);
+        Sf2File sf2;
+        Require(sf2.LoadFromMemory(bytes.data(), bytes.size()), sf2.ErrorMessage().c_str());
+
+        std::vector<ResolvedZone> zones;
+        const ResolvedZone& zone = RequireSingleZone(sf2, 84, 65535, nullptr, zones);
+
+        XAmeCreateOptions specOptions{};
+        specOptions.structSize = sizeof(specOptions);
+        specOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_SPEC_204;
+        const SynthCompatOptions specCompat = ResolveCompatOptionsForCreateOptions(&specOptions);
+
+        XAmeCreateOptions tunedOptions = specOptions;
+        tunedOptions.compatibilityMode = XAME_COMPAT_MODE_SF2_RENDER_TUNED;
+        const SynthCompatOptions tunedCompat = ResolveCompatOptionsForCreateOptions(&tunedOptions);
+
+        Voice specVoice;
+        specVoice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(),
+            0, 0, 81, 84, 65535, 1, 44100, 0.0, SoundBankKind::Sf2, specCompat);
+        Voice tunedVoice;
+        tunedVoice.NoteOn(zone, sf2.SampleData(), sf2.SampleData24(), sf2.SampleDataCount(),
+            0, 0, 81, 84, 65535, 1, 44100, 0.0, SoundBankKind::Sf2, tunedCompat);
+
+        Require(specVoice.filterBaseFcCents > tunedVoice.filterBaseFcCents,
+            "SF2_RENDER_TUNED loop-body compensation should lower filter cutoff on short-loop high-step voices");
+        Require(specVoice.filterQCb > tunedVoice.filterQCb,
+            "SF2_RENDER_TUNED loop-body compensation should soften filter Q on short-loop high-step voices");
+        Require((specVoice.filterBaseFcCents - tunedVoice.filterBaseFcCents) >= 40,
+            "SF2_RENDER_TUNED loop-body compensation should apply a meaningful cutoff offset for short-loop risk");
     }
 
     void TestRemovedLegacyCompatibilityFlagsRemainAbsent() {
@@ -6565,6 +6608,7 @@ int main(int argc, char** argv) {
     RUN_TEST(TestSf2RenderTunedCompatibilityModeUsesSpecResolverDefaults);
     RUN_TEST(TestSf2RenderTunedCompatibilityModeDoesNotUseLegacyResolver);
     RUN_TEST(TestSf2RenderTunedCompatibilityModeMatchesSpecCoreOptions);
+    RUN_TEST(TestSf2RenderTunedLoopBodyCompensationUsesLoopProperties);
     RUN_TEST(TestRemovedLegacyCompatibilityFlagsRemainAbsent);
     RUN_TEST(TestSf2SpecResolverEffectsSendUsesResolverValue);
     RUN_TEST(TestEngineDefaultCompatibilityModePreservesFlagInterpretation);

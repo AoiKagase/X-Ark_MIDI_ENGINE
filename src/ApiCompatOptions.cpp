@@ -44,10 +44,15 @@ SynthCompatOptions ResolveCompatOptionsForCreateOptions(const XAmeCreateOptions*
     switch (compatMode) {
     case XAME_COMPAT_MODE_SF2_LEGACY:
         compatOptions.useSf2SpecModulatorResolver = false;
+        compatOptions.enableRenderTunedLoopBodyCompensation = false;
         break;
     case XAME_COMPAT_MODE_SF2_SPEC_204:
+        compatOptions.enableRenderTunedLoopBodyCompensation = false;
+        compatOptions.useSf2SpecModulatorResolver = true;
+        break;
     case XAME_COMPAT_MODE_SF2_RENDER_TUNED:
         compatOptions.useSf2SpecModulatorResolver = true;
+        compatOptions.enableRenderTunedLoopBodyCompensation = true;
         break;
     case XAME_COMPAT_MODE_ENGINE_DEFAULT:
     default:

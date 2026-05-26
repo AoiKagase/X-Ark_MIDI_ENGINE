@@ -78,6 +78,8 @@ The script writes per-case outputs under `<OutputDir>\dry` and `<OutputDir>\wet`
 ## Notes
 
 - `XArkMidiTest` now supports `--compat-mode` for deterministic mode selection.
+- `XArkMidiTest` now supports `--output-stage` (`standard`, `enhanced-loud`, `enhanced-natural`, `enhanced-warm`).
 - Dry run uses `--disable-internal-effects` to isolate source rendering behavior first.
 - Wet run keeps internal effects enabled for follow-up balance checks.
 - `-ReferenceWavPath` is optional and enables direct `spec/tuned vs reference` comparison in one run.
+- `-SpecOutputStage` / `-TunedOutputStage` can be used to A/B output-stage thickness against reference renders.

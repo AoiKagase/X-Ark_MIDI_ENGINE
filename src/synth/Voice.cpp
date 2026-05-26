@@ -46,6 +46,44 @@ f32 MixEffectsSend(f32 presetSend, f32 channelSend) {
     return std::clamp(presetSend + channelSend, 0.0f, 1.0f);
 }
 
+struct LoopBodyCompensation {
+    i32 fcOffsetCents = 0;
+    i32 qOffsetCb = 0;
+};
+
+LoopBodyCompensation ResolveRenderTunedLoopBodyCompensation(
+    const SynthCompatOptions& compatOptions,
+    SoundBankKind soundBankKind,
+    bool looping,
+    u32 loopStart,
+    u32 loopEnd,
+    f64 baseSampleStep) {
+    if (!compatOptions.enableRenderTunedLoopBodyCompensation ||
+        soundBankKind != SoundBankKind::Sf2 ||
+        !looping ||
+        loopEnd <= loopStart + 1) {
+        return {};
+    }
+
+    const u32 loopLength = loopEnd - loopStart;
+    if (loopLength == 0) {
+        return {};
+    }
+
+    const f64 absStep = std::fabs(baseSampleStep);
+    const f64 loopRisk = std::clamp((512.0 - static_cast<f64>(std::min<u32>(loopLength, 512u))) / 512.0, 0.0, 1.0);
+    const f64 stepRisk = std::clamp((absStep - 0.75) / 0.85, 0.0, 1.0);
+    const f64 risk = loopRisk * stepRisk;
+    if (risk <= 0.0) {
+        return {};
+    }
+
+    LoopBodyCompensation compensation;
+    compensation.fcOffsetCents = -static_cast<i32>(std::lround(360.0 * risk));
+    compensation.qOffsetCb = -static_cast<i32>(std::lround(120.0 * risk));
+    return compensation;
+}
+
 u8 ResolveForcedKey(u8 key, const i32* gen) {
     const i32 forcedKey = gen[GEN_Keynum];
     if (forcedKey >= 0 && forcedKey <= 127) {
@@ -512,8 +550,21 @@ void Voice::ApplyResolvedZonePitchState(const ResolvedZone& zone, i32 effectiveK
 
 void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
     const i32* gen = zone.generators;
-    filterBaseFcCents = std::clamp(gen[GEN_InitialFilterFc], kFilterFcMin, kFilterFcMax);
-    filterQCb = std::clamp(gen[GEN_InitialFilterQ], kFilterQCbMin, kFilterQCbMax);
+    const LoopBodyCompensation compensation = ResolveRenderTunedLoopBodyCompensation(
+        compatOptions,
+        soundBankKind,
+        looping,
+        loopStart,
+        loopEnd,
+        baseSampleStep);
+    filterBaseFcCents = std::clamp(
+        gen[GEN_InitialFilterFc] + compensation.fcOffsetCents,
+        kFilterFcMin,
+        kFilterFcMax);
+    filterQCb = std::clamp(
+        gen[GEN_InitialFilterQ] + compensation.qOffsetCb,
+        kFilterQCbMin,
+        kFilterQCbMax);
     filterModEnvToFcCents = gen[GEN_ModEnvToFilterFc];
     filterCurrentFcCents = filterBaseFcCents;
     useModEnv = (filterModEnvToFcCents != 0 || modEnvToPitchCents != 0.0f);

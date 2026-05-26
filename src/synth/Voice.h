@@ -16,6 +16,7 @@ struct SynthCompatOptions {
     bool sf2ZeroLengthLoopRetrigger = false;
     bool enableSf2SamplePitchCorrection = false;
     bool useSf2SpecModulatorResolver = false;
+    bool enableRenderTunedLoopBodyCompensation = false;
     bool enableSoftPedal = true;
     bool enableEnhancedOutputStage = false;
     bool useNaturalOutputStage = false;

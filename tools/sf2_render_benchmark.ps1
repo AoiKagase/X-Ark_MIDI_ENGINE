@@ -33,7 +33,13 @@ param(
 
     [string]$ReferenceWavPath = "",
 
-    [string]$ReferenceLabel = "reference"
+    [string]$ReferenceLabel = "reference",
+
+    [ValidateSet("standard", "enhanced-loud", "enhanced-natural", "enhanced-warm")]
+    [string]$SpecOutputStage = "standard",
+
+    [ValidateSet("standard", "enhanced-loud", "enhanced-natural", "enhanced-warm")]
+    [string]$TunedOutputStage = "standard"
 )
 
 Set-StrictMode -Version Latest
@@ -58,6 +64,23 @@ function Invoke-And-Capture {
         throw "Command failed ($LASTEXITCODE): $Exe $($ExeArgs -join ' ')"
     }
     return $output
+}
+
+function Convert-OutputToLines {
+    param($Value)
+    if ($null -eq $Value) {
+        return @("")
+    }
+    $text = if ($Value -is [System.Array]) {
+        $Value -join [Environment]::NewLine
+    } else {
+        [string]$Value
+    }
+    $normalized = $text -replace "`r", ""
+    if ($normalized -eq "") {
+        return @("")
+    }
+    return $normalized -split "`n"
 }
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
@@ -114,10 +137,16 @@ function Render-Case {
     $specArgs = @($commonArgs)
     $specArgs[2] = $specWav
     $specArgs += @("--compat-mode", "sf2-spec-204")
+    if ($SpecOutputStage -ne "standard") {
+        $specArgs += @("--output-stage", $SpecOutputStage)
+    }
 
     $tunedArgs = @($commonArgs)
     $tunedArgs[2] = $tunedWav
     $tunedArgs += @("--compat-mode", "sf2-render-tuned")
+    if ($TunedOutputStage -ne "standard") {
+        $tunedArgs += @("--output-stage", $TunedOutputStage)
+    }
 
     Write-Host "Rendering case: $CaseName"
     Invoke-And-Capture -Exe $testExe -ExeArgs $specArgs -LogPath (Join-Path $caseDir "render_spec.log") | Out-Null
@@ -132,7 +161,6 @@ function Render-Case {
         $diffSpecVsRefOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($specWav, $ReferenceWavPath, "$DiffThreshold") -LogPath (Join-Path $caseDir ("compare_spec_vs_" + $ReferenceLabel + ".log"))
         $diffTunedVsRefOut = Invoke-And-Capture -Exe $diffExe -ExeArgs @($tunedWav, $ReferenceWavPath, "$DiffThreshold") -LogPath (Join-Path $caseDir ("compare_tuned_vs_" + $ReferenceLabel + ".log"))
     }
-
     $summaryLines = @(
         "Case: $CaseName",
         "Midi: $MidiPath",
@@ -143,31 +171,27 @@ function Render-Case {
         "ChunkFrames: $ChunkFrames",
         "MaxSeconds: $MaxSeconds",
         "DisableInternalEffects: $DisableInternalEffects",
+        "SpecOutputStage: $SpecOutputStage",
+        "TunedOutputStage: $TunedOutputStage",
         "",
-        "==== compare_wav_diff (spec vs tuned) ====",
-        $diffOut,
-        ""
+        "==== compare_wav_diff (spec vs tuned) ===="
     )
+    $summaryLines += Convert-OutputToLines $diffOut
+    $summaryLines += @("")
     if ($ReferenceWavPath -ne "") {
-        $summaryLines += @(
-            "==== compare_wav_diff (spec vs " + $ReferenceLabel + ") ====",
-            $diffSpecVsRefOut,
-            "",
-            "==== compare_wav_diff (tuned vs " + $ReferenceLabel + ") ====",
-            $diffTunedVsRefOut,
-            ""
-        )
+        $summaryLines += @("==== compare_wav_diff (spec vs " + $ReferenceLabel + ") ====")
+        $summaryLines += Convert-OutputToLines $diffSpecVsRefOut
+        $summaryLines += @("")
+        $summaryLines += @("==== compare_wav_diff (tuned vs " + $ReferenceLabel + ") ====")
+        $summaryLines += Convert-OutputToLines $diffTunedVsRefOut
+        $summaryLines += @("")
     } else {
         $summaryLines += @("")
     }
-    $summaryLines += @(
-        "",
-        "==== analyze_wav_clipping (spec) ====",
-        $clipSpecOut,
-        "",
-        "==== analyze_wav_clipping (tuned) ====",
-        $clipTunedOut
-    )
+    $summaryLines += @("", "==== analyze_wav_clipping (spec) ====")
+    $summaryLines += Convert-OutputToLines $clipSpecOut
+    $summaryLines += @("", "==== analyze_wav_clipping (tuned) ====")
+    $summaryLines += Convert-OutputToLines $clipTunedOut
     $summaryLines | Out-File -FilePath (Join-Path $caseDir "summary.txt") -Encoding utf8
 }
 

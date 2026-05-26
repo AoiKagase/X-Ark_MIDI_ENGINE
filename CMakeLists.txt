@@ -91,6 +91,9 @@ if(XAME_BUILD_TESTS)
     add_executable(analyze_wav_clipping tests/analyze_wav_clipping.cpp)
     target_compile_features(analyze_wav_clipping PRIVATE cxx_std_17)
 
+    add_executable(analyze_wav_tone tests/analyze_wav_tone.cpp)
+    target_compile_features(analyze_wav_tone PRIVATE cxx_std_17)
+
     add_executable(compare_wav_diff tests/compare_wav_diff.cpp)
     target_compile_features(compare_wav_diff PRIVATE cxx_std_17)
 
