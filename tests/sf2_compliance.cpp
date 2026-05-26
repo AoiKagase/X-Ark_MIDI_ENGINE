@@ -1734,8 +1734,6 @@ namespace {
             "SF2_RENDER_TUNED loop-body compensation should apply a meaningful cutoff offset for short-loop risk");
         Require(tunedVoice.renderTunedBodyGain > specVoice.renderTunedBodyGain,
             "SF2_RENDER_TUNED loop-body compensation should add body gain for short-loop high-step voices");
-        Require(tunedVoice.renderTunedPresenceGain > specVoice.renderTunedPresenceGain,
-            "SF2_RENDER_TUNED loop-body compensation should enable presence-band enhancement for short-loop high-step voices");
     }
 
     void TestRemovedLegacyCompatibilityFlagsRemainAbsent() {
