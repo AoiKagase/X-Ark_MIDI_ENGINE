@@ -49,6 +49,7 @@ f32 MixEffectsSend(f32 presetSend, f32 channelSend) {
 struct LoopBodyCompensation {
     i32 fcOffsetCents = 0;
     i32 qOffsetCb = 0;
+    f32 bodyGain = 1.0f;
 };
 
 LoopBodyCompensation ResolveRenderTunedLoopBodyCompensation(
@@ -71,16 +72,20 @@ LoopBodyCompensation ResolveRenderTunedLoopBodyCompensation(
     }
 
     const f64 absStep = std::fabs(baseSampleStep);
-    const f64 loopRisk = std::clamp((512.0 - static_cast<f64>(std::min<u32>(loopLength, 512u))) / 512.0, 0.0, 1.0);
-    const f64 stepRisk = std::clamp((absStep - 0.75) / 0.85, 0.0, 1.0);
-    const f64 risk = loopRisk * stepRisk;
+    const f64 loopRisk = std::clamp(
+        (768.0 - static_cast<f64>(std::min<u32>(loopLength, 768u))) / 768.0,
+        0.0,
+        1.0);
+    const f64 stepRisk = std::clamp((absStep - 0.55) / 0.70, 0.0, 1.0);
+    const f64 risk = std::pow(loopRisk * stepRisk, 0.85);
     if (risk <= 0.0) {
         return {};
     }
 
     LoopBodyCompensation compensation;
-    compensation.fcOffsetCents = -static_cast<i32>(std::lround(360.0 * risk));
-    compensation.qOffsetCb = -static_cast<i32>(std::lround(120.0 * risk));
+    compensation.fcOffsetCents = -static_cast<i32>(std::lround(700.0 * risk));
+    compensation.qOffsetCb = -static_cast<i32>(std::lround(240.0 * risk));
+    compensation.bodyGain = std::clamp(1.0f + static_cast<f32>(0.24 * risk), 1.0f, 1.28f);
     return compensation;
 }
 
@@ -557,6 +562,7 @@ void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
         loopStart,
         loopEnd,
         baseSampleStep);
+    renderTunedBodyGain = compensation.bodyGain;
     filterBaseFcCents = std::clamp(
         gen[GEN_InitialFilterFc] + compensation.fcOffsetCents,
         kFilterFcMin,
@@ -643,6 +649,7 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     portamentoSamplesRemaining = 0;
     usesLoopFallback = false;
     ignoreNoteOffUntilSampleEnd = false;
+    renderTunedBodyGain = 1.0f;
     envPhase      = EnvPhase::Delay;
     envLevel      = 0.0f;
     envSampleCount= 0;
@@ -893,7 +900,7 @@ void Voice::RefreshEffectSends() {
 }
 
 void Voice::RefreshOutputGains() {
-    const f32 baseVoiceGain = static_cast<f32>(attenuation);
+    const f32 baseVoiceGain = static_cast<f32>(attenuation) * renderTunedBodyGain;
     const f32 baseDryGainL = baseVoiceGain * baseGainL * channelGainL;
     const f32 baseDryGainR = baseVoiceGain * baseGainR * channelGainR;
     dryGainL = baseDryGainL;

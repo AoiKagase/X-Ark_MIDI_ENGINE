@@ -158,6 +158,7 @@ public:
     f32      reverbGainR = 0.0f;
     f32      chorusGainL = 0.0f;
     f32      chorusGainR = 0.0f;
+    f32      renderTunedBodyGain = 1.0f;
     const SampleHeader* sampleHeader = nullptr;
     SynthCompatOptions compatOptions{};
     SpecialVoiceRoute specialRoute;
