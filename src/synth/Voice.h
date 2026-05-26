@@ -159,6 +159,11 @@ public:
     f32      chorusGainL = 0.0f;
     f32      chorusGainR = 0.0f;
     f32      renderTunedBodyGain = 1.0f;
+    f32      renderTunedPresenceGain = 0.0f;
+    f32      renderTunedPresenceLowAlpha = 0.0f;
+    f32      renderTunedPresenceHighAlpha = 0.0f;
+    f32      renderTunedPresenceLowState = 0.0f;
+    f32      renderTunedPresenceHighState = 0.0f;
     const SampleHeader* sampleHeader = nullptr;
     SynthCompatOptions compatOptions{};
     SpecialVoiceRoute specialRoute;

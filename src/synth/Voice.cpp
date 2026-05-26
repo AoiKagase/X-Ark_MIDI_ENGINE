@@ -46,10 +46,17 @@ f32 MixEffectsSend(f32 presetSend, f32 channelSend) {
     return std::clamp(presetSend + channelSend, 0.0f, 1.0f);
 }
 
+f32 OnePoleAlphaFromHz(f32 cutoffHz, u32 sampleRate) {
+    const f32 sr = static_cast<f32>(std::max<u32>(sampleRate, 1));
+    const f32 clampedHz = std::clamp(cutoffHz, 20.0f, sr * 0.45f);
+    return 1.0f - std::exp(-2.0f * static_cast<f32>(3.14159265358979323846) * clampedHz / sr);
+}
+
 struct LoopBodyCompensation {
     i32 fcOffsetCents = 0;
     i32 qOffsetCb = 0;
     f32 bodyGain = 1.0f;
+    f32 presenceGain = 0.0f;
 };
 
 LoopBodyCompensation ResolveRenderTunedLoopBodyCompensation(
@@ -83,9 +90,10 @@ LoopBodyCompensation ResolveRenderTunedLoopBodyCompensation(
     }
 
     LoopBodyCompensation compensation;
-    compensation.fcOffsetCents = -static_cast<i32>(std::lround(700.0 * risk));
-    compensation.qOffsetCb = -static_cast<i32>(std::lround(240.0 * risk));
-    compensation.bodyGain = std::clamp(1.0f + static_cast<f32>(0.24 * risk), 1.0f, 1.28f);
+    compensation.fcOffsetCents = -static_cast<i32>(std::lround(140.0 * risk));
+    compensation.qOffsetCb = -static_cast<i32>(std::lround(90.0 * risk));
+    compensation.bodyGain = std::clamp(1.0f + static_cast<f32>(0.26 * risk), 1.0f, 1.30f);
+    compensation.presenceGain = std::clamp(static_cast<f32>(0.62 * risk), 0.0f, 0.55f);
     return compensation;
 }
 
@@ -563,6 +571,9 @@ void Voice::ApplyResolvedZoneFilterState(const ResolvedZone& zone) {
         loopEnd,
         baseSampleStep);
     renderTunedBodyGain = compensation.bodyGain;
+    renderTunedPresenceGain = compensation.presenceGain;
+    renderTunedPresenceLowAlpha = OnePoleAlphaFromHz(2200.0f, outputSampleRate);
+    renderTunedPresenceHighAlpha = OnePoleAlphaFromHz(4300.0f, outputSampleRate);
     filterBaseFcCents = std::clamp(
         gen[GEN_InitialFilterFc] + compensation.fcOffsetCents,
         kFilterFcMin,
@@ -650,6 +661,11 @@ void Voice::NoteOn(const ResolvedZone& zone, const i16* pcmData, const i32* pcmD
     usesLoopFallback = false;
     ignoreNoteOffUntilSampleEnd = false;
     renderTunedBodyGain = 1.0f;
+    renderTunedPresenceGain = 0.0f;
+    renderTunedPresenceLowAlpha = 0.0f;
+    renderTunedPresenceHighAlpha = 0.0f;
+    renderTunedPresenceLowState = 0.0f;
+    renderTunedPresenceHighState = 0.0f;
     envPhase      = EnvPhase::Delay;
     envLevel      = 0.0f;
     envSampleCount= 0;
@@ -982,6 +998,12 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
     f32 localFilterZ1 = filterZ1;
     f32 localFilterZ2 = filterZ2;
     i32 localFilterCurrentFcCents = filterCurrentFcCents;
+    const f32 localPresenceGain = renderTunedPresenceGain;
+    const bool localUsePresenceEnhance = (localPresenceGain > 1.0e-5f) && !use24BitSamples;
+    const f32 localPresenceLowAlpha = renderTunedPresenceLowAlpha;
+    const f32 localPresenceHighAlpha = renderTunedPresenceHighAlpha;
+    f32 localPresenceLowState = renderTunedPresenceLowState;
+    f32 localPresenceHighState = renderTunedPresenceHighState;
     f64 localPortamentoOffsetSemitones = portamentoOffsetSemitones;
     f64 localPortamentoStepSemitones = portamentoStepSemitones;
     u32 localPortamentoSamplesRemaining = portamentoSamplesRemaining;
@@ -1008,6 +1030,8 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
         filterZ1 = localFilterZ1;
         filterZ2 = localFilterZ2;
         filterCurrentFcCents = localFilterCurrentFcCents;
+        renderTunedPresenceLowState = localPresenceLowState;
+        renderTunedPresenceHighState = localPresenceHighState;
         portamentoOffsetSemitones = localPortamentoOffsetSemitones;
         portamentoStepSemitones = localPortamentoStepSemitones;
         portamentoSamplesRemaining = localPortamentoSamplesRemaining;
@@ -1015,7 +1039,18 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
     const bool localUsePortamento = localPortamentoSamplesRemaining > 0 && std::fabs(localPortamentoOffsetSemitones) > 1.0e-6;
     const bool localUseLfo = localUsePortamento ||
                              (modLfoPhaseStep > 0.0f && (modLfoToPitchCents != 0.0f || modLfoToFilterFcCents != 0.0f || modLfoToVolumeCb != 0.0f)) ||
-                             (vibLfoPhaseStep > 0.0f && vibLfoToPitchCents != 0.0f);
+                             (vibLfoPhaseStep > 0.0f && vibLfoToPitchCents != 0.0f) ||
+                             localUsePresenceEnhance;
+
+    auto applyPresenceEnhance = [&](f32 sample) {
+        if (!localUsePresenceEnhance) {
+            return sample;
+        }
+        localPresenceLowState += localPresenceLowAlpha * (sample - localPresenceLowState);
+        localPresenceHighState += localPresenceHighAlpha * (sample - localPresenceHighState);
+        const f32 band = localPresenceHighState - localPresenceLowState;
+        return sample + band * localPresenceGain;
+    };
 
     if (use24BitSamples && sampleData24 != nullptr) {
         u32 offset = 0;
@@ -1763,6 +1798,7 @@ void Voice::RenderBlock(f32* outL, f32* outR, f32* reverbL, f32* reverbR, f32* c
                     localFilterB0, localFilterB1, localFilterB2, localFilterA1, localFilterA2,
                     localFilterZ1, localFilterZ2);
             }
+            normalized = applyPresenceEnhance(normalized);
 
             const i32 tremoloAttenCb = static_cast<i32>(std::max(0.0f, ((modLfoValue + 1.0f) * 0.5f) * modLfoToVolumeCb));
             const f32 tremoloGain = static_cast<f32>(AttenuationToGain(tremoloAttenCb));

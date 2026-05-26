@@ -1729,11 +1729,13 @@ namespace {
         Require(specVoice.filterBaseFcCents > tunedVoice.filterBaseFcCents,
             "SF2_RENDER_TUNED loop-body compensation should lower filter cutoff on short-loop high-step voices");
         Require(specVoice.filterQCb > tunedVoice.filterQCb,
-            "SF2_RENDER_TUNED loop-body compensation should soften filter Q on short-loop high-step voices");
+            "SF2_RENDER_TUNED loop-body compensation should keep Q easing active for short-loop high-step voices");
         Require((specVoice.filterBaseFcCents - tunedVoice.filterBaseFcCents) >= 40,
             "SF2_RENDER_TUNED loop-body compensation should apply a meaningful cutoff offset for short-loop risk");
         Require(tunedVoice.renderTunedBodyGain > specVoice.renderTunedBodyGain,
             "SF2_RENDER_TUNED loop-body compensation should add body gain for short-loop high-step voices");
+        Require(tunedVoice.renderTunedPresenceGain > specVoice.renderTunedPresenceGain,
+            "SF2_RENDER_TUNED loop-body compensation should enable presence-band enhancement for short-loop high-step voices");
     }
 
     void TestRemovedLegacyCompatibilityFlagsRemainAbsent() {
